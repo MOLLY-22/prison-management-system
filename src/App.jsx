@@ -16,7 +16,7 @@ function App() {
 
   return (
     <>
-      <Login />
+      <h1>Prison Management System</h1>
     </>
   )
 }
