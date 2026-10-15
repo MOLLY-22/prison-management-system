@@ -7,6 +7,7 @@ export default function UserAccess() {
     const [userData, setUserData] = useState({name: "",email: "",role: "",status: ""});
     const [newUser, setNewUser] = useState({name : '', email: '', role: '', status: ''});
     const [search, setSearch] = useState('');
+    const [loading, setLoading] = useState(false);
 
     useEffect(() => {
         // TODO: Fetch users from API
