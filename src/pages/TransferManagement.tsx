@@ -3,6 +3,8 @@ import { useState } from 'react'
 import {
   Alert,
   Box,
+  Chip,
+  Paper,
   Stack,
   Typography,
 } from '@mui/material'
@@ -36,6 +38,18 @@ function TransferManagement() {
   const [selectedTransfer, setSelectedTransfer] =
     useState<Transfer | null>(null)
   const [successMessage, setSuccessMessage] = useState('')
+
+  // Calculate these values from the current transfer records.
+  const totalTransfers = transfers.length
+  const pendingApprovals = transfers.filter(
+    transfer => transfer.status === 'Pending',
+  ).length
+  const activeTransits = transfers.filter(
+    transfer => transfer.status === 'In Transit',
+  ).length
+  const completedTransfers = transfers.filter(
+    transfer => transfer.status === 'Completed',
+  ).length
 
   function recordAudit(
     transferId: number,
@@ -125,7 +139,8 @@ function TransferManagement() {
     const auditDetails: Record<TransferStatus, string> = {
       Pending: 'Transfer request is awaiting supervisory review.',
       Approved: 'Transfer request approved by a demo supervisor.',
-      'In Transit': 'Transport movement started and the transit date was recorded.',
+      'In Transit':
+        'Transport movement started and the transit date was recorded.',
       Completed: 'Arrival at the destination facility was recorded.',
       Cancelled: 'Transfer request was cancelled.',
       Rejected: 'Transfer request was rejected by a demo supervisor.',
@@ -159,19 +174,177 @@ function TransferManagement() {
     handleStatusChange(transferId, 'Completed')
   }
 
+  const statistics = [
+    {
+      label: 'Total Transfers',
+      value: totalTransfers,
+      description: 'All recorded requests',
+      color: '#1d4ed8',
+      background: '#eff6ff',
+    },
+    {
+      label: 'Pending Approvals',
+      value: pendingApprovals,
+      description: 'Awaiting review',
+      color: '#b45309',
+      background: '#fffbeb',
+    },
+    {
+      label: 'Active Transits',
+      value: activeTransits,
+      description: 'Currently in transit',
+      color: '#0369a1',
+      background: '#f0f9ff',
+    },
+    {
+      label: 'Completed Transfers',
+      value: completedTransfers,
+      description: 'Marked as completed',
+      color: '#15803d',
+      background: '#f0fdf4',
+    },
+  ]
+
   return (
-    <Box sx={{ p: { xs: 2, md: 4 }, maxWidth: 1600, mx: 'auto' }}>
-      <Stack spacing={3}>
-        <Box>
-          <Typography variant="h4" sx={{ fontWeight: 700 }}>
-            Transfer Management
-          </Typography>
-          <Typography color="text.secondary" sx={{ mt: 1 }}>
-            Create transfer requests, review approvals, track movement, and
-            inspect transfer history.
-          </Typography>
+    <Box
+      sx={{
+        minHeight: '100vh',
+        width: '100%',
+        px: { xs: 2, sm: 3, lg: 4 },
+        py: { xs: 2, md: 3 },
+        backgroundColor: '#f8fafc',
+      }}
+    >
+      <Stack spacing={3} sx={{ maxWidth: 1600, mx: 'auto' }}>
+        {/* Page heading */}
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: { xs: 'flex-start', sm: 'center' },
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: 2,
+          }}
+        >
+          <Box>
+            <Typography
+              variant="overline"
+              sx={{
+                color: '#64748b',
+                fontWeight: 700,
+                letterSpacing: 1.4,
+              }}
+            >
+              OPERATIONS / TRANSFERS
+            </Typography>
+
+            <Typography
+              variant="h4"
+              sx={{
+                mt: 0.5,
+                color: '#172033',
+                fontWeight: 750,
+                fontSize: { xs: '1.65rem', md: '2rem' },
+              }}
+            >
+              Transfer Management
+            </Typography>
+
+            <Typography
+              sx={{
+                mt: 1,
+                color: '#64748b',
+                maxWidth: 720,
+                fontSize: '0.95rem',
+              }}
+            >
+              Manage transfer requests, review approvals, track inmate
+              movements and inspect the transfer audit history.
+            </Typography>
+          </Box>
+
+          <Chip
+            label="DEMO MODE"
+            size="small"
+            sx={{
+              fontWeight: 700,
+              color: '#475569',
+              backgroundColor: '#e2e8f0',
+              borderRadius: 1,
+            }}
+          />
         </Box>
 
+        {/* Statistics */}
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: {
+              xs: 'repeat(2, minmax(0, 1fr))',
+              lg: 'repeat(4, minmax(0, 1fr))',
+            },
+            gap: 2,
+          }}
+        >
+          {statistics.map(statistic => (
+            <Paper
+              key={statistic.label}
+              elevation={0}
+              sx={{
+                p: { xs: 2, md: 2.5 },
+                minWidth: 0,
+                border: '1px solid #e2e8f0',
+                borderRadius: 2,
+                backgroundColor: '#ffffff',
+              }}
+            >
+              <Typography
+                sx={{
+                  color: '#64748b',
+                  fontSize: '0.82rem',
+                  fontWeight: 600,
+                }}
+              >
+                {statistic.label}
+              </Typography>
+
+              <Typography
+                sx={{
+                  mt: 1,
+                  color: statistic.color,
+                  fontSize: { xs: '1.8rem', md: '2.1rem' },
+                  lineHeight: 1.2,
+                  fontWeight: 750,
+                  fontVariantNumeric: 'tabular-nums',
+                }}
+              >
+                {statistic.value}
+              </Typography>
+
+              <Typography
+                sx={{
+                  mt: 0.75,
+                  color: '#64748b',
+                  fontSize: '0.78rem',
+                }}
+              >
+                {statistic.description}
+              </Typography>
+
+              <Box
+                sx={{
+                  mt: 2,
+                  height: 4,
+                  width: 44,
+                  borderRadius: 2,
+                  backgroundColor: statistic.background,
+                }}
+              />
+            </Paper>
+          ))}
+        </Box>
+
+        {/* Status messages */}
         {successMessage && (
           <Alert
             severity={
@@ -185,17 +358,57 @@ function TransferManagement() {
           </Alert>
         )}
 
-        <TransferForm onSubmit={handleCreateTransfer} />
+        {/* Request form and movement table */}
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: {
+              xs: 'minmax(0, 1fr)',
+              lg: 'minmax(320px, 0.85fr) minmax(0, 1.65fr)',
+            },
+            alignItems: 'start',
+            gap: 3,
+            '& > *': {
+              minWidth: 0,
+            },
+          }}
+        >
+          <TransferForm onSubmit={handleCreateTransfer} />
 
-        <TransferTable
-          transfers={transfers}
-          onSelectTransfer={setSelectedTransfer}
-        />
+          <TransferTable
+            transfers={transfers}
+            onSelectTransfer={setSelectedTransfer}
+          />
+        </Box>
 
+        {/* Audit history */}
         <TransferHistory
           entries={auditEntries}
           transfers={transfers}
         />
+
+        {/* Demo limitation notice */}
+        <Paper
+          elevation={0}
+          sx={{
+            p: 2,
+            border: '1px solid #e2e8f0',
+            borderRadius: 2,
+            backgroundColor: '#ffffff',
+          }}
+        >
+          <Typography
+            sx={{
+              color: '#64748b',
+              fontSize: '0.8rem',
+              lineHeight: 1.7,
+            }}
+          >
+            Demo mode: transfer and audit data are held in frontend memory.
+            Refreshing the page resets changes. Real persistence and
+            authorization require backend integration.
+          </Typography>
+        </Paper>
 
         <TransferApproval
           transfer={selectedTransfer}
@@ -205,12 +418,6 @@ function TransferManagement() {
           onMarkCompleted={handleMarkCompleted}
           onClose={() => setSelectedTransfer(null)}
         />
-
-        <Typography variant="caption" color="text.secondary">
-          Demo mode: transfer and audit data are held in frontend memory.
-          Refreshing the page resets changes. Real persistence and
-          authorization require backend integration.
-        </Typography>
       </Stack>
     </Box>
   )
