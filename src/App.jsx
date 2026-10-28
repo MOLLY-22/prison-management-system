@@ -5,6 +5,8 @@ import './visitorStyles.css'
 import { InmateManagement } from './features/inmates/InmateManagement'
 import TransferManagement from './pages/TransferManagement'
 import UserAccess from './UsersAccess/UserAccess'
+import ReleaseManagement from './pages/ReleaseManagement'
+import { developmentUser, hasDevelopmentPermission } from './config/developmentSession'
 
 const API_URL =
   import.meta.env.VITE_API_URL || '/api/visitors'
@@ -33,11 +35,11 @@ function formatTime(time) {
 }
 
 const navItems = [
-  ['dashboard', 'Dashboard'], ['inmates', 'Inmate management'], ['visitors', 'Visitor management'],
-  ['transfers', 'Transfer management'], ['access', 'Users & access'],
+  ['dashboard', 'Dashboard', 'dashboard:view'], ['inmates', 'Inmate management', 'inmates:view'], ['visitors', 'Visitor management', 'visitors:manage'],
+  ['transfers', 'Transfer management', 'transfers:manage'], ['releases', 'Release & discharge', 'releases:manage'], ['access', 'Users & access', 'users:manage'],
 ]
 function NavIcon({ name }) {
-  const paths = { dashboard: 'M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z', inmates: 'M16 11c1.7 0 3-1.3 3-3s-1.3-3-3-3-3 1.3-3 3 1.3 3 3 3zM8 11c1.7 0 3-1.3 3-3S9.7 5 8 5 5 6.3 5 8s1.3 3 3 3zm0 2c-2.3 0-7 1.2-7 3.5V19h14v-2.5C15 14.2 10.3 13 8 13zm8 0c-.3 0-.6 0-1 .1 1.2.8 2 2 2 3.4V19h6v-2.5c0-2.3-4.7-3.5-7-3.5z', visitors: 'M12 12c2.2 0 4-1.8 4-4s-1.8-4-4-4-4 1.8-4 4 1.8 4 4 4zm0 2c-2.7 0-8 1.3-8 4v2h16v-2c0-2.7-5.3-4-8-4z', transfers: 'M7 7h11l-3.5-3.5L16 2l6 6-6 6-1.5-1.5L18 9H7V7zm10 10H6l3.5 3.5L8 22l-6-6 6-6 1.5 1.5L6 15h11v2z', access: 'M12 1 3 5v6c0 5.6 3.8 10.7 9 12 5.2-1.3 9-6.4 9-12V5l-9-4zm0 4a3 3 0 1 1 0 6 3 3 0 0 1 0-6zm5.1 12A9.7 9.7 0 0 1 12 20.9 9.7 9.7 0 0 1 6.9 17c.1-1.7 3.4-2.6 5.1-2.6s5.1.9 5.1 2.6z' }
+  const paths = { dashboard: 'M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z', inmates: 'M16 11c1.7 0 3-1.3 3-3s-1.3-3-3-3-3 1.3-3 3 1.3 3 3 3zM8 11c1.7 0 3-1.3 3-3S9.7 5 8 5 5 6.3 5 8s1.3 3 3 3zm0 2c-2.3 0-7 1.2-7 3.5V19h14v-2.5C15 14.2 10.3 13 8 13zm8 0c-.3 0-.6 0-1 .1 1.2.8 2 2 2 3.4V19h6v-2.5c0-2.3-4.7-3.5-7-3.5z', visitors: 'M12 12c2.2 0 4-1.8 4-4s-1.8-4-4-4-4 1.8-4 4 1.8 4 4 4zm0 2c-2.7 0-8 1.3-8 4v2h16v-2c0-2.7-5.3-4-8-4z', transfers: 'M7 7h11l-3.5-3.5L16 2l6 6-6 6-1.5-1.5L18 9H7V7zm10 10H6l3.5 3.5L8 22l-6-6 6-6 1.5 1.5L6 15h11v2z', releases: 'M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm-2 15-5-5 1.4-1.4 3.6 3.6 7.6-7.6L19 8z', access: 'M12 1 3 5v6c0 5.6 3.8 10.7 9 12 5.2-1.3 9-6.4 9-12V5l-9-4zm0 4a3 3 0 1 1 0 6 3 3 0 0 1 0-6zm5.1 12A9.7 9.7 0 0 1 12 20.9 9.7 9.7 0 0 1 6.9 17c.1-1.7 3.4-2.6 5.1-2.6s5.1.9 5.1 2.6z' }
   return <svg viewBox="0 0 24 24" aria-hidden="true"><path d={paths[name]} /></svg>
 }
 
@@ -259,12 +261,12 @@ function App() {
       <aside className="reference-sidebar" aria-label="Primary navigation">
         <div className="reference-brand"><span>⌂</span><div><strong>PRISON OPS</strong><small>Operations console</small></div></div>
         <p className="sidebar-module-label">OPERATIONS</p>
-        <nav>{navItems.map(([id, label]) => <button key={id} className={`reference-nav-item ${activeModule === id ? 'active' : ''}`} type="button" onClick={() => setActiveModule(id)}><span><NavIcon name={id} /></span>{label}</button>)}</nav>
-        <div className="reference-version"><strong>Officer-in-Charge</strong><span>Secure session active</span></div>
+        <nav>{navItems.filter(([, , permission]) => hasDevelopmentPermission(permission)).map(([id, label]) => <button key={id} className={`reference-nav-item ${activeModule === id ? 'active' : ''}`} type="button" onClick={() => setActiveModule(id)}><span><NavIcon name={id} /></span>{label}</button>)}</nav>
+        <div className="reference-version"><strong>{developmentUser.role}</strong><span>Development session · sign-in disabled</span></div>
       </aside>
       <main className="main-content">
         <header className="topbar inmate-host-topbar">
-          <div className="inmate-host-account"><span>Officer-in-Charge</span><b aria-label="Account">●</b></div>
+          <div className="inmate-host-account"><span>{developmentUser.name} · {developmentUser.role}</span><b aria-label="Development account">●</b></div>
         </header>
 
         {activeModule === 'visitors' ? <div className="page-content" id="visitor-dashboard">
@@ -382,7 +384,7 @@ function App() {
             <span>Prison Management System</span>
             <span>Visitor Management · Frontend demonstration</span>
           </footer>
-        </div> : <div className="module-host">{activeModule === 'inmates' && <InmateManagement canAdmit />}{activeModule === 'transfers' && <TransferManagement />}{activeModule === 'access' && <UserAccess />}{activeModule === 'dashboard' && <section className="dashboard-placeholder"><p>OPERATIONS / OVERVIEW</p><h1>Operations dashboard</h1><span>Select a module from the navigation to manage institutional records and workflows.</span></section>}</div>}
+        </div> : <div className="module-host">{activeModule === 'inmates' && <InmateManagement canAdmit={hasDevelopmentPermission('admissions:create')} />}{activeModule === 'transfers' && <TransferManagement />}{activeModule === 'releases' && hasDevelopmentPermission('releases:manage') && <ReleaseManagement />}{activeModule === 'access' && hasDevelopmentPermission('users:manage') && <UserAccess />}{activeModule === 'dashboard' && <section className="dashboard-placeholder"><p>OPERATIONS / OVERVIEW</p><h1>Operations dashboard</h1><span>Select a module from the navigation to manage institutional records and workflows.</span></section>}</div>}
       </main>
 
       {showForm && (
