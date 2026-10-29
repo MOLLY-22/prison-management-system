@@ -1,4 +1,5 @@
 import LoginComponent from "../components/LoginForm";
+import "./Login.css";
 
 export default function Login() {
     return (

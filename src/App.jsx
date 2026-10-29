@@ -6,7 +6,9 @@ import { InmateManagement } from './features/inmates/InmateManagement'
 import TransferManagement from './pages/TransferManagement'
 import UserAccess from './UsersAccess/UserAccess'
 import ReleaseManagement from './pages/ReleaseManagement'
-import { developmentUser, hasDevelopmentPermission } from './config/developmentSession'
+import Login from './pages/Login'
+import { useAuth } from './context/AuthContext'
+import { hasPermission } from './config/developmentSession'
 
 const API_URL =
   import.meta.env.VITE_API_URL || '/api/visitors'
@@ -43,8 +45,8 @@ function NavIcon({ name }) {
   return <svg viewBox="0 0 24 24" aria-hidden="true"><path d={paths[name]} /></svg>
 }
 
-function App() {
-  const [activeModule, setActiveModule] = useState('visitors')
+function OperationsApp({ user, onSignOut }) {
+  const [activeModule, setActiveModule] = useState('dashboard')
   const [visitors, setVisitors] = useState([])
   const [showForm, setShowForm] = useState(false)
   const [notice, setNotice] = useState('')
@@ -261,12 +263,18 @@ function App() {
       <aside className="reference-sidebar" aria-label="Primary navigation">
         <div className="reference-brand"><span>⌂</span><div><strong>PRISON OPS</strong><small>Operations console</small></div></div>
         <p className="sidebar-module-label">OPERATIONS</p>
-        <nav>{navItems.filter(([, , permission]) => hasDevelopmentPermission(permission)).map(([id, label]) => <button key={id} className={`reference-nav-item ${activeModule === id ? 'active' : ''}`} type="button" onClick={() => setActiveModule(id)}><span><NavIcon name={id} /></span>{label}</button>)}</nav>
-        <div className="reference-version"><strong>{developmentUser.role}</strong><span>Development session · sign-in disabled</span></div>
+        <nav>{navItems.filter(([, , permission]) => hasPermission(user, permission)).map(([id, label]) => <button key={id} className={`reference-nav-item ${activeModule === id ? 'active' : ''}`} type="button" onClick={() => setActiveModule(id)}><span><NavIcon name={id} /></span>{label}</button>)}</nav>
+        <div className="reference-version"><strong>{user.role}</strong><span>Authenticated session</span></div>
       </aside>
       <main className="main-content">
         <header className="topbar inmate-host-topbar">
-          <div className="inmate-host-account"><span>{developmentUser.name} · {developmentUser.role}</span><b aria-label="Development account">●</b></div>
+          <div className="inmate-host-account">
+            <span>{user.role}</span>
+            <b aria-label="Account status">●</b>
+            <button className="sign-out-button" type="button" onClick={onSignOut}>
+              Sign out
+            </button>
+          </div>
         </header>
 
         {activeModule === 'visitors' ? <div className="page-content" id="visitor-dashboard">
@@ -384,7 +392,7 @@ function App() {
             <span>Prison Management System</span>
             <span>Visitor Management · Frontend demonstration</span>
           </footer>
-        </div> : <div className="module-host">{activeModule === 'inmates' && <InmateManagement canAdmit={hasDevelopmentPermission('admissions:create')} />}{activeModule === 'transfers' && <TransferManagement />}{activeModule === 'releases' && hasDevelopmentPermission('releases:manage') && <ReleaseManagement />}{activeModule === 'access' && hasDevelopmentPermission('users:manage') && <UserAccess />}{activeModule === 'dashboard' && <section className="dashboard-placeholder"><p>OPERATIONS / OVERVIEW</p><h1>Operations dashboard</h1><span>Select a module from the navigation to manage institutional records and workflows.</span></section>}</div>}
+        </div> : <div className="module-host">{activeModule === 'inmates' && <InmateManagement canAdmit={hasPermission(user, 'admissions:create')} />}{activeModule === 'transfers' && <TransferManagement />}{activeModule === 'releases' && hasPermission(user, 'releases:manage') && <ReleaseManagement />}{activeModule === 'access' && hasPermission(user, 'users:manage') && <UserAccess />}{activeModule === 'dashboard' && <section className="dashboard-placeholder"><p>OPERATIONS / OVERVIEW</p><h1>Operations dashboard</h1><span>Select a module from the navigation to manage institutional records and workflows.</span></section>}</div>}
       </main>
 
       {showForm && (
@@ -657,6 +665,14 @@ function App() {
       )}
     </div>
   )
+}
+
+function App() {
+  const { user, isAuthenticated, logout } = useAuth()
+
+  if (!isAuthenticated || !user) return <Login />
+
+  return <OperationsApp user={user} onSignOut={logout} />
 }
 
 export default App

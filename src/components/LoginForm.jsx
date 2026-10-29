@@ -42,7 +42,6 @@ export default function LoginForm() {
                 <span className="login-mark" aria-hidden="true">◇</span>
                 <h2>Login Form</h2>
             </header>
-
             <label className="login-field" htmlFor="email">
                 <span>Email</span>
                 <input

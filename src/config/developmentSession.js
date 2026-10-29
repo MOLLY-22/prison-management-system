@@ -10,12 +10,18 @@ export const developmentUser = {
 }
 
 const rolePermissions = {
+  'Super Admin': ['dashboard:view', 'inmates:view', 'admissions:create', 'visitors:manage', 'transfers:manage', 'releases:manage', 'users:manage'],
   'Officer-in-Charge': ['dashboard:view', 'inmates:view', 'admissions:create', 'visitors:manage', 'transfers:manage', 'releases:manage', 'users:manage'],
   'Senior Prison Officer': ['dashboard:view', 'inmates:view', 'admissions:create', 'visitors:manage', 'transfers:manage', 'releases:manage'],
   'Prison Officer': ['inmates:view', 'admissions:create', 'visitors:manage', 'transfers:manage'],
   Gatekeeper: ['inmates:view', 'visitors:manage'],
 }
 
+export function hasPermission(user, permission) {
+  return rolePermissions[user?.role]?.includes(permission) ?? false
+}
+
+// Retained for development tools that may still import this module.
 export function hasDevelopmentPermission(permission) {
-  return rolePermissions[developmentUser.role]?.includes(permission) ?? false
+  return hasPermission(developmentUser, permission)
 }
