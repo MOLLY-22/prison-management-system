@@ -1,15 +1,21 @@
 import { useState } from "react";
-import { useAuth } from "../context/AuthContext";
+import { useLocation, useNavigate } from "react-router-dom";
+import { useAuth } from "../context/authContext";
+
+function getErrorMessage(error) {
+    return error.response?.data?.message || error.message || "Unable to sign in. Please try again.";
+}
 
 export default function LoginForm() {
-    const { login, loading } = useAuth();
+    const { login, loading, authError } = useAuth();
+    const navigate = useNavigate();
+    const location = useLocation();
     const [credentials, setCredentials] = useState({
         email: "",
         password: "",
         rememberMe: false,
     });
     const [errorMessage, setErrorMessage] = useState("");
-    const [message, setMessage] = useState("");
     const [passwordShown, setPasswordShown] = useState(false);
 
     const handleChange = (event) => {
@@ -19,20 +25,18 @@ export default function LoginForm() {
             [name]: type === "checkbox" ? checked : value,
         }));
         setErrorMessage("");
-        setMessage("");
     };
 
     const handleSubmit = async (event) => {
         event.preventDefault();
         setErrorMessage("");
-        setMessage("");
 
         try {
             await login(credentials);
-            setMessage("Login successful");
+            const destination = location.state?.from?.pathname || "/dashboard";
+            navigate(destination, { replace: true });
         } catch (error) {
-            console.error("Login failed:", error);
-            setErrorMessage(error.response?.data?.message || "Invalid email or password");
+            setErrorMessage(getErrorMessage(error));
         }
     };
 
@@ -40,7 +44,8 @@ export default function LoginForm() {
         <form className="login-card" onSubmit={handleSubmit}>
             <header className="login-card-heading">
                 <span className="login-mark" aria-hidden="true">◇</span>
-                <h2>Login Form</h2>
+                <h2>Sign in</h2>
+                <p>Use your authorized staff account to continue.</p>
             </header>
 
             <label className="login-field" htmlFor="email">
@@ -65,7 +70,7 @@ export default function LoginForm() {
                         id="password"
                         name="password"
                         onChange={handleChange}
-                        placeholder="*********"
+                        placeholder="Enter your password"
                         required
                         type={passwordShown ? "text" : "password"}
                         value={credentials.password}
@@ -93,14 +98,16 @@ export default function LoginForm() {
                     />
                     <span>Remember me</span>
                 </label>
-                <p className="forgot-password">Forgot password?</p>
             </div>
 
-            {errorMessage && <p className="login-feedback login-error" role="alert">{errorMessage}</p>}
-            {message && <p className="login-feedback login-success" role="status">{message}</p>}
+            {(authError || errorMessage) && (
+                <p className="login-feedback login-error" role="alert">
+                    {errorMessage || authError}
+                </p>
+            )}
 
             <button className="login-submit" disabled={loading} type="submit">
-                {loading ? "Logging in…" : "Login"}
+                {loading ? "Signing in…" : "Sign in"}
             </button>
         </form>
     );

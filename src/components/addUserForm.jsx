@@ -41,16 +41,19 @@ export default function AddUserForm({ onClose, onUserCreated, userToEdit, onUser
             status: newUser.status,
         };
 
-        if (isEditing) {
-            onUserUpdated(savedUser);
-        } else {
-            onUserCreated(savedUser);
-        }
-        onClose();
-        if (isEditing) {
-            await userService.updateUser(savedUser);
-        } else {
-            await userService.createUser(savedUser);
+        try {
+            const persistedUser = isEditing
+                ? await userService.updateUser(savedUser)
+                : await userService.createUser(savedUser);
+
+            if (isEditing) {
+                onUserUpdated(persistedUser);
+            } else {
+                onUserCreated(persistedUser);
+            }
+            onClose();
+        } catch (error) {
+            setFormError(error.response?.data?.message || "Could not save this user.");
         }
     };
 

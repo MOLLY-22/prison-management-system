@@ -1,9 +1,10 @@
-const BASE_URL = import.meta.env.VITE_LOCAL_API_URL || 'http://localhost:3000';
+const BASE_URL = import.meta.env.VITE_API_URL || '/api';
 const TIMEOUT_MS = 10000;
 
 async function request(endpoint, options = {}) {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  const token = localStorage.getItem('token') || sessionStorage.getItem('token');
 
   const url = endpoint.startsWith('http')
     ? endpoint
@@ -14,6 +15,7 @@ async function request(endpoint, options = {}) {
     signal: controller.signal,
     headers: {
       'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options.headers,
     },
   };
@@ -67,4 +69,3 @@ const apiClient = {
 };
 
 export default apiClient;
-

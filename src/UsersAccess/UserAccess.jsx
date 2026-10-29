@@ -3,9 +3,8 @@ import { userService, INITIAL_MOCK_USERS } from "../api/userService";
 
 export default function UserAccess() {
     const [users, setUsers] = useState(INITIAL_MOCK_USERS);
-    const [isActive,setIsActive] = useState(false);
-    const [userData, setUserData] = useState({name: "",email: "",role: "",status: ""});
-    const [newUser, setNewUser] = useState({name : '', email: '', role: '', status: ''});
+    const [isActive, setIsActive] = useState(false);
+    const [newUser, setNewUser] = useState({ name: "", email: "", role: "Viewer", status: "Active" });
     const [search, setSearch] = useState('');
     const [loading, setLoading] = useState(false);
 
@@ -21,26 +20,17 @@ export default function UserAccess() {
     }, []);
 
 
-    const addUser = (e) => {
-        e.preventDefault();
+    const addUser = () => {
         if(!newUser.name || !newUser.email) return;
-        // TODO: Implement add user logic   
 
         const createdUser = {
             id: Date.now().toString(),
             ...newUser,
-            status: 'active'
+            status: 'Active'
         };
         
-        setUsers([...users, createdUser]);
-        setNewUser({name : '', email: '', role: '', status: 'Viewer'});
-    }
-
-    const handleRoleChange = async (id, newRole) => {
-        setUsers( (prev) => prev.map(user => user.id === id ? {...user, role: newRole} : user));
-
-
-        await userService.updateUserRole(id, newRole);
+        setUsers((currentUsers) => [...currentUsers, createdUser]);
+        setNewUser({ name: "", email: "", role: "Viewer", status: "Active" });
     };
 
     //Delete user function
@@ -76,13 +66,13 @@ export default function UserAccess() {
             {/* Add user popup */}
             <div className="bg-white p-4 rounded shadow mx-4 my-4 border border-gray-200 flex flex-col gap-2 max-w-md mx-auto">
                 <label htmlFor="name">Name</label>
-                <input className="border border-gray-300 rounded p-2 focus:outline-none focus:ring-2 focus:ring-blue-500" type="text" id="name" value={userData.name}  />
+                <input className="border border-gray-300 rounded p-2 focus:outline-none focus:ring-2 focus:ring-blue-500" type="text" id="name" value={newUser.name} onChange={(e) => setNewUser({ ...newUser, name: e.target.value })} />
 
                 <label htmlFor="email">Email</label>
-                <input className="border border-gray-300 rounded p-2 focus:outline-none focus:ring-2 focus:ring-blue-500" type="email" id="email" value={userData.email}  />
+                <input className="border border-gray-300 rounded p-2 focus:outline-none focus:ring-2 focus:ring-blue-500" type="email" id="email" value={newUser.email} onChange={(e) => setNewUser({ ...newUser, email: e.target.value })} />
 
                 <label htmlFor="role">Role</label>
-                <select className="border border-gray-300 rounded p-2 focus:outline-none focus:ring-2 focus:ring-blue-500" id="role" value={userData.role} onChange={(e) => handleRoleChange(userData.id, e.target.value)}>
+                <select className="border border-gray-300 rounded p-2 focus:outline-none focus:ring-2 focus:ring-blue-500" id="role" value={newUser.role} onChange={(e) => setNewUser({ ...newUser, role: e.target.value })}>
                     <option value="default">Select Role</option>
                     <option value="Admin">Admin</option>
                     <option value="User">User</option>
@@ -102,7 +92,9 @@ export default function UserAccess() {
                         </tr>
                     </thead>
                     <tbody>
-                        {filteredUsers.map(user => (
+                        {loading ? (
+                            <tr><td colSpan="7">Loading users…</td></tr>
+                        ) : filteredUsers.map(user => (
                             <tr key={user.id}>
                                 <td>{user.name}</td>
                                 <td>{user.email}</td>

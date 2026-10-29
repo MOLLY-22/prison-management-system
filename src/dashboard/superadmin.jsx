@@ -1,7 +1,9 @@
+import { useNavigate } from "react-router-dom";
 import SectionOne from "../components/sectionOne";
 import SectionTwo from "../components/sectionTwo";
 import SectionThree from "../components/sectionThree";
 import TopBanner from "../components/topBanner";
+import { useAuth } from "../context/authContext";
 
 const navigation = [
     { href: "#overview", label: "Overview" },
@@ -11,6 +13,14 @@ const navigation = [
 ];
 
 export default function SuperAdmin() {
+    const { user, logout } = useAuth();
+    const navigate = useNavigate();
+
+    const handleLogout = async () => {
+        await logout();
+        navigate("/login", { replace: true });
+    };
+
     return (
         <div className="portal-shell">
             <aside className="sidebar">
@@ -31,6 +41,10 @@ export default function SuperAdmin() {
             <div className="main-column">
                 <header className="topbar">
                     <p>Administration <span aria-hidden="true">/</span> User &amp; Access Control</p>
+                    <div className="account-controls">
+                        <span>{user?.name}</span>
+                        <button type="button" onClick={handleLogout}>Sign out</button>
+                    </div>
                 </header>
                 <main className="dashboard-content">
                     <TopBanner />

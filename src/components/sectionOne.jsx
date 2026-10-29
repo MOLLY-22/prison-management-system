@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { userService, INITIAL_MOCK_USERS } from "../api/userService";
+import { userService } from "../api/userService";
 import AddUserForm from "./addUserForm";
 
 export default function SectionOne() {
-    const [users, setUsers] = useState(INITIAL_MOCK_USERS);
+    const [users, setUsers] = useState([]);
     const [loading, setLoading] = useState(false);
+    const [errorMessage, setErrorMessage] = useState("");
     const [search, setSearch] = useState("");
     const [showForm, setShowForm] = useState(false);
     const [editingUser, setEditingUser] = useState(null);
@@ -17,6 +18,10 @@ export default function SectionOne() {
             try {
                 const data = await userService.getUsers();
                 if (mounted) setUsers(data);
+            } catch (error) {
+                if (mounted) {
+                    setErrorMessage(error.response?.data?.message || "Could not load personnel records.");
+                }
             } finally {
                 if (mounted) setLoading(false);
             }
@@ -47,17 +52,27 @@ export default function SectionOne() {
             status: user.status === "Active" ? "Inactive" : "Active",
         };
 
-        setUsers((currentUsers) =>
-            currentUsers.map((currentUser) => currentUser.id === user.id ? updatedUser : currentUser)
-        );
-        await userService.updateUser(updatedUser);
+        try {
+            const savedUser = await userService.updateUser(updatedUser);
+            setUsers((currentUsers) =>
+                currentUsers.map((currentUser) => currentUser.id === user.id ? savedUser : currentUser)
+            );
+            setErrorMessage("");
+        } catch (error) {
+            setErrorMessage(error.response?.data?.message || "Could not update personnel status.");
+        }
     };
 
     const deleteUser = async (user) => {
         if (!window.confirm(`Delete ${user.name} from personnel access?`)) return;
 
-        await userService.deleteUser(user.id);
-        setUsers((currentUsers) => currentUsers.filter((currentUser) => currentUser.id !== user.id));
+        try {
+            await userService.deleteUser(user.id);
+            setUsers((currentUsers) => currentUsers.filter((currentUser) => currentUser.id !== user.id));
+            setErrorMessage("");
+        } catch (error) {
+            setErrorMessage(error.response?.data?.message || "Could not delete personnel.");
+        }
     };
 
     return (
@@ -85,6 +100,8 @@ export default function SectionOne() {
                     Add user
                 </button>
             </div>
+
+            {errorMessage && <p className="login-feedback login-error" role="alert">{errorMessage}</p>}
 
             <div className="table-toolbar">
                 <label className="search-control">
@@ -115,6 +132,8 @@ export default function SectionOne() {
                     <tbody>
                         {loading ? (
                             <tr><td className="empty-state" colSpan="6">Loading personnel records…</td></tr>
+                        ) : errorMessage && users.length === 0 ? (
+                            <tr><td className="empty-state" colSpan="6">{errorMessage}</td></tr>
                         ) : filteredUsers.length === 0 ? (
                             <tr><td className="empty-state" colSpan="6">No personnel match “{search}”.</td></tr>
                         ) : filteredUsers.map((user) => (
