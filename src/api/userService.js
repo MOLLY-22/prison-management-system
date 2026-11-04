@@ -17,19 +17,21 @@ export const userService = {
         }
     },
 
-    // POST create user
-    createUser: async(userData) => {
-        try {
-            const response = await api.post('/users', userData)
-            return response.data
-        } catch (error) {
-            console.error('Error creating user:', error)
-            throw error
-        }
+    createUser: async (userData) => {
+        const response = await api.post('/users', userData);
+        return response.data;
+    },
+    updateUserRole: async (id, newRole) => {
+        const response = await api.patch(`/users/${id}/role`, { role: newRole });
+        return response.data;
     },
 
-    getUserById: async(id) => {
-        const response = await api.get(`/users/${id}`)
-        return response.data
-    }
-}
+    updateUser: async (userData) => {
+        const response = await api.patch(`/users/${userData.id}`, userData);
+        return response.data;
+    },
+
+    deleteUser: async (id) => {
+        await api.delete(`/users/${id}`);
+    },
+};

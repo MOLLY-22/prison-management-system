@@ -1,35 +1,71 @@
-import axios from 'axios';
+const BASE_URL = import.meta.env.VITE_API_URL || '/api';
+const TIMEOUT_MS = 10000;
 
-const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || 'https://api.example.com',
-  headers: {
-    'Content-Type': 'application/json',
-  },
-  timeout: 10000, // 10 seconds
-});
+async function request(endpoint, options = {}) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  const token = localStorage.getItem('token') || sessionStorage.getItem('token');
 
-// Request Interceptor: Attach Auth Token if present
-api.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+  const url = endpoint.startsWith('http')
+    ? endpoint
+    : `${BASE_URL.replace(/\/$/, '')}/${endpoint.replace(/^\//, '')}`;
+
+  const config = {
+    ...options,
+    signal: controller.signal,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...options.headers,
+    },
+  };
+
+  try {
+    const response = await fetch(url, config);
+    clearTimeout(timeoutId);
+
+    let data = null;
+    const contentType = response.headers.get('content-type');
+    if (contentType && contentType.includes('application/json')) {
+      data = await response.json();
+    } else {
+      data = await response.text();
     }
-    return config;
-  },
-  (error) => Promise.reject(error)
-);
 
-// Response Interceptor: Handle global errors (e.g. 401 Unauthorized)
-api.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      // Handle logout or token refresh logic here
-      console.error('Unauthorized! Redirecting to login...');
+    if (!response.ok) {
+      const error = new Error(`HTTP error! status: ${response.status}`);
+      error.response = { status: response.status, data };
+      throw error;
     }
-    return Promise.reject(error);
+
+    return { data, status: response.status, headers: response.headers };
+  } catch (err) {
+    clearTimeout(timeoutId);
+    throw err;
   }
-);
+}
 
-export default api;
+const apiClient = {
+  get: (endpoint, config = {}) => request(endpoint, { ...config, method: 'GET' }),
+  post: (endpoint, body, config = {}) =>
+    request(endpoint, {
+      ...config,
+      method: 'POST',
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    }),
+  put: (endpoint, body, config = {}) =>
+    request(endpoint, {
+      ...config,
+      method: 'PUT',
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    }),
+  patch: (endpoint, body, config = {}) =>
+    request(endpoint, {
+      ...config,
+      method: 'PATCH',
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    }),
+  delete: (endpoint, config = {}) => request(endpoint, { ...config, method: 'DELETE' }),
+};
+
+export default apiClient;

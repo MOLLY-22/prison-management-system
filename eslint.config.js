@@ -18,4 +18,10 @@ export default defineConfig([
       parserOptions: { ecmaFeatures: { jsx: true } },
     },
   },
+  {
+    files: ['mock-backend/**/*.js'],
+    languageOptions: {
+      globals: globals.node,
+    },
+  },
 ])
