@@ -1,6 +1,11 @@
-import api from 'axios'
+import api from './axios'
+
+export const  INITIAL_MOCK_INMATES =[
+    
+]
 
 export const userService = {
+
     //GET all users
     getAllUsers: async () => {
         try {
