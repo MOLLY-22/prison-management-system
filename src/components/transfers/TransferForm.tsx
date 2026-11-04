@@ -66,7 +66,6 @@ function TransferForm({ onSubmit }: TransferFormProps) {
       [field]: value,
     }))
 
-    // Remove this field's error as the user corrects it.
     setErrors(current => ({
       ...current,
       [field]: undefined,
@@ -114,12 +113,12 @@ function TransferForm({ onSubmit }: TransferFormProps) {
 
     setErrors(nextErrors)
 
-    const hasErrors = Object.keys(nextErrors).length > 0
+    const errorCount = Object.keys(nextErrors).length
 
-    if (hasErrors) {
+    if (errorCount > 0) {
       setFormError(
-        `Please correct ${Object.keys(nextErrors).length} ${
-          Object.keys(nextErrors).length === 1 ? 'error' : 'errors'
+        `Please correct ${errorCount} ${
+          errorCount === 1 ? 'error' : 'errors'
         } before reviewing this transfer.`,
       )
       return false
@@ -132,11 +131,8 @@ function TransferForm({ onSubmit }: TransferFormProps) {
   function handleReview(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
-    if (!validateForm()) {
-      return
-    }
+    if (!validateForm()) return
 
-    // Validation guarantees the required values are present.
     const transfer: Transfer = {
       id: Date.now(),
       inmateNumber: values.inmateNumber.trim(),
@@ -169,22 +165,59 @@ function TransferForm({ onSubmit }: TransferFormProps) {
   }
 
   function handleConfirmationClose() {
-    // Preserve form values if the user chooses to go back.
     setConfirmationOpen(false)
     setPendingTransfer(null)
   }
 
+  const panelSx = {
+    '& .MuiOutlinedInput-root': {
+      borderRadius: 1.5,
+      backgroundColor: '#ffffff',
+    },
+    '& .MuiInputLabel-root': {
+      color: '#475569',
+    },
+    '& .MuiFormHelperText-root': {
+      fontSize: '0.75rem',
+    },
+  }
+
   return (
     <>
-      <Paper variant="outlined" sx={{ p: { xs: 2, md: 3 } }}>
-        <Stack spacing={2}>
+      <Paper
+        variant="outlined"
+        sx={{
+          p: { xs: 2, md: 3 },
+          height: '100%',
+          borderColor: '#e2e8f0',
+          borderRadius: 2,
+          backgroundColor: '#ffffff',
+          boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)',
+        }}
+      >
+        <Stack spacing={2.5}>
           <Box>
-            <Typography variant="h6" sx={{ fontWeight: 700 }}>
-              Create Transfer Request
+            <Typography
+              variant="h6"
+              sx={{
+                fontWeight: 750,
+                color: '#172033',
+                fontSize: '1.1rem',
+              }}
+            >
+              Initiate Transfer Request
             </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Complete all required fields before submitting a transfer for
-              supervisory review.
+
+            <Typography
+              variant="body2"
+              sx={{
+                mt: 0.75,
+                color: '#64748b',
+                lineHeight: 1.6,
+              }}
+            >
+              Enter the inmate details, destination facility and transport
+              security level before submitting the request for review.
             </Typography>
           </Box>
 
@@ -201,10 +234,11 @@ function TransferForm({ onSubmit }: TransferFormProps) {
             sx={{
               display: 'grid',
               gridTemplateColumns: {
-                xs: '1fr',
+                xs: 'minmax(0, 1fr)',
                 sm: 'repeat(2, minmax(0, 1fr))',
               },
               gap: 2,
+              ...panelSx,
             }}
           >
             <TextField
@@ -297,9 +331,26 @@ function TransferForm({ onSubmit }: TransferFormProps) {
                 gridColumn: { xs: 'auto', sm: '1 / -1' },
                 display: 'flex',
                 justifyContent: 'flex-end',
+                mt: 0.5,
               }}
             >
-              <Button type="submit" variant="contained">
+              <Button
+                type="submit"
+                variant="contained"
+                sx={{
+                  px: 3,
+                  py: 1.1,
+                  borderRadius: 1.5,
+                  backgroundColor: '#1d4ed8',
+                  fontWeight: 700,
+                  textTransform: 'none',
+                  boxShadow: 'none',
+                  '&:hover': {
+                    backgroundColor: '#1e40af',
+                    boxShadow: 'none',
+                  },
+                }}
+              >
                 Review Transfer
               </Button>
             </Box>
@@ -314,7 +365,10 @@ function TransferForm({ onSubmit }: TransferFormProps) {
         maxWidth="sm"
         aria-labelledby="transfer-confirmation-title"
       >
-        <DialogTitle id="transfer-confirmation-title">
+        <DialogTitle
+          id="transfer-confirmation-title"
+          sx={{ color: '#172033', fontWeight: 700 }}
+        >
           Confirm Transfer Request
         </DialogTitle>
 
@@ -346,7 +400,7 @@ function TransferForm({ onSubmit }: TransferFormProps) {
                 <strong>Security Level:</strong> {pendingTransfer.securityLevel}
               </Typography>
 
-              <Typography>
+              <Typography sx={{ overflowWrap: 'anywhere' }}>
                 <strong>Reason:</strong> {pendingTransfer.reason}
               </Typography>
 
@@ -357,7 +411,7 @@ function TransferForm({ onSubmit }: TransferFormProps) {
           )}
         </DialogContent>
 
-        <DialogActions sx={{ p: 2 }}>
+        <DialogActions sx={{ p: 2, gap: 1 }}>
           <Button onClick={handleConfirmationClose} color="inherit">
             Go Back
           </Button>
@@ -366,6 +420,14 @@ function TransferForm({ onSubmit }: TransferFormProps) {
             onClick={handleConfirm}
             variant="contained"
             disabled={!pendingTransfer}
+            sx={{
+              backgroundColor: '#1d4ed8',
+              fontWeight: 700,
+              textTransform: 'none',
+              '&:hover': {
+                backgroundColor: '#1e40af',
+              },
+            }}
           >
             Confirm and Submit
           </Button>
