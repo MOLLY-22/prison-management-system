@@ -22,3 +22,10 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Local SQLite database and backups
+mock-backend/visitors.db
+mock-backend/server-backup.js
+
+# Local environment variables
+.env
