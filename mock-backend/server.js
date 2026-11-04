@@ -3,9 +3,16 @@ const express = require('express')
 const cors = require('cors')
 const Database = require('better-sqlite3')
 const path = require('path')
+const crypto = require('crypto')
 
 const app = express()
 const PORT = 5000
+const SESSION_TTL_MS = 8 * 60 * 60 * 1000
+const demoEmail = process.env.DEMO_AUTH_EMAIL ||
+  (process.env.NODE_ENV === 'production' ? '' : 'admin@prison.local')
+const demoPassword = process.env.DEMO_AUTH_PASSWORD ||
+  (process.env.NODE_ENV === 'production' ? '' : 'DemoPrison2026!')
+const sessions = new Map()
 
 const db = new Database(path.join(__dirname, 'visitors.db'))
 
@@ -83,6 +90,39 @@ if (inmateCount === 0) {
   })
 
   insertInmates(seedInmates)
+}
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    badgeId TEXT NOT NULL UNIQUE,
+    role TEXT NOT NULL,
+    facility TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'Active'
+  )
+`)
+
+const userCount = db.prepare('SELECT COUNT(*) AS total FROM users').get().total
+
+if (userCount === 0) {
+  const insertUser = db.prepare(`
+    INSERT INTO users (name, badgeId, role, facility, status)
+    VALUES (?, ?, ?, ?, ?)
+  `)
+
+  const seedUsers = [
+    ['Commander John Davis', 'SEC-00412', 'Officer-in-Charge', 'Block A - Maximum', 'Active'],
+    ['Sarah Miller', 'SEC-00891', 'Security Officer', 'Block B - Medium', 'Active'],
+    ['Robert King', 'SEC-01104', 'Prison Officer', 'Block C - General', 'Active'],
+    ['Alan Lee', 'SEC-01459', 'Security Officer', 'Block A - Maximum', 'Active'],
+  ]
+
+  const insertUsers = db.transaction((records) => {
+    for (const user of records) insertUser.run(...user)
+  })
+
+  insertUsers(seedUsers)
 }
 
 // Add sample visitors only when the visitors table is empty.
@@ -166,6 +206,191 @@ app.get('/', (req, res) => {
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', service: 'mock-backend' })
+})
+
+function secureStringEqual(left, right) {
+  const leftBuffer = Buffer.from(left)
+  const rightBuffer = Buffer.from(right)
+
+  return leftBuffer.length === rightBuffer.length &&
+    crypto.timingSafeEqual(leftBuffer, rightBuffer)
+}
+
+function requireAuth(req, res, next) {
+  const authorization = req.get('authorization') || ''
+  const token = authorization.startsWith('Bearer ')
+    ? authorization.slice('Bearer '.length)
+    : ''
+  const session = sessions.get(token)
+
+  if (!session || session.expiresAt <= Date.now()) {
+    sessions.delete(token)
+    return res.status(401).json({ message: 'Your session has expired. Please sign in again.' })
+  }
+
+  req.authToken = token
+  req.authUser = session.user
+  return next()
+}
+
+app.post('/api/auth/login', (req, res) => {
+  const email = String(req.body.email || '').trim().toLowerCase()
+  const password = String(req.body.password || '')
+
+  if (!email || !password) {
+    return res.status(400).json({ message: 'Email and password are required.' })
+  }
+
+  if (!demoEmail || !demoPassword) {
+    return res.status(503).json({ message: 'Authentication is not configured on this server.' })
+  }
+
+  if (
+    !secureStringEqual(email, demoEmail.toLowerCase()) ||
+    !secureStringEqual(password, demoPassword)
+  ) {
+    return res.status(401).json({ message: 'Invalid email or password.' })
+  }
+
+  const user = {
+    id: 'demo-admin',
+    name: 'Prison System Administrator',
+    email: demoEmail,
+    role: 'Administrator',
+  }
+  const token = crypto.randomBytes(32).toString('hex')
+
+  sessions.set(token, {
+    user,
+    expiresAt: Date.now() + SESSION_TTL_MS,
+  })
+
+  return res.json({ token, user })
+})
+
+app.get('/api/auth/me', requireAuth, (req, res) => {
+  res.json({ user: req.authUser })
+})
+
+app.post('/api/auth/logout', requireAuth, (req, res) => {
+  sessions.delete(req.authToken)
+  res.json({ message: 'Signed out successfully.' })
+})
+
+app.get('/api/users', requireAuth, (req, res) => {
+  const users = db.prepare('SELECT * FROM users ORDER BY id').all()
+  res.json(users)
+})
+
+app.post('/api/users', requireAuth, (req, res) => {
+  const name = String(req.body.name || '').trim()
+  const badgeId = String(req.body.badgeId || '').trim()
+  const role = String(req.body.role || '').trim()
+  const facility = String(req.body.facility || '').trim()
+  const status = String(req.body.status || 'Active').trim()
+
+  if (!name || !badgeId || !role || !facility) {
+    return res.status(400).json({
+      message: 'Name, badge ID, role, and facility are required.',
+    })
+  }
+
+  try {
+    const result = db.prepare(`
+      INSERT INTO users (name, badgeId, role, facility, status)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(name, badgeId, role, facility, status)
+
+    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(result.lastInsertRowid)
+    return res.status(201).json(user)
+  } catch (error) {
+    if (error.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+      return res.status(409).json({ message: 'That badge ID is already assigned.' })
+    }
+
+    console.error('Creating user failed:', error.message)
+    return res.status(500).json({ message: 'Could not create user.' })
+  }
+})
+
+app.patch('/api/users/:id/role', requireAuth, (req, res) => {
+  const id = Number(req.params.id)
+  const role = String(req.body.role || '').trim()
+
+  if (!Number.isInteger(id) || !role) {
+    return res.status(400).json({ message: 'A valid user ID and role are required.' })
+  }
+
+  const result = db.prepare('UPDATE users SET role = ? WHERE id = ?').run(role, id)
+  if (result.changes === 0) {
+    return res.status(404).json({ message: 'User not found.' })
+  }
+
+  return res.json(db.prepare('SELECT * FROM users WHERE id = ?').get(id))
+})
+
+app.patch('/api/users/:id', requireAuth, (req, res) => {
+  const id = Number(req.params.id)
+  if (!Number.isInteger(id)) {
+    return res.status(400).json({ message: 'A valid user ID is required.' })
+  }
+
+  const currentUser = db.prepare('SELECT * FROM users WHERE id = ?').get(id)
+  if (!currentUser) {
+    return res.status(404).json({ message: 'User not found.' })
+  }
+
+  const updatedUser = {
+    name: String(req.body.name ?? currentUser.name).trim(),
+    badgeId: String(req.body.badgeId ?? currentUser.badgeId).trim(),
+    role: String(req.body.role ?? currentUser.role).trim(),
+    facility: String(req.body.facility ?? currentUser.facility).trim(),
+    status: String(req.body.status ?? currentUser.status).trim(),
+  }
+
+  if (!updatedUser.name || !updatedUser.badgeId || !updatedUser.role || !updatedUser.facility) {
+    return res.status(400).json({
+      message: 'Name, badge ID, role, and facility are required.',
+    })
+  }
+
+  try {
+    db.prepare(`
+      UPDATE users
+      SET name = ?, badgeId = ?, role = ?, facility = ?, status = ?
+      WHERE id = ?
+    `).run(
+      updatedUser.name,
+      updatedUser.badgeId,
+      updatedUser.role,
+      updatedUser.facility,
+      updatedUser.status,
+      id,
+    )
+
+    return res.json(db.prepare('SELECT * FROM users WHERE id = ?').get(id))
+  } catch (error) {
+    if (error.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+      return res.status(409).json({ message: 'That badge ID is already assigned.' })
+    }
+
+    console.error('Updating user failed:', error.message)
+    return res.status(500).json({ message: 'Could not update user.' })
+  }
+})
+
+app.delete('/api/users/:id', requireAuth, (req, res) => {
+  const id = Number(req.params.id)
+  if (!Number.isInteger(id)) {
+    return res.status(400).json({ message: 'A valid user ID is required.' })
+  }
+
+  const result = db.prepare('DELETE FROM users WHERE id = ?').run(id)
+  if (result.changes === 0) {
+    return res.status(404).json({ message: 'User not found.' })
+  }
+
+  return res.json({ message: 'User deleted successfully.' })
 })
 
 // List visitor records.
