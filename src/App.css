@@ -1862,6 +1862,13 @@ body,
   opacity: .48;
 }
 
+.reference-gate-empty {
+  margin: 10px 0 0;
+  color: #68717b;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
 .reference-port-details {
   display: grid;
   gap: 8px;
@@ -1899,7 +1906,7 @@ body,
 .reference-log-header,
 .reference-log-row {
   display: grid;
-  grid-template-columns: minmax(90px, 1fr) 54px auto;
+  grid-template-columns: minmax(90px, 1fr) 54px minmax(80px, auto);
   align-items: center;
   gap: 8px;
   font-family: Georgia, serif;
@@ -1968,6 +1975,50 @@ body,
   background: #f5edda;
 }
 
+.reference-log-actions {
+  display: grid;
+  justify-items: start;
+  gap: 5px;
+}
+
+.reference-review-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.reference-review-actions button {
+  min-height: 23px;
+  padding: 2px 6px;
+  border: 1px solid #cfd3d8;
+  border-radius: 2px;
+  color: #24313d;
+  background: #fff;
+  font-size: 8px;
+  cursor: pointer;
+}
+
+.reference-review-actions button:first-child {
+  border-color: #2e694e;
+  color: #fff;
+  background: #2e694e;
+}
+
+.reference-review-actions .gate-row-action {
+  border-color: #246995;
+  color: #fff;
+  background: #246995;
+  cursor: pointer;
+}
+
+.reference-review-actions .gate-row-action:hover:not(:disabled) {
+  background: #1b5276;
+}
+
+.reference-review-actions button:disabled {
+  opacity: .6;
+  cursor: wait;
+}
+
 .reference-log-empty {
   padding: 12px 4px;
   color: #737a83;
@@ -1993,14 +2044,20 @@ body,
   font-size: 10px;
 }
 
-.reference-lookup-search span {
+.reference-lookup-search button {
   display: grid;
   min-width: 72px;
   place-items: center;
+  border: 0;
   color: #fff;
   background: #246995;
   font-family: Georgia, serif;
   font-size: 10px;
+  cursor: pointer;
+}
+
+.reference-lookup-search button:hover {
+  background: #174e72;
 }
 
 .reference-inmate-card {

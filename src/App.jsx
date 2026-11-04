@@ -51,7 +51,9 @@ function OperationsApp({ user, onSignOut }) {
   const [showForm, setShowForm] = useState(false)
   const [notice, setNotice] = useState('')
   const [loading, setLoading] = useState(true)
+  const [showAllSessions, setShowAllSessions] = useState(false)
   const [busyId, setBusyId] = useState(null)
+  const [statusBusyId, setStatusBusyId] = useState(null)
   const [formBusy, setFormBusy] = useState(false)
   const [gateVisitorId, setGateVisitorId] = useState('')
 
@@ -141,7 +143,10 @@ function OperationsApp({ user, onSignOut }) {
   ).length
 
   const gateCandidates = visitors.filter(
-    (visitor) => visitor.status === 'Approved' && !visitor.exitTimestamp,
+    (visitor) =>
+      visitor.status === 'Approved' &&
+      visitor.date === today &&
+      !visitor.exitTimestamp,
   )
   const gateVisitor =
     gateCandidates.find((visitor) => String(visitor.id) === gateVisitorId) ||
@@ -187,6 +192,36 @@ function OperationsApp({ user, onSignOut }) {
       setNotice(error.message || 'Could not record visit time.')
     } finally {
       setBusyId(null)
+    }
+  }
+
+  async function updateVisitorStatus(visitor, status) {
+    if (statusBusyId !== null) return
+
+    setStatusBusyId(visitor.id)
+    setNotice('')
+
+    try {
+      const response = await fetch(`${API_URL}/${visitor.id}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status }),
+      })
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.message || `Could not ${status.toLowerCase()} visitor.`)
+      }
+
+      setVisitors((current) =>
+        current.map((item) => item.id === visitor.id ? { ...item, ...result } : item),
+      )
+      setNotice(`${visitor.name}'s request was ${status.toLowerCase()}.`)
+    } catch (error) {
+      console.error('Updating visitor status failed:', error)
+      setNotice(error.message || 'Could not update visitor status.')
+    } finally {
+      setStatusBusyId(null)
     }
   }
 
@@ -368,7 +403,7 @@ function OperationsApp({ user, onSignOut }) {
 
               <section className="reference-panel reference-lookup">
                 <div className="reference-panel-heading"><h2><span>⌕</span> Inmate Lookup & Gatekeeper Minimum Access (FR-11)</h2><small>Confidential Files<br />Restricted</small></div>
-                <label className="reference-lookup-search"><input aria-label="Search inmate ID or name" placeholder="Search Inmate ID or Name..." value={inmateSearch} onChange={(event) => { setInmateSearch(event.target.value); setInmateResults([]); setLookingUpInmates(false); setSelectedInmate(null) }} /><span>Lookup</span></label>
+                <label className="reference-lookup-search"><input aria-label="Search inmate ID or name" placeholder="Search Inmate ID or Name..." value={inmateSearch} onChange={(event) => { setInmateSearch(event.target.value); setInmateResults([]); setLookingUpInmates(false); setSelectedInmate(null) }} /><button type="button" onClick={() => { document.querySelector('.reference-registration input[placeholder="Search inmate ID or name..."]')?.focus(); document.querySelector('.reference-registration')?.scrollIntoView({ behavior: 'smooth' }); if (inmateSearch.trim().length < 2) setNotice('Enter at least 2 characters to search inmate records.') }}>Lookup</button></label>
                 {selectedInmate ? <div className="reference-inmate-card">{selectedInmate.photoUrl ? <img src={selectedInmate.photoUrl} alt={`${selectedInmate.fullName} profile`} /> : <div className="reference-photo-placeholder">{selectedInmate.fullName.split(' ').map((part) => part[0]).slice(0, 2).join('').toUpperCase()}</div>}<div><h3>{selectedInmate.fullName}</h3><p>Cell Block: <strong>{selectedInmate.cellBlock}</strong></p><p>Security, Tier 2</p><small>✓ &nbsp;Verified minimum information displayed</small></div><button type="button" onClick={() => { setForm({ ...form, inmate: selectedInmate.fullName }); document.querySelector('.reference-registration')?.scrollIntoView({ behavior: 'smooth' }) }}>Attach to Session</button></div> : <p className="reference-lookup-empty">Search for an inmate to display permitted details.</p>}
               </section>
             </div>
@@ -377,12 +412,13 @@ function OperationsApp({ user, onSignOut }) {
                 <div className="reference-panel-heading"><h2><span>♧</span> Gatehouse Touch Controls</h2><span className="live-port">LIVE PORT</span></div>
                 <label className="gate-visitor-select">Approved visitor<select aria-label="Select an approved visitor" value={gateVisitor?.id || ''} onChange={(event) => setGateVisitorId(event.target.value)}><option value="">Select visitor...</option>{gateCandidates.map((visitor) => <option key={visitor.id} value={visitor.id}>{visitor.name} · {visitor.visitorId}</option>)}</select></label>
                 <div className="reference-gate-buttons"><button className="gate-check-in" type="button" disabled={!gateVisitor || Boolean(gateVisitor.entryTimestamp) || busyId !== null} onClick={() => gateVisitor && recordVisitTime(gateVisitor, 'entry')}><span>⇥</span>CHECK-IN</button><button className="gate-check-out" type="button" disabled={!gateVisitor?.entryTimestamp || Boolean(gateVisitor.exitTimestamp) || busyId !== null} onClick={() => gateVisitor && recordVisitTime(gateVisitor, 'exit')}><span>⇤</span>CHECK-OUT</button></div>
+                {!loading && !gateVisitor && <p className="reference-gate-empty">No approved visitor is scheduled for today. Check the visit date and approval status in Active Session Logs.</p>}
                 <div className="reference-port-details"><p><span>Active Station Terminal</span><strong>GT-PORT-04</strong></p><p><span>Gatekeeper Officer ID</span><strong>SEC-OFF-882</strong></p><p><span>System Synchronization</span><strong className="optimal-label">Optimal (0.04s)</strong></p></div>
               </section>
               <section className="reference-panel reference-session-logs">
-                <div className="reference-panel-heading"><h2><span>▤</span> Active Session Logs</h2><small>Auto-updating</small></div>
+                <div className="reference-panel-heading"><h2><span>▤</span> Active Session Logs</h2><button className="clear-filters" type="button" onClick={() => setShowAllSessions((showAll) => !showAll)}>{showAllSessions ? 'Show recent' : `View all (${visitors.length})`}</button></div>
                 <div className="reference-log-header"><span>VISITOR / INMATE</span><span>ENTRY</span><span>STATUS</span></div>
-                {loading ? <p className="reference-log-empty">Loading sessions...</p> : visitors.slice(0, 6).map((visitor) => <div className="reference-log-row" key={visitor.id}><div><strong>{visitor.name}</strong><span>↳ {visitor.inmate}</span></div><time>{visitor.entryTimestamp ? formatTime(new Date(visitor.entryTimestamp).toTimeString().slice(0, 5)) : formatTime(visitor.time)}</time><span className={`reference-log-status ${visitor.exitTimestamp ? 'exited' : visitor.entryTimestamp ? 'onsite' : 'scheduled'}`}>{visitor.exitTimestamp ? 'Exited' : visitor.entryTimestamp ? 'On Site' : visitor.status}</span></div>)}
+                {loading ? <p className="reference-log-empty">Loading sessions...</p> : (showAllSessions ? visitors : visitors.slice(0, 6)).map((visitor) => <div className="reference-log-row" key={visitor.id}><div><strong>{visitor.name}</strong><span>↳ {visitor.inmate}</span></div><time>{visitor.entryTimestamp ? formatTime(new Date(visitor.entryTimestamp).toTimeString().slice(0, 5)) : formatTime(visitor.time)}</time><div className="reference-log-actions"><span className={`reference-log-status ${visitor.exitTimestamp ? 'exited' : visitor.entryTimestamp ? 'onsite' : 'scheduled'}`}>{visitor.exitTimestamp ? 'Exited' : visitor.entryTimestamp ? 'On Site' : visitor.status}</span>{visitor.status === 'Pending' && <div className="reference-review-actions"><button type="button" disabled={statusBusyId !== null} onClick={() => updateVisitorStatus(visitor, 'Approved')}>{statusBusyId === visitor.id ? 'Saving…' : 'Approve'}</button><button type="button" disabled={statusBusyId !== null} onClick={() => updateVisitorStatus(visitor, 'Rejected')}>Reject</button></div>}{visitor.status === 'Rejected' && !visitor.entryTimestamp && <div className="reference-review-actions"><button type="button" disabled={statusBusyId !== null} onClick={() => updateVisitorStatus(visitor, 'Pending')}>{statusBusyId === visitor.id ? 'Saving…' : 'Reopen'}</button></div>}{visitor.status === 'Approved' && !visitor.entryTimestamp && <div className="reference-review-actions"><button type="button" disabled={statusBusyId !== null} onClick={() => updateVisitorStatus(visitor, 'Rejected')}>{statusBusyId === visitor.id ? 'Saving…' : 'Revoke'}</button></div>}{visitor.status === 'Approved' && !visitor.exitTimestamp && (visitor.entryTimestamp || visitor.date === today) && <div className="reference-review-actions"><button className="gate-row-action" type="button" disabled={busyId !== null} onClick={() => recordVisitTime(visitor, visitor.entryTimestamp ? 'exit' : 'entry')}>{busyId === visitor.id ? 'Saving…' : visitor.entryTimestamp ? 'Check out' : 'Check in'}</button></div>}</div></div>)}
                 {!loading && visitors.length === 0 && <p className="reference-log-empty">No visitor sessions have been recorded.</p>}
               </section>
             </div>
