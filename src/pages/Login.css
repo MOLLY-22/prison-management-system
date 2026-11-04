@@ -1,0 +1,233 @@
+#root {
+    min-height: 100vh;
+}
+
+.login-page {
+    display: grid;
+    min-height: 100vh;
+    place-items: center;
+    padding: 32px 20px;
+    background: #f8f9fb;
+}
+
+.login-layout {
+    display: grid;
+    width: min(100%, 420px);
+    gap: 18px;
+}
+
+.login-brand {
+    padding: 0 3px;
+}
+
+.login-brand-rule {
+    display: block;
+    width: 29px;
+    height: 3px;
+    margin-bottom: 11px;
+    background: #0a2540;
+}
+
+.login-brand h1 {
+    margin: 0;
+    color: #0a2540;
+    font-size: clamp(20px, 5vw, 25px);
+    font-weight: 650;
+    letter-spacing: -.035em;
+    line-height: 1.3;
+}
+
+.login-card {
+    display: grid;
+    gap: 18px;
+    padding: clamp(22px, 6vw, 34px);
+    border: 1px solid #dfe3e7;
+    border-radius: 6px;
+    background: #f2f4f6;
+    box-shadow: 0 12px 34px rgb(10 37 64 / 9%);
+}
+
+.login-card-heading {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    padding-bottom: 17px;
+    border-bottom: 1px solid #d9dee3;
+}
+
+.login-mark {
+    display: grid;
+    width: 31px;
+    height: 31px;
+    place-items: center;
+    border: 1px solid #aebbc7;
+    border-radius: 50%;
+    color: #0a2540;
+    font-size: 21px;
+    line-height: 1;
+}
+
+.login-card-heading h2 {
+    margin: 0;
+    color: #0a2540;
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: -.02em;
+}
+
+.login-field {
+    display: grid;
+    gap: 7px;
+    color: #303a43;
+    font-size: 12px;
+    font-weight: 550;
+}
+
+.login-field > input,
+.password-control input {
+    width: 100%;
+    min-height: 42px;
+    padding: 0 12px;
+    border: 1px solid #c7cdd3;
+    border-radius: 3px;
+    color: #191c1e;
+    background: #fff;
+    font-size: 13px;
+}
+
+.login-field > input::placeholder,
+.password-control input::placeholder {
+    color: #747d85;
+}
+
+.login-field > input:focus,
+.password-control input:focus {
+    border-color: #1e629a;
+    outline: 2px solid rgb(30 98 154 / 15%);
+    outline-offset: 0;
+}
+
+.password-control {
+    position: relative;
+    display: block;
+}
+
+.password-control input {
+    padding-right: 62px;
+}
+
+.password-toggle {
+    position: absolute;
+    top: 50%;
+    right: 10px;
+    padding: 5px 3px;
+    transform: translateY(-50%);
+    border: 0;
+    color: #1e629a;
+    background: transparent;
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.password-toggle:hover {
+    color: #0a2540;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+}
+
+.login-options {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: -2px;
+}
+
+.remember-option {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: #43474d;
+    cursor: pointer;
+    font-size: 12px;
+}
+
+.remember-option input {
+    width: 15px;
+    height: 15px;
+    margin: 0;
+    accent-color: #0a2540;
+}
+
+.forgot-password {
+    margin: 0;
+    color: #59616a;
+    font-size: 11px;
+}
+
+.login-submit {
+    min-height: 43px;
+    border: 1px solid #000f22;
+    border-radius: 3px;
+    color: #fff;
+    background: #000f22;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+    transition: background .15s ease, border-color .15s ease;
+}
+
+.login-submit:hover:not(:disabled) {
+    border-color: #1e629a;
+    background: #1e629a;
+}
+
+.login-submit:disabled {
+    cursor: wait;
+    opacity: .7;
+}
+
+.login-feedback {
+    margin: -6px 0 0;
+    padding: 9px 10px;
+    border: 1px solid;
+    border-radius: 3px;
+    font-size: 11px;
+    line-height: 1.45;
+}
+
+.login-error {
+    border-color: #e4c3c0;
+    color: #8f2824;
+    background: #fff5f4;
+}
+
+.login-success {
+    border-color: #c1d9ca;
+    color: #245c3a;
+    background: #f1f8f3;
+}
+
+@media (max-width: 480px) {
+    .login-page {
+        padding: 22px 15px;
+    }
+
+    .login-layout {
+        gap: 14px;
+    }
+
+    .login-card {
+        gap: 16px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        scroll-behavior: auto !important;
+        transition-duration: .01ms !important;
+    }
+}
