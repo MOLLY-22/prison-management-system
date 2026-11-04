@@ -291,9 +291,23 @@ app.patch('/api/visitors/:id/status', (req, res) => {
   const { status } = req.body
   const id = Number(req.params.id)
 
-  if (!['Approved', 'Rejected'].includes(status)) {
+  if (!['Pending', 'Approved', 'Rejected'].includes(status)) {
     return res.status(400).json({
-      message: 'Status must be Approved or Rejected.',
+      message: 'Status must be Pending, Approved, or Rejected.',
+    })
+  }
+
+  const existingVisitor = db.prepare(
+    'SELECT entryTimestamp FROM visitors WHERE id = ?',
+  ).get(id)
+
+  if (!existingVisitor) {
+    return res.status(404).json({ message: 'Visitor not found.' })
+  }
+
+  if (existingVisitor.entryTimestamp) {
+    return res.status(400).json({
+      message: 'A visitor status cannot be changed after check-in.',
     })
   }
 
@@ -327,6 +341,14 @@ app.post('/api/visitors/:id/entry', (req, res) => {
   if (visitor.status !== 'Approved') {
     return res.status(400).json({
       message: 'Only approved visitors can be checked in.',
+    })
+  }
+
+  const facilityToday = new Date().toLocaleDateString('en-CA')
+
+  if (visitor.date !== facilityToday) {
+    return res.status(400).json({
+      message: 'Check-in is only available on the scheduled visit date.',
     })
   }
 
