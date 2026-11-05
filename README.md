@@ -1,37 +1,18 @@
-# Corp-Sec Visitor Management Demo
+# Prison Management System
 
-A React/Vite visitor-management dashboard with an Express and SQLite mock API.
+## Trial mock backend
 
-## Run locally
+The discharge dashboard runs against a browser-local mock backend; it does not
+connect to a server or production data. The queue is seeded with sample records,
+and discharge events and saved clearance checklists persist in the current
+browser's local storage.
 
-Install dependencies once from the project root and backend folder:
+The trial storage keys are:
 
-```powershell
-npm install
-npm --prefix mock-backend install
-```
+- `prison-management.trial.inmates`
+- `prison-management.trial.discharge-events`
+- `prison-management.trial.checklists`
 
-Open two terminals at the project root:
-
-```powershell
-npm run dev:backend
-```
-
-```powershell
-npm run dev
-```
-
-Open the Vite URL shown in the second terminal. The development server proxies `/api` requests to the backend on port `5000`.
-
-The backend persists demo data in `mock-backend/visitors.db`. It exposes visitor registration, status approval/rejection, gate entry/exit, deletion, inmate search, and `/api/health`.
-
-## Staff login
-
-The app starts at `/login`. A successful sign-in opens the protected `/dashboard` route; unauthenticated visits to the dashboard redirect to login. Use **Remember me** to keep the session across browser restarts, or leave it unchecked to keep it for the current browser session only. Sign out from the dashboard header.
-
-The local mock backend accepts this development-only account:
-
-- Email: `admin@prison.local`
-- Password: `DemoPrison2026!`
-
-Set `DEMO_AUTH_EMAIL` and `DEMO_AUTH_PASSWORD` to override the local demo credentials. The mock backend uses in-memory sessions and is not suitable for production. In production mode, credentials must be explicitly configured.
+To restore the sample records and clear saved trial changes, remove those keys
+from the browser's local storage for this app. This mock backend is for UI
+testing only and is not suitable for real records or operational decisions.
