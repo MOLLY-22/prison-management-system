@@ -1,0 +1,201 @@
+.transfer-workspace {
+  max-width: 1440px !important;
+  padding: 4px 0 24px !important;
+  color: #17243a;
+}
+
+.transfer-workspace > .MuiStack-root {
+  gap: 16px;
+}
+
+.transfer-workspace > .MuiStack-root > .MuiBox-root:first-child {
+  padding: 4px 0 8px;
+}
+
+.transfer-workspace .MuiTypography-h4 {
+  color: #132d47;
+  font: 800 clamp(28px, 4vw, 36px)/1.1 "Manrope", "DM Sans", sans-serif;
+  letter-spacing: -.045em;
+}
+
+.transfer-workspace .MuiTypography-h4::before {
+  display: block;
+  margin-bottom: 8px;
+  color: #2a719b;
+  content: "OPERATIONS / TRANSFER CONTROL";
+  font-size: 10px;
+  letter-spacing: .13em;
+}
+
+.transfer-workspace > .MuiStack-root > .MuiBox-root:first-child .MuiTypography-body1 {
+  max-width: 680px;
+  color: #7a8898;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.transfer-workspace .MuiPaper-root {
+  border: 1px solid #dfe6ed;
+  border-radius: 0;
+  background: #fff;
+  box-shadow: 0 7px 24px rgb(22 46 72 / 4%);
+}
+
+.transfer-workspace .MuiPaper-root > .MuiStack-root,
+.transfer-workspace .MuiPaper-root > .MuiBox-root {
+  color: #17243a;
+}
+
+.transfer-workspace .MuiTypography-h6 {
+  color: #132d47;
+  font: 800 17px/1.2 "Manrope", "DM Sans", sans-serif;
+}
+
+.transfer-workspace .MuiTypography-body2 {
+  color: #7a8898;
+  font-size: 12px;
+}
+
+.transfer-workspace .MuiTextField-root .MuiOutlinedInput-root,
+.transfer-workspace .MuiFormControl-root .MuiOutlinedInput-root {
+  border-radius: 0;
+}
+
+.transfer-workspace .MuiInputLabel-root,
+.transfer-workspace .MuiInputBase-input,
+.transfer-workspace .MuiSelect-select {
+  font-size: 12px;
+}
+
+.transfer-workspace .MuiButton-root {
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: none;
+}
+
+.transfer-workspace .MuiButton-contained {
+  background: #0c2d4b;
+  box-shadow: none;
+}
+
+.transfer-workspace .MuiButton-contained:hover {
+  background: #1d5f86;
+}
+
+.transfer-workspace .MuiTable-root {
+  min-width: 760px;
+  border-collapse: collapse;
+}
+
+.transfer-workspace .MuiTableCell-root {
+  border-color: #e8edf2;
+  padding: 13px 10px;
+  color: #52677d;
+  font-size: 11px;
+  vertical-align: middle;
+}
+
+.transfer-workspace .MuiTableCell-head {
+  background: #fff;
+  color: #7b8b9b;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.transfer-workspace .MuiTableBody-root .MuiTableRow-root:hover {
+  background: #f8fbfd;
+}
+
+.transfer-workspace .MuiTableCell-body .MuiTypography-root {
+  color: #243d57;
+  font-size: 11px;
+}
+
+.transfer-workspace .MuiTableCell-body .MuiTypography-caption {
+  color: #647d92;
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 10px;
+}
+
+.transfer-workspace .MuiChip-root {
+  height: 25px;
+  border-radius: 12px;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.transfer-workspace .MuiChip-colorSuccess {
+  color: #21744d;
+  background: #e7f6ec;
+}
+
+.transfer-workspace .MuiChip-colorWarning {
+  color: #91681d;
+  background: #fff4df;
+}
+
+.transfer-workspace .MuiChip-colorInfo,
+.transfer-workspace .MuiChip-colorPrimary {
+  color: #246da0;
+  background: #e6f2fb;
+}
+
+.transfer-workspace .MuiChip-colorError {
+  color: #a64b48;
+  background: #fff0ef;
+}
+
+.transfer-workspace .MuiChip-colorDefault {
+  color: #7b8791;
+  background: #eef1f3;
+}
+
+.transfer-workspace .MuiTablePagination-root {
+  color: #8492a1;
+  font-size: 10px;
+}
+
+.transfer-workspace .MuiDialog-paper {
+  border: 1px solid #d5e0e9;
+  border-radius: 8px;
+  box-shadow: 0 28px 90px rgb(3 18 34 / 30%);
+}
+
+.transfer-workspace .MuiDialogTitle-root {
+  border-bottom: 1px solid #e4ebf1;
+  padding: 22px 26px 18px;
+  color: #132d47;
+  background: linear-gradient(135deg, #f8fbfd 0%, #fff 72%);
+  font: 800 20px/1.2 "Manrope", "DM Sans", sans-serif;
+}
+
+.transfer-workspace .MuiDialogContent-root {
+  padding: 22px 26px 18px;
+}
+
+.transfer-workspace .MuiDialogActions-root {
+  gap: 8px;
+  border-top: 1px solid #e4ebf1;
+  padding: 14px 26px 18px;
+}
+
+.transfer-workspace .MuiAlert-root {
+  border-radius: 3px;
+  font-size: 12px;
+}
+
+@media (max-width: 700px) {
+  .transfer-workspace {
+    padding: 4px 0 18px !important;
+  }
+
+  .transfer-workspace .MuiDialogTitle-root,
+  .transfer-workspace .MuiDialogContent-root,
+  .transfer-workspace .MuiDialogActions-root {
+    padding-right: 20px;
+    padding-left: 20px;
+  }
+}

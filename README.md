@@ -1,18 +1,24 @@
 # Prison Management System
 
-## Trial mock backend
+The Vite frontend proxies local API requests to `http://localhost:8080/api/v1`.
+PostgreSQL is managed by the API stack and is not accessed directly by the
+browser.
 
-The discharge dashboard runs against a browser-local mock backend; it does not
-connect to a server or production data. The queue is seeded with sample records,
-and discharge events and saved clearance checklists persist in the current
-browser's local storage.
+## Run locally
 
-The trial storage keys are:
+```powershell
+npm install
+npm run dev
+```
 
-- `prison-management.trial.inmates`
-- `prison-management.trial.discharge-events`
-- `prison-management.trial.checklists`
+Leave `VITE_API_URL` empty in local development so requests use the Vite proxy:
 
-To restore the sample records and clear saved trial changes, remove those keys
-from the browser's local storage for this app. This mock backend is for UI
-testing only and is not suitable for real records or operational decisions.
+```text
+VITE_API_URL=
+```
+
+For a deployed frontend, set `VITE_API_URL` to the public API base URL,
+including the `/api/v1` path.
+
+The frontend sends the login token as a Bearer token and uses the API for
+inmates, visitors, transfers, releases, and user access records.
