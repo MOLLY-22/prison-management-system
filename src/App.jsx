@@ -1,11 +1,8 @@
-
-import { useEffect, useState } from 'react'
+﻿import { useEffect, useMemo, useState } from 'react'
 import './App.css'
 
-const API_URL =
-  import.meta.env.VITE_API_URL || '/api/visitors'
-
-const INMATES_URL = API_URL.replace(/\/visitors\/?$/, '/inmates')
+const DEFAULT_API_BASE = 'http://localhost:8080/api/v1'
+const API_BASE = (import.meta.env.VITE_API_URL || DEFAULT_API_BASE).replace(/\/+$/, '')
 
 const EMPTY_FORM = {
   name: '',
@@ -19,92 +16,179 @@ const EMPTY_FORM = {
   time: '09:00',
 }
 
-function formatTime(time) {
-  if (!time) return '—'
+function readJson(response) {
+  if (response.status === 204) return null
 
-  const [hours, minutes] = time.split(':')
-  const hour = Number(hours)
+  return response.text().then((text) => {
+    if (!text) return null
+    try {
+      return JSON.parse(text)
+    } catch {
+      return text
+    }
+  })
+}
 
-  return `${hour % 12 || 12}:${minutes} ${hour >= 12 ? 'PM' : 'AM'}`
+function getStoredToken() {
+  return localStorage.getItem('pms-access-token') || ''
+}
+
+function formatTime(value) {
+  if (!value) return '—'
+
+  const raw = String(value)
+  if (raw.includes('T')) {
+    const timePart = raw.split('T')[1]?.slice(0, 5)
+    if (timePart) {
+      const [hours, minutes] = timePart.split(':')
+      const hourNumber = Number(hours)
+      const suffix = hourNumber >= 12 ? 'PM' : 'AM'
+      return `${hourNumber % 12 || 12}:${minutes} ${suffix}`
+    }
+  }
+
+  if (raw.length <= 5) {
+    const [hours, minutes] = raw.split(':')
+    const hourNumber = Number(hours)
+    const suffix = hourNumber >= 12 ? 'PM' : 'AM'
+    return `${hourNumber % 12 || 12}:${minutes} ${suffix}`
+  }
+
+  return raw
+}
+
+function buildVisitPayload(form, inmate) {
+  if (!inmate?.id) {
+    throw new Error('Select a valid inmate before registering the visit.')
+  }
+
+  const [hours, minutes] = (form.time || '09:00').split(':').map(Number)
+  const totalMinutes = hours * 60 + minutes + 60
+  const endHour = Math.floor(totalMinutes / 60) % 24
+  const endMinute = totalMinutes % 60
+
+  return {
+    visitorFullName: form.name.trim(),
+    inmateId: inmate.id,
+    visitDate: form.date,
+    startTime: form.time,
+    endTime: `${String(endHour).padStart(2, '0')}:${String(endMinute).padStart(2, '0')}`,
+    itemsBrought: form.checkedItems.length ? form.checkedItems.join(', ') : form.purpose.trim(),
+  }
+}
+
+function normalizeVisit(record) {
+  return {
+    id: record.id || record.visitId || record._id,
+    name: record.visitorFullName || record.visitorName || 'Unknown visitor',
+    inmate: record.inmateName || record.inmate?.fullName || 'Unknown inmate',
+    status: record.status || 'Logged',
+    date: record.visitDate || record.date || '',
+    time: record.startTime || record.time || '',
+    endTime: record.endTime || '',
+    itemsBrought: record.itemsBrought || '',
+    loggedBy: record.loggedBy || record.loggingUserName || '',
+    inmateId: record.inmateId || record.inmate?.id || '',
+    source: record,
+  }
 }
 
 function App() {
-  const [visitors, setVisitors] = useState([])
-  const [showForm, setShowForm] = useState(false)
+  const [visits, setVisits] = useState([])
   const [notice, setNotice] = useState('')
   const [loading, setLoading] = useState(true)
   const [showAllSessions, setShowAllSessions] = useState(false)
-  const [busyId, setBusyId] = useState(null)
-  const [statusBusyId, setStatusBusyId] = useState(null)
   const [formBusy, setFormBusy] = useState(false)
-  const [gateVisitorId, setGateVisitorId] = useState('')
-
   const [inmateSearch, setInmateSearch] = useState('')
   const [inmateResults, setInmateResults] = useState([])
   const [selectedInmate, setSelectedInmate] = useState(null)
   const [lookingUpInmates, setLookingUpInmates] = useState(false)
+  const [tokenInput, setTokenInput] = useState(getStoredToken())
+  const [authToken, setAuthToken] = useState(getStoredToken())
 
   const today = new Date().toLocaleDateString('en-CA')
-
   const [form, setForm] = useState({
     ...EMPTY_FORM,
     date: today,
   })
 
-  async function loadVisitors() {
+  const visitCount = visits.length
+  const todayLogCount = visits.filter((visit) => visit.date === today).length
+  const activeVisitorCount = visits.filter((visit) => visit.date === today).length
+  const pendingCount = visits.filter((visit) => visit.status === 'Pending').length
+
+  const gateCandidates = useMemo(
+    () => visits.filter((visit) => visit.date === today),
+    [visits, today],
+  )
+
+  async function fetchJson(url, options = {}) {
+    const requestHeaders = {
+      'Content-Type': 'application/json',
+      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+      ...(options.headers || {}),
+    }
+
+    const response = await fetch(url, {
+      ...options,
+      headers: requestHeaders,
+    })
+
+    if (!response.ok) {
+      const payload = await readJson(response)
+      const message = typeof payload === 'string' ? payload : payload?.message || 'The server rejected the request.'
+      throw new Error(message)
+    }
+
+    return readJson(response)
+  }
+
+  async function loadVisits() {
+    setLoading(true)
+
     try {
-      const response = await fetch(API_URL)
+      const response = await fetchJson(`${API_BASE}/visits?page=0&size=20`)
+      const rows = Array.isArray(response)
+        ? response
+        : Array.isArray(response?.content)
+          ? response.content
+          : []
 
-      if (!response.ok) {
-        throw new Error('The server could not load visitor records.')
-      }
-
-      setVisitors(await response.json())
+      setVisits(rows.map(normalizeVisit))
+      setNotice('')
     } catch (error) {
-      console.error('Loading visitors failed:', error)
-      setNotice(
-        'Cannot connect to the backend. Start the mock backend on port 5000.',
-      )
+      console.error('Loading visits failed:', error)
+      setNotice(`Cannot load the live PMS backend. Check the API at ${API_BASE} and provide a valid bearer token.`)
+      setVisits([])
     } finally {
       setLoading(false)
     }
   }
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      void loadVisitors()
-    }, 0)
-
-    return () => window.clearTimeout(timer)
-  }, [])
+    void loadVisits()
+  }, [authToken])
 
   useEffect(() => {
     const query = inmateSearch.trim()
-
-    if (query.length < 2 || selectedInmate) {
-      return
-    }
+    if (query.length < 2 || selectedInmate) return
 
     let cancelled = false
 
-    async function findInmates() {
+    async function searchInmates() {
       setLookingUpInmates(true)
-
       try {
-        const response = await fetch(
-          `${INMATES_URL}?search=${encodeURIComponent(query)}`,
-        )
+        const response = await fetchJson(`${API_BASE}/inmates?search=${encodeURIComponent(query)}&page=0&size=10`)
+        const rows = Array.isArray(response)
+          ? response
+          : Array.isArray(response?.content)
+            ? response.content
+            : []
 
-        if (!response.ok) {
-          throw new Error('Could not search inmate records.')
-        }
-
-        const results = await response.json()
-
-        if (!cancelled) setInmateResults(results)
+        if (!cancelled) setInmateResults(rows)
       } catch (error) {
         if (!cancelled) {
-          console.error('Inmate lookup failed:', error)
+          console.error('Search inmates failed:', error)
           setInmateResults([])
         }
       } finally {
@@ -112,100 +196,12 @@ function App() {
       }
     }
 
-    const timer = setTimeout(findInmates, 300)
-
+    const timer = setTimeout(searchInmates, 300)
     return () => {
       cancelled = true
       clearTimeout(timer)
     }
-  }, [inmateSearch, selectedInmate])
-
-  const pendingCount = visitors.filter(
-    (visitor) => visitor.status === 'Pending',
-  ).length
-
-  const gateCandidates = visitors.filter(
-    (visitor) =>
-      visitor.status === 'Approved' &&
-      visitor.date === today &&
-      !visitor.exitTimestamp,
-  )
-  const gateVisitor =
-    gateCandidates.find((visitor) => String(visitor.id) === gateVisitorId) ||
-    gateCandidates[0]
-  const activeVisitorCount = visitors.filter(
-    (visitor) => visitor.entryTimestamp && !visitor.exitTimestamp,
-  ).length
-  const todayLogCount = visitors.filter(
-    (visitor) => visitor.date === today,
-  ).length
-
-  async function recordVisitTime(visitor, action) {
-    if (busyId !== null) return
-
-    setBusyId(visitor.id)
-    setNotice('')
-
-    try {
-      const response = await fetch(
-        `${API_URL}/${visitor.id}/${action}`,
-        { method: 'POST' },
-      )
-
-      const result = await response.json()
-
-      if (!response.ok) {
-        throw new Error(result.message || 'Could not record visit time.')
-      }
-
-      setVisitors((current) =>
-        current.map((item) =>
-          item.id === visitor.id ? { ...item, ...result } : item,
-        ),
-      )
-
-      setNotice(
-        action === 'entry'
-          ? `Entry time recorded for ${visitor.name}.`
-          : `Exit time recorded for ${visitor.name}.`,
-      )
-    } catch (error) {
-      console.error('Recording visit time failed:', error)
-      setNotice(error.message || 'Could not record visit time.')
-    } finally {
-      setBusyId(null)
-    }
-  }
-
-  async function updateVisitorStatus(visitor, status) {
-    if (statusBusyId !== null) return
-
-    setStatusBusyId(visitor.id)
-    setNotice('')
-
-    try {
-      const response = await fetch(`${API_URL}/${visitor.id}/status`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status }),
-      })
-      const result = await response.json()
-
-      if (!response.ok) {
-        throw new Error(result.message || `Could not ${status.toLowerCase()} visitor.`)
-      }
-
-      setVisitors((current) =>
-        current.map((item) => item.id === visitor.id ? { ...item, ...result } : item),
-      )
-      setNotice(`${visitor.name}'s request was ${status.toLowerCase()}.`)
-    } catch (error) {
-      console.error('Updating visitor status failed:', error)
-      setNotice(error.message || 'Could not update visitor status.')
-    } finally {
-      setStatusBusyId(null)
-    }
-  }
+  }, [inmateSearch, selectedInmate, authToken])
 
   function resetRegistrationForm() {
     setForm({ ...EMPTY_FORM, date: today })
@@ -217,33 +213,15 @@ function App() {
   async function registerVisitor(event) {
     event.preventDefault()
 
-    if (!selectedInmate || !selectedInmate.visitationAllowed) {
-      setNotice('Search for and select an inmate who is allowed visitors.')
+    if (!selectedInmate) {
+      setNotice('Search for and select an inmate before registering the visit.')
       return
     }
 
-    const visitorData = {
-      name: form.name.trim(),
-      nationalId: form.nationalId.trim(),
-      phone: form.phone.trim(),
-      relationshipToInmate: form.relationshipToInmate,
-      inmate: selectedInmate.fullName,
-      purpose: form.purpose.trim(),
-      checkedItems: form.checkedItems,
-      date: form.date,
-      time: form.time,
-    }
+    const payload = buildVisitPayload(form, selectedInmate)
 
-    if (
-      !visitorData.name ||
-      !visitorData.nationalId ||
-      !visitorData.phone ||
-      !visitorData.relationshipToInmate ||
-      !visitorData.purpose ||
-      !visitorData.date ||
-      !visitorData.time
-    ) {
-      setNotice('Please complete all required visitor details.')
+    if (!payload.visitorFullName || !payload.visitDate || !payload.startTime || !payload.endTime) {
+      setNotice('Please complete all required visit details.')
       return
     }
 
@@ -251,28 +229,35 @@ function App() {
     setNotice('')
 
     try {
-      const response = await fetch(API_URL, {
+      const created = await fetchJson(`${API_BASE}/visits`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(visitorData),
+        body: JSON.stringify(payload),
       })
 
-      const result = await response.json()
-
-      if (!response.ok) {
-        throw new Error(result.message || 'Could not register visitor.')
-      }
-
-      setVisitors((current) => [result, ...current])
+      const item = normalizeVisit(created)
+      setVisits((current) => [item, ...current])
       resetRegistrationForm()
-      setShowForm(false)
-      setNotice('Visitor registered successfully. Request is pending.')
+      setNotice('Visitor visit recorded successfully in the live backend.')
     } catch (error) {
-      console.error('Registering visitor failed:', error)
-      setNotice(error.message || 'Could not register visitor.')
+      console.error('Register visitor failed:', error)
+      setNotice(error.message || 'Could not register the visit.')
     } finally {
       setFormBusy(false)
     }
+  }
+
+  function handleUseToken() {
+    const trimmed = tokenInput.trim()
+    if (!trimmed) {
+      localStorage.removeItem('pms-access-token')
+      setAuthToken('')
+      setNotice('Token cleared. Add a valid bearer token to query the live backend.')
+      return
+    }
+
+    localStorage.setItem('pms-access-token', trimmed)
+    setAuthToken(trimmed)
+    setNotice('Bearer token saved and the live API is active.')
   }
 
   return (
@@ -284,7 +269,20 @@ function App() {
             <span className="breadcrumb-divider">/</span>
             <span>Visitor Management</span>
           </div>
-          <div className="reference-topbar-right"><span className="secure-pill">● System Secure</span><span>◉ Security Badge #SEC-992</span><span className="role-pill">Role: <strong>Officer-in-Charge</strong></span><span className="officer-avatar">♟</span></div>
+
+          <div className="reference-topbar-right">
+            <span className="secure-pill">● System Secure</span>
+            <span>◉ API: {API_BASE}</span>
+            <input
+              aria-label="Bearer token"
+              type="password"
+              value={tokenInput}
+              onChange={(event) => setTokenInput(event.target.value)}
+              placeholder="Bearer token"
+              style={{ width: '180px', padding: '6px 8px', borderRadius: '6px', border: '1px solid #c8d1dc' }}
+            />
+            <button type="button" className="primary-button" onClick={handleUseToken}>Use token</button>
+          </div>
         </header>
 
         <div className="page-content" id="visitor-dashboard">
@@ -293,27 +291,15 @@ function App() {
               <p className="eyebrow">FACILITY OPERATIONS / RECORDS</p>
               <h1>Visitor Management</h1>
               <p className="page-description">
-                Register visitors, verify visitation rights, and record gate
-                entry and exit times.
+                Register and review visits using the live PMS API contract.
               </p>
             </div>
-
-            <button className="primary-button" type="button" onClick={() => document.querySelector('.reference-registration')?.scrollIntoView({ behavior: 'smooth' })}>
-              <span className="plus-sign">+</span>
-              Register visitor
-            </button>
           </section>
 
           {notice && (
             <div className="notice" role="status">
               <span>{notice}</span>
-              <button
-                type="button"
-                aria-label="Dismiss message"
-                onClick={() => setNotice('')}
-              >
-                ×
-              </button>
+              <button type="button" aria-label="Dismiss message" onClick={() => setNotice('')}>×</button>
             </div>
           )}
 
@@ -324,16 +310,16 @@ function App() {
                 <span className="stat-icon stat-blue">♙</span>
               </div>
               <div className="stat-number">{activeVisitorCount}</div>
-              <p className="stat-footnote">Checked in and currently on site</p>
+              <p className="stat-footnote">Live visit records for today</p>
             </article>
 
             <article className="stat-card">
               <div className="stat-top">
-                <span className="stat-label">Pending check-ins</span>
+                <span className="stat-label">Pending review</span>
                 <span className="stat-icon stat-amber">◷</span>
               </div>
               <div className="stat-number">{pendingCount}</div>
-                <p className="stat-footnote">Awaiting approval</p>
+              <p className="stat-footnote">Status is tracked by the backend</p>
             </article>
 
             <article className="stat-card">
@@ -342,7 +328,7 @@ function App() {
                 <span className="stat-icon stat-green">♙</span>
               </div>
               <div className="stat-number secure-word">SECURE</div>
-              <p className="stat-footnote">All systems operational</p>
+              <p className="stat-footnote">Live PMS API connected</p>
             </article>
 
             <article className="stat-card">
@@ -351,329 +337,296 @@ function App() {
                 <span className="stat-icon stat-purple">◴</span>
               </div>
               <div className="stat-number">{todayLogCount}</div>
-              <p className="stat-footnote">Visitor records scheduled today</p>
+              <p className="stat-footnote">Visit records recorded today</p>
             </article>
           </section>
 
           <div className="reference-dashboard-grid">
             <div className="reference-left-stack">
               <section className="reference-panel reference-registration">
-                <div className="reference-panel-heading"><h2><span>♧</span> Visitor Registration Form (FR-07)</h2><small>Gatehouse Entry Port A</small></div>
+                <div className="reference-panel-heading">
+                  <h2><span>♧</span> Visitor Registration Form</h2>
+                  <small>Live PMS API</small>
+                </div>
+
                 <form className="reference-inline-form" onSubmit={registerVisitor}>
                   <div className="reference-fields-grid">
-                    <label>Full Name<input required maxLength="100" placeholder="e.g. Jonathan R. Vance" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /></label>
-                    <label>National ID / Passport<input required maxLength="60" placeholder="US-99482103-X" value={form.nationalId} onChange={(event) => setForm({ ...form, nationalId: event.target.value })} /></label>
-                    <label>Contact Details<input required type="tel" maxLength="30" placeholder="+1 (555) 019-2834" value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} /></label>
-                    <label>Relationship to Inmate<select required value={form.relationshipToInmate} onChange={(event) => setForm({ ...form, relationshipToInmate: event.target.value })}><option value="">Select relationship</option><option>Legal Counsel / Attorney</option><option>Spouse</option><option>Parent</option><option>Child</option><option>Sibling</option><option>Relative</option><option>Friend</option><option>Other</option></select></label>
+                    <label>
+                      Full Name
+                      <input
+                        required
+                        maxLength="100"
+                        placeholder="e.g. Jonathan R. Vance"
+                        value={form.name}
+                        onChange={(event) => setForm({ ...form, name: event.target.value })}
+                      />
+                    </label>
+
+                    <label>
+                      National ID / Passport
+                      <input
+                        maxLength="60"
+                        placeholder="US-99482103-X"
+                        value={form.nationalId}
+                        onChange={(event) => setForm({ ...form, nationalId: event.target.value })}
+                      />
+                    </label>
+
+                    <label>
+                      Contact Details
+                      <input
+                        type="tel"
+                        maxLength="30"
+                        placeholder="+1 (555) 019-2834"
+                        value={form.phone}
+                        onChange={(event) => setForm({ ...form, phone: event.target.value })}
+                      />
+                    </label>
+
+                    <label>
+                      Relationship to Inmate
+                      <select
+                        value={form.relationshipToInmate}
+                        onChange={(event) => setForm({ ...form, relationshipToInmate: event.target.value })}
+                      >
+                        <option value="">Select relationship</option>
+                        <option>Legal Counsel / Attorney</option>
+                        <option>Spouse</option>
+                        <option>Parent</option>
+                        <option>Child</option>
+                        <option>Sibling</option>
+                        <option>Relative</option>
+                        <option>Friend</option>
+                        <option>Other</option>
+                      </select>
+                    </label>
                   </div>
-                  <label className="reference-wide-field">Inmate Lookup<input required placeholder="Search inmate ID or name..." value={inmateSearch} onChange={(event) => { setInmateSearch(event.target.value); setSelectedInmate(null); setForm({ ...form, inmate: '' }) }} /></label>
+
+                  <label className="reference-wide-field">
+                    Inmate Lookup
+                    <input
+                      placeholder="Search inmate name or ID..."
+                      value={inmateSearch}
+                      onChange={(event) => {
+                        setInmateSearch(event.target.value)
+                        setSelectedInmate(null)
+                        setForm({ ...form, inmate: '' })
+                      }}
+                    />
+                  </label>
+
                   {lookingUpInmates && <p className="reference-help">Searching inmate records...</p>}
-                  {inmateResults.length > 0 && !selectedInmate && <div className="reference-inmate-results">{inmateResults.map((inmate) => <button type="button" key={inmate.fullName} onClick={() => { setSelectedInmate(inmate); setForm({ ...form, inmate: inmate.fullName }); setInmateSearch(inmate.fullName); setInmateResults([]) }}><strong>{inmate.fullName}</strong><span>{inmate.cellBlock} · {inmate.visitationAllowed ? 'Visitation allowed' : 'Restricted'}</span></button>)}</div>}
-                  {selectedInmate && <div className="reference-selected-inmate"><strong>{selectedInmate.fullName}</strong><span>{selectedInmate.cellBlock} · {selectedInmate.visitationAllowed ? 'Visitation allowed' : 'Restricted'}</span><button type="button" onClick={() => { setSelectedInmate(null); setInmateSearch(''); setForm({ ...form, inmate: '' }) }}>Change</button></div>}
-                  <label className="reference-wide-field">Purpose of Visit<input required maxLength="500" placeholder="Brief reason for visit" value={form.purpose} onChange={(event) => setForm({ ...form, purpose: event.target.value })} /></label>
-                  <fieldset className="reference-gate-checks"><legend>Checked Items at Gate (Security Screening)</legend>{['Valid ID', 'Metal Detector Clear', 'No Electronics', 'Bag Tagged'].map((item) => <label key={item}><input type="checkbox" checked={form.checkedItems.includes(item)} onChange={(event) => { const checkedItems = event.target.checked ? [...form.checkedItems, item] : form.checkedItems.filter((checked) => checked !== item); setForm({ ...form, checkedItems }) }} />{item}</label>)}</fieldset>
-                  <div className="reference-form-footer"><label>Visit date<input required type="date" min={today} value={form.date} onChange={(event) => setForm({ ...form, date: event.target.value })} /></label><label>Visit time<input required type="time" value={form.time} onChange={(event) => setForm({ ...form, time: event.target.value })} /></label><div><button className="outline-button" type="button" onClick={resetRegistrationForm}>Clear Form</button><button className="dark-button" type="submit" disabled={formBusy}>{formBusy ? 'Registering...' : 'Register & Issue Pass'}</button></div></div>
+
+                  {inmateResults.length > 0 && !selectedInmate && (
+                    <div className="reference-inmate-results">
+                      {inmateResults.map((inmate) => (
+                        <button
+                          type="button"
+                          key={inmate.id || inmate.fullName}
+                          onClick={() => {
+                            setSelectedInmate(inmate)
+                            setForm({ ...form, inmate: inmate.fullName })
+                            setInmateSearch(inmate.fullName)
+                            setInmateResults([])
+                          }}
+                        >
+                          <strong>{inmate.fullName}</strong>
+                          <span>{inmate.cellBlock || 'Cell block not provided'} · {inmate.visitationAllowed ? 'Visitation allowed' : 'Restricted'}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {selectedInmate && (
+                    <div className="reference-selected-inmate">
+                      <strong>{selectedInmate.fullName}</strong>
+                      <span>{selectedInmate.cellBlock || 'Cell block not provided'} · {selectedInmate.visitationAllowed ? 'Visitation allowed' : 'Restricted'}</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedInmate(null)
+                          setInmateSearch('')
+                          setForm({ ...form, inmate: '' })
+                        }}
+                      >
+                        Change
+                      </button>
+                    </div>
+                  )}
+
+                  <label className="reference-wide-field">
+                    Purpose of Visit
+                    <input
+                      maxLength="500"
+                      placeholder="Brief reason for visit"
+                      value={form.purpose}
+                      onChange={(event) => setForm({ ...form, purpose: event.target.value })}
+                    />
+                  </label>
+
+                  <fieldset className="reference-gate-checks">
+                    <legend>Checked Items at Gate (Security Screening)</legend>
+                    {['Valid ID', 'Metal Detector Clear', 'No Electronics', 'Bag Tagged'].map((item) => (
+                      <label key={item}>
+                        <input
+                          type="checkbox"
+                          checked={form.checkedItems.includes(item)}
+                          onChange={(event) => {
+                            const checkedItems = event.target.checked
+                              ? [...form.checkedItems, item]
+                              : form.checkedItems.filter((checked) => checked !== item)
+
+                            setForm({ ...form, checkedItems })
+                          }}
+                        />
+                        {item}
+                      </label>
+                    ))}
+                  </fieldset>
+
+                  <div className="reference-form-footer">
+                    <label>
+                      Visit date
+                      <input
+                        required
+                        type="date"
+                        min={today}
+                        value={form.date}
+                        onChange={(event) => setForm({ ...form, date: event.target.value })}
+                      />
+                    </label>
+
+                    <label>
+                      Visit time
+                      <input
+                        required
+                        type="time"
+                        value={form.time}
+                        onChange={(event) => setForm({ ...form, time: event.target.value })}
+                      />
+                    </label>
+
+                    <div>
+                      <button className="outline-button" type="button" onClick={resetRegistrationForm}>Clear Form</button>
+                      <button className="dark-button" type="submit" disabled={formBusy}>
+                        {formBusy ? 'Registering...' : 'Register & Issue Pass'}
+                      </button>
+                    </div>
+                  </div>
                 </form>
               </section>
 
               <section className="reference-panel reference-lookup">
-                <div className="reference-panel-heading"><h2><span>⌕</span> Inmate Lookup & Gatekeeper Minimum Access (FR-11)</h2><small>Confidential Files<br />Restricted</small></div>
-                <label className="reference-lookup-search"><input aria-label="Search inmate ID or name" placeholder="Search Inmate ID or Name..." value={inmateSearch} onChange={(event) => { setInmateSearch(event.target.value); setInmateResults([]); setLookingUpInmates(false); setSelectedInmate(null) }} /><button type="button" onClick={() => { document.querySelector('.reference-registration input[placeholder="Search inmate ID or name..."]')?.focus(); document.querySelector('.reference-registration')?.scrollIntoView({ behavior: 'smooth' }); if (inmateSearch.trim().length < 2) setNotice('Enter at least 2 characters to search inmate records.') }}>Lookup</button></label>
-                {selectedInmate ? <div className="reference-inmate-card">{selectedInmate.photoUrl ? <img src={selectedInmate.photoUrl} alt={`${selectedInmate.fullName} profile`} /> : <div className="reference-photo-placeholder">{selectedInmate.fullName.split(' ').map((part) => part[0]).slice(0, 2).join('').toUpperCase()}</div>}<div><h3>{selectedInmate.fullName}</h3><p>Cell Block: <strong>{selectedInmate.cellBlock}</strong></p><p>Security, Tier 2</p><small>✓ &nbsp;Verified minimum information displayed</small></div><button type="button" onClick={() => { setForm({ ...form, inmate: selectedInmate.fullName }); document.querySelector('.reference-registration')?.scrollIntoView({ behavior: 'smooth' }) }}>Attach to Session</button></div> : <p className="reference-lookup-empty">Search for an inmate to display permitted details.</p>}
+                <div className="reference-panel-heading">
+                  <h2><span>⌕</span> Inmate Lookup</h2>
+                  <small>Minimum access data from live API</small>
+                </div>
+
+                <label className="reference-lookup-search">
+                  <input
+                    aria-label="Search inmate"
+                    placeholder="Search inmate name..."
+                    value={inmateSearch}
+                    onChange={(event) => setInmateSearch(event.target.value)}
+                  />
+                  <button type="button" onClick={() => setSelectedInmate(null)}>Lookup</button>
+                </label>
+
+                {selectedInmate ? (
+                  <div className="reference-inmate-card">
+                    <div className="reference-photo-placeholder">
+                      {selectedInmate.fullName.split(' ').map((part) => part[0]).slice(0, 2).join('').toUpperCase()}
+                    </div>
+                    <div>
+                      <h3>{selectedInmate.fullName}</h3>
+                      <p>Cell Block: <strong>{selectedInmate.cellBlock || 'Not available'}</strong></p>
+                      <small>✓ Verified minimum information displayed</small>
+                    </div>
+                    <button type="button" onClick={() => setForm({ ...form, inmate: selectedInmate.fullName })}>Attach to Visit</button>
+                  </div>
+                ) : (
+                  <p className="reference-lookup-empty">Search for an inmate to attach to the visit record.</p>
+                )}
               </section>
             </div>
+
             <div className="reference-right-stack">
               <section className="reference-panel reference-gatehouse">
-                <div className="reference-panel-heading"><h2><span>♧</span> Gatehouse Touch Controls</h2><span className="live-port">LIVE PORT</span></div>
-                <label className="gate-visitor-select">Approved visitor<select aria-label="Select an approved visitor" value={gateVisitor?.id || ''} onChange={(event) => setGateVisitorId(event.target.value)}><option value="">Select visitor...</option>{gateCandidates.map((visitor) => <option key={visitor.id} value={visitor.id}>{visitor.name} · {visitor.visitorId}</option>)}</select></label>
-                <div className="reference-gate-buttons"><button className="gate-check-in" type="button" disabled={!gateVisitor || Boolean(gateVisitor.entryTimestamp) || busyId !== null} onClick={() => gateVisitor && recordVisitTime(gateVisitor, 'entry')}><span>⇥</span>CHECK-IN</button><button className="gate-check-out" type="button" disabled={!gateVisitor?.entryTimestamp || Boolean(gateVisitor.exitTimestamp) || busyId !== null} onClick={() => gateVisitor && recordVisitTime(gateVisitor, 'exit')}><span>⇤</span>CHECK-OUT</button></div>
-                {!loading && !gateVisitor && <p className="reference-gate-empty">No approved visitor is scheduled for today. Check the visit date and approval status in Active Session Logs.</p>}
-                <div className="reference-port-details"><p><span>Active Station Terminal</span><strong>GT-PORT-04</strong></p><p><span>Gatekeeper Officer ID</span><strong>SEC-OFF-882</strong></p><p><span>System Synchronization</span><strong className="optimal-label">Optimal (0.04s)</strong></p></div>
+                <div className="reference-panel-heading">
+                  <h2><span>♧</span> Gatehouse Touch Controls</h2>
+                  <span className="live-port">LIVE PORT</span>
+                </div>
+
+                <label className="gate-visitor-select">
+                  Approved visitor
+                  <select aria-label="Select an approved visitor" value="">
+                    <option value="">Select visitor...</option>
+                    {gateCandidates.map((visitor) => (
+                      <option key={visitor.id} value={visitor.id}>{visitor.name}</option>
+                    ))}
+                  </select>
+                </label>
+
+                <div className="reference-gate-buttons">
+                  <button className="gate-check-in" type="button" disabled>
+                    <span>⇥</span>CHECK-IN
+                  </button>
+                  <button className="gate-check-out" type="button" disabled>
+                    <span>⇤</span>CHECK-OUT
+                  </button>
+                </div>
+
+                <p className="reference-gate-empty">
+                  The live PMS backend records visits through /api/v1/visits; entry and exit timestamps are managed separately by the API contract.
+                </p>
+
+                <div className="reference-port-details">
+                  <p><span>Active Station Terminal</span><strong>GT-PORT-04</strong></p>
+                  <p><span>Gatekeeper Officer ID</span><strong>SEC-OFF-882</strong></p>
+                  <p><span>System Synchronization</span><strong className="optimal-label">Connected</strong></p>
+                </div>
               </section>
+
               <section className="reference-panel reference-session-logs">
-                <div className="reference-panel-heading"><h2><span>▤</span> Active Session Logs</h2><button className="clear-filters" type="button" onClick={() => setShowAllSessions((showAll) => !showAll)}>{showAllSessions ? 'Show recent' : `View all (${visitors.length})`}</button></div>
-                <div className="reference-log-header"><span>VISITOR / INMATE</span><span>ENTRY</span><span>STATUS</span></div>
-                {loading ? <p className="reference-log-empty">Loading sessions...</p> : (showAllSessions ? visitors : visitors.slice(0, 6)).map((visitor) => <div className="reference-log-row" key={visitor.id}><div><strong>{visitor.name}</strong><span>↳ {visitor.inmate}</span></div><time>{visitor.entryTimestamp ? formatTime(new Date(visitor.entryTimestamp).toTimeString().slice(0, 5)) : formatTime(visitor.time)}</time><div className="reference-log-actions"><span className={`reference-log-status ${visitor.exitTimestamp ? 'exited' : visitor.entryTimestamp ? 'onsite' : 'scheduled'}`}>{visitor.exitTimestamp ? 'Exited' : visitor.entryTimestamp ? 'On Site' : visitor.status}</span>{visitor.status === 'Pending' && <div className="reference-review-actions"><button type="button" disabled={statusBusyId !== null} onClick={() => updateVisitorStatus(visitor, 'Approved')}>{statusBusyId === visitor.id ? 'Saving…' : 'Approve'}</button><button type="button" disabled={statusBusyId !== null} onClick={() => updateVisitorStatus(visitor, 'Rejected')}>Reject</button></div>}{visitor.status === 'Rejected' && !visitor.entryTimestamp && <div className="reference-review-actions"><button type="button" disabled={statusBusyId !== null} onClick={() => updateVisitorStatus(visitor, 'Pending')}>{statusBusyId === visitor.id ? 'Saving…' : 'Reopen'}</button></div>}{visitor.status === 'Approved' && !visitor.entryTimestamp && <div className="reference-review-actions"><button type="button" disabled={statusBusyId !== null} onClick={() => updateVisitorStatus(visitor, 'Rejected')}>{statusBusyId === visitor.id ? 'Saving…' : 'Revoke'}</button></div>}{visitor.status === 'Approved' && !visitor.exitTimestamp && (visitor.entryTimestamp || visitor.date === today) && <div className="reference-review-actions"><button className="gate-row-action" type="button" disabled={busyId !== null} onClick={() => recordVisitTime(visitor, visitor.entryTimestamp ? 'exit' : 'entry')}>{busyId === visitor.id ? 'Saving…' : visitor.entryTimestamp ? 'Check out' : 'Check in'}</button></div>}</div></div>)}
-                {!loading && visitors.length === 0 && <p className="reference-log-empty">No visitor sessions have been recorded.</p>}
+                <div className="reference-panel-heading">
+                  <h2><span>▤</span> Active Session Logs</h2>
+                  <button className="clear-filters" type="button" onClick={() => setShowAllSessions((value) => !value)}>
+                    {showAllSessions ? 'Show recent' : `View all (${visitCount})`}
+                  </button>
+                </div>
+
+                <div className="reference-log-header">
+                  <span>VISITOR / INMATE</span>
+                  <span>ENTRY</span>
+                  <span>STATUS</span>
+                </div>
+
+                {loading ? (
+                  <p className="reference-log-empty">Loading sessions...</p>
+                ) : (showAllSessions ? visits : visits.slice(0, 6)).map((visit) => (
+                  <div className="reference-log-row" key={visit.id || `${visit.name}-${visit.date}`}>
+                    <div>
+                      <strong>{visit.name}</strong>
+                      <span>↳ {visit.inmate}</span>
+                    </div>
+                    <time>{visit.time ? formatTime(visit.time) : '—'}</time>
+                    <div className="reference-log-actions">
+                      <span className="reference-log-status scheduled">{visit.status}</span>
+                    </div>
+                  </div>
+                ))}
+
+                {!loading && visits.length === 0 && <p className="reference-log-empty">No visitor sessions have been recorded yet.</p>}
               </section>
             </div>
           </div>
 
           <footer className="page-footer">
             <span>Prison Management System</span>
-            <span>Visitor Management · Frontend demonstration</span>
+            <span>Visitor Management · Real API integration</span>
           </footer>
         </div>
       </main>
-
-      {showForm && (
-        <div
-          className="modal-backdrop"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget && !formBusy) {
-              setShowForm(false)
-            }
-          }}
-        >
-          <section
-            className="registration-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="registration-title"
-          >
-            <div className="modal-heading">
-              <div>
-                <p className="eyebrow">VISITOR MANAGEMENT</p>
-                <h2 id="registration-title">Register visitor</h2>
-                <p>Enter the visitor's information and visit details.</p>
-              </div>
-              <button
-                className="close-modal"
-                type="button"
-                aria-label="Close registration form"
-                disabled={formBusy}
-                onClick={() => setShowForm(false)}
-              >
-                ×
-              </button>
-            </div>
-
-            <form className="registration-form" onSubmit={registerVisitor}>
-              <label>
-                Visitor's full name
-                <input
-                  required
-                  maxLength="100"
-                  value={form.name}
-                  onChange={(event) =>
-                    setForm({ ...form, name: event.target.value })
-                  }
-                  placeholder="Enter full name"
-                />
-              </label>
-
-              <label>
-                National ID / Passport number
-                <input
-                  required
-                  maxLength="60"
-                  value={form.nationalId}
-                  onChange={(event) =>
-                    setForm({ ...form, nationalId: event.target.value })
-                  }
-                  placeholder="Enter ID or passport number"
-                />
-              </label>
-
-              <label>
-                Contact number
-                <input
-                  required
-                  type="tel"
-                  maxLength="30"
-                  value={form.phone}
-                  onChange={(event) =>
-                    setForm({ ...form, phone: event.target.value })
-                  }
-                  placeholder="Enter contact number"
-                />
-              </label>
-
-              <label>
-                Relationship to inmate
-                <select
-                  required
-                  value={form.relationshipToInmate}
-                  onChange={(event) =>
-                    setForm({
-                      ...form,
-                      relationshipToInmate: event.target.value,
-                    })
-                  }
-                >
-                  <option value="">Select relationship</option>
-                  <option value="Spouse">Spouse</option>
-                  <option value="Parent">Parent</option>
-                  <option value="Child">Child</option>
-                  <option value="Sibling">Sibling</option>
-                  <option value="Relative">Other relative</option>
-                  <option value="Friend">Friend</option>
-                  <option value="Lawyer">Lawyer</option>
-                  <option value="Other">Other</option>
-                </select>
-              </label>
-
-              <label>
-                Search inmate
-                <input
-                  required
-                  value={inmateSearch}
-                  onChange={(event) => {
-                    setInmateSearch(event.target.value)
-                    setInmateResults([])
-                    setLookingUpInmates(false)
-                    setSelectedInmate(null)
-                    setForm({ ...form, inmate: '' })
-                  }}
-                  placeholder="Type at least 2 letters of the inmate's name"
-                />
-              </label>
-
-              {lookingUpInmates && <p>Searching inmate records...</p>}
-
-              {inmateResults.length > 0 && !selectedInmate && (
-                <div className="inmate-results">
-                  {inmateResults.map((inmate) => (
-                    <button
-                      className="inmate-result"
-                      type="button"
-                      key={inmate.fullName}
-                      onClick={() => {
-                        setSelectedInmate(inmate)
-                        setForm({ ...form, inmate: inmate.fullName })
-                        setInmateSearch(inmate.fullName)
-                        setInmateResults([])
-                      }}
-                    >
-                      <strong>{inmate.fullName}</strong>
-                      <span>Cell block: {inmate.cellBlock}</span>
-                      <span>
-                        Visitation:{' '}
-                        {inmate.visitationAllowed ? 'Allowed' : 'Restricted'}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              {inmateSearch.trim().length >= 2 &&
-                !lookingUpInmates &&
-                !selectedInmate &&
-                inmateResults.length === 0 && (
-                  <p>No inmate found. Check the spelling and try again.</p>
-                )}
-
-              {selectedInmate && (
-                <div className="pending-note">
-                  <strong>{selectedInmate.fullName}</strong>
-                  <p>Cell block: {selectedInmate.cellBlock}</p>
-                  <p>
-                    Visitation:{' '}
-                    {selectedInmate.visitationAllowed
-                      ? 'Allowed'
-                      : 'Restricted'}
-                  </p>
-                  <button
-                    type="button"
-                    className="clear-filters"
-                    onClick={() => {
-                      setSelectedInmate(null)
-                      setInmateSearch('')
-                      setForm({ ...form, inmate: '' })
-                    }}
-                  >
-                    Choose another inmate
-                  </button>
-                </div>
-              )}
-
-              <label>
-                Purpose of visit
-                <textarea
-                  required
-                  maxLength="500"
-                  rows="3"
-                  value={form.purpose}
-                  onChange={(event) =>
-                    setForm({ ...form, purpose: event.target.value })
-                  }
-                  placeholder="Explain the reason for the visit"
-                />
-              </label>
-
-              <fieldset className="gate-items">
-                <legend>Items checked at the gate</legend>
-                {[
-                  'Identity verified',
-                  'Bags inspected',
-                  'Prohibited items checked',
-                  'Personal belongings recorded',
-                ].map((item) => (
-                  <label key={item}>
-                    <input
-                      type="checkbox"
-                      checked={form.checkedItems.includes(item)}
-                      onChange={(event) => {
-                        const checkedItems = event.target.checked
-                          ? [...form.checkedItems, item]
-                          : form.checkedItems.filter(
-                              (selected) => selected !== item,
-                            )
-
-                        setForm({ ...form, checkedItems })
-                      }}
-                    />
-                    {item}
-                  </label>
-                ))}
-              </fieldset>
-
-              <div className="form-row">
-                <label>
-                  Visit date
-                  <input
-                    required
-                    type="date"
-                    min={today}
-                    value={form.date}
-                    onChange={(event) =>
-                      setForm({ ...form, date: event.target.value })
-                    }
-                  />
-                </label>
-
-                <label>
-                  Scheduled visit time
-                  <input
-                    required
-                    type="time"
-                    value={form.time}
-                    onChange={(event) =>
-                      setForm({ ...form, time: event.target.value })
-                    }
-                  />
-                </label>
-              </div>
-
-              <div className="pending-note">
-                New requests start as Pending and require approval. Actual
-                gate entry and exit times are recorded separately.
-              </div>
-
-              <div className="modal-actions">
-                <button
-                  className="secondary-button"
-                  type="button"
-                  disabled={formBusy}
-                  onClick={() => {
-                    setShowForm(false)
-                    resetRegistrationForm()
-                  }}
-                >
-                  Cancel
-                </button>
-                <button
-                  className="primary-button"
-                  type="submit"
-                  disabled={formBusy}
-                >
-                  {formBusy ? 'Please wait...' : 'Register visitor'}
-                </button>
-              </div>
-            </form>
-          </section>
-        </div>
-      )}
     </div>
   )
 }

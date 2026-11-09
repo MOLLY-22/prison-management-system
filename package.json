@@ -4,12 +4,12 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "vite --host 0.0.0.0 --port 5173",
     "dev:backend": "npm --prefix mock-backend run dev",
     "start:backend": "npm --prefix mock-backend start",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview --host 0.0.0.0 --port 4173"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",
