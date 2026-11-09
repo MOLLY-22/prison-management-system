@@ -5,3 +5,19 @@
 .admission-fields { display: grid; gap: 14px; }.admission-identity-fields { grid-template-columns: 1.25fr 1fr 1fr; }.admission-placement-fields { grid-template-columns: 1fr 1fr 1.25fr; }.admission-intake-fields { grid-template-columns: .85fr 1.5fr; }.admission-dialog .MuiInputLabel-root { font-size: 13px; }.admission-dialog .MuiOutlinedInput-root { border-radius: 7px; background: #fff; }.admission-dialog .MuiOutlinedInput-input { padding: 13px 14px; font-size: 14px; }
 .admission-dialog-actions { gap: 10px; padding: 17px 30px 21px !important; border-top: 1px solid #e5ebf1; }.admission-dialog-actions .MuiButton-root { min-height: 39px; padding: 0 17px; border-radius: 7px; font-size: 13px; font-weight: 700; text-transform: none; }.admission-dialog-actions .MuiButton-contained { background: #123c65; box-shadow: none; }.admission-dialog-actions .MuiButton-contained:hover { background: #0c2d4d; }
 @media (max-width: 720px) { .admission-dialog-title { align-items: flex-start; flex-direction: column; padding: 22px 22px 18px !important; gap: 9px; }.admission-dialog-content { padding: 20px 22px !important; }.admission-identity-fields, .admission-placement-fields, .admission-intake-fields { grid-template-columns: 1fr; }.admission-dialog-actions { padding: 15px 22px 18px !important; } }
+
+/* Pagination footer */
+.module-host .pagination { justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+.module-host .pagination .pagination-summary { color: #64748b; font-size: 13px; }
+.module-host .pagination .pagination-summary strong { color: #172033; font-weight: 650; }
+.module-host .pagination .pagination-controls { display: flex; align-items: center; gap: 12px; }
+.module-host .pagination .pagination-page { color: #64748b; font-size: 13px; white-space: nowrap; }
+.module-host .pagination .pagination-page strong { color: #172033; font-weight: 650; }
+.module-host .pagination .pagination-button { min-width: 0; padding: 6px 14px; border: 1px solid #d8e0ea; border-radius: 6px; color: #123c65; font-size: 13px; font-weight: 600; text-transform: none; }
+.module-host .pagination .pagination-button:hover:not(:disabled) { border-color: #176da8; background: #f1f7fb; }
+.module-host .pagination .pagination-button.Mui-disabled { border-color: #edf1f5; color: #a8b3c0; }
+
+/* "View transfers" is the only clickable part of the card */
+.module-host .metric-card .metric-action-link { display: flex; min-width: 0; margin-top: 2px; padding: 0; color: #176da8; font-size: 12px; font-weight: 700; text-transform: none; cursor: pointer; }
+.module-host .metric-card .metric-action-link:hover,
+.module-host .metric-card .metric-action-link:focus-visible { background: transparent; text-decoration: underline; }
