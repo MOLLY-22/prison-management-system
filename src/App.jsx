@@ -14,11 +14,12 @@ import { AuthProvider } from './context/AuthContext.jsx'
 import { useAuth } from './context/authContext'
 import './App.css'
 
-const DEFAULT_API_BASE = 'http://localhost:8080/api/v1'
+const DEFAULT_API_BASE = 'http://localhost:5000/api'
 const API_BASE = (import.meta.env.VITE_API_URL || DEFAULT_API_BASE).replace(/\/+$/, '')
 
 const EMPTY_FORM = {
   name: '',
+  phone: '',
   itemsBrought: '',
   date: '',
   startTime: '09:00',
@@ -67,34 +68,51 @@ function normalizeInmate(inmate) {
 }
 
 function buildVisitPayload(form, inmate) {
-  if (!inmate?.id) {
+  const inmateName = inmate?.fullName || inmate?.name || ''
+
+  if (!inmateName) {
     throw new Error('Select a valid inmate before registering the visit.')
   }
 
   return {
-    visitorFullName: form.name.trim(),
-    inmateId: inmate.id,
-    visitDate: form.date,
-    startTime: toApiTime(form.startTime),
-    endTime: toApiTime(form.endTime),
-    itemsBrought: form.itemsBrought.trim(),
+    name: form.name.trim(),
+    inmate: inmateName,
+    phone: form.phone.trim(),
+    date: form.date,
+    time: toApiTime(form.startTime),
+    status: 'Pending',
+    purpose: form.itemsBrought.trim(),
+    checkedItems: form.itemsBrought.trim() ? [form.itemsBrought.trim()] : [],
+    nationalId: '',
+    relationshipToInmate: '',
   }
 }
 
 function normalizeVisit(record) {
   return {
     id: record.id || record.visitId || record._id,
-    name: record.visitorFullName || record.visitorName || record.visitor?.fullName || 'Unknown visitor',
-    inmate: record.inmateName || (record.inmate ? getInmateName(record.inmate) : 'Unknown inmate'),
+    name: record.name || record.visitorFullName || record.visitorName || record.visitor?.fullName || 'Unknown visitor',
+    inmate: record.inmate || record.inmateName || (record.inmate ? getInmateName(record.inmate) : 'Unknown inmate'),
     status: record.status || 'Recorded',
-    date: record.visitDate || record.date || '',
-    time: record.startTime || record.visitStartTime || record.time || '',
+    date: record.date || record.visitDate || '',
+    time: record.time || record.startTime || record.visitStartTime || '',
     endTime: record.endTime || '',
-    itemsBrought: record.itemsBrought || '',
+    itemsBrought: record.itemsBrought || record.purpose || '',
     loggedBy: record.loggedBy || record.loggingUserName || record.loggedByName || '',
     inmateId: record.inmateId || record.inmate?.id || '',
+    entryTimestamp: record.entryTimestamp || '',
+    exitTimestamp: record.exitTimestamp || '',
     source: record,
   }
+}
+
+function getStatusClass(status) {
+  const normalized = String(status || '').toLowerCase()
+
+  if (normalized === 'approved') return 'scheduled'
+  if (normalized === 'rejected') return 'exited'
+  if (normalized === 'pending') return 'scheduled'
+  return 'scheduled'
 }
 
 function VisitorManagement() {
@@ -107,6 +125,7 @@ function VisitorManagement() {
   const [inmateResults, setInmateResults] = useState([])
   const [selectedInmate, setSelectedInmate] = useState(null)
   const [lookingUpInmates, setLookingUpInmates] = useState(false)
+  const [selectedVisitId, setSelectedVisitId] = useState('')
   const [tokenInput, setTokenInput] = useState(getStoredToken())
   const [authToken, setAuthToken] = useState(getStoredToken())
 
@@ -126,6 +145,12 @@ function VisitorManagement() {
     () => visits.filter((visit) => visit.date === today),
     [visits, today],
   )
+
+  const selectedVisit = useMemo(() => {
+    if (!selectedVisitId) return gateCandidates[0] || null
+
+    return visits.find((visit) => String(visit.id) === String(selectedVisitId)) || gateCandidates[0] || null
+  }, [gateCandidates, selectedVisitId, visits])
 
   const fetchJson = useCallback(async (url, options = {}) => {
     const requestHeaders = {
@@ -155,7 +180,7 @@ function VisitorManagement() {
       setLoading(true)
 
       try {
-        const response = await fetchJson(`${API_BASE}/visits?page=0&size=20`)
+        const response = await fetchJson(`${API_BASE}/visitors?page=0&size=20`)
         const rows = Array.isArray(response)
           ? response
           : Array.isArray(response?.content)
@@ -224,6 +249,49 @@ function VisitorManagement() {
     setSelectedInmate(null)
   }
 
+  async function updateVisitStatus(visitId, status) {
+    if (!visitId) return
+
+    try {
+      const updated = normalizeVisit(await fetchJson(`${API_BASE}/visitors/${visitId}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status }),
+      }))
+
+      setVisits((current) => current.map((visit) => String(visit.id) === String(updated.id) ? updated : visit))
+      setNotice(`Visit status changed to ${status}.`)
+    } catch (error) {
+      console.error('Updating visitor status failed:', error)
+      setNotice(error.message || 'Could not update the visit status.')
+    }
+  }
+
+  async function checkInVisitor(visitId) {
+    if (!visitId) return
+
+    try {
+      const updated = normalizeVisit(await fetchJson(`${API_BASE}/visitors/${visitId}/entry`, { method: 'POST' }))
+      setVisits((current) => current.map((visit) => String(visit.id) === String(updated.id) ? updated : visit))
+      setNotice('Visitor checked in successfully.')
+    } catch (error) {
+      console.error('Checking in visitor failed:', error)
+      setNotice(error.message || 'Could not check in the visitor.')
+    }
+  }
+
+  async function checkOutVisitor(visitId) {
+    if (!visitId) return
+
+    try {
+      const updated = normalizeVisit(await fetchJson(`${API_BASE}/visitors/${visitId}/exit`, { method: 'POST' }))
+      setVisits((current) => current.map((visit) => String(visit.id) === String(updated.id) ? updated : visit))
+      setNotice('Visitor checked out successfully.')
+    } catch (error) {
+      console.error('Checking out visitor failed:', error)
+      setNotice(error.message || 'Could not check out the visitor.')
+    }
+  }
+
   async function registerVisitor(event) {
     event.preventDefault()
 
@@ -237,8 +305,8 @@ function VisitorManagement() {
     const startMinutes = form.startTime.split(':').map(Number).reduce((hours, value) => hours * 60 + value)
     const endMinutes = form.endTime.split(':').map(Number).reduce((hours, value) => hours * 60 + value)
 
-    if (!payload.visitorFullName || !payload.visitDate || !payload.startTime || !payload.endTime || endMinutes < startMinutes) {
-      setNotice('Please complete all required visit details.')
+    if (!payload.name || !payload.phone || !payload.date || !payload.time || endMinutes < startMinutes) {
+      setNotice('Please complete all required visit details, including the visitor phone number.')
       return
     }
 
@@ -246,7 +314,7 @@ function VisitorManagement() {
     setNotice('')
 
     try {
-      const created = await fetchJson(`${API_BASE}/visits`, {
+      const created = await fetchJson(`${API_BASE}/visitors`, {
         method: 'POST',
         body: JSON.stringify(payload),
       })
@@ -429,6 +497,17 @@ function VisitorManagement() {
                   )}
 
                   <label className="reference-wide-field">
+                    Phone number
+                    <input
+                      required
+                      maxLength="30"
+                      placeholder="e.g. 0999 123 456"
+                      value={form.phone}
+                      onChange={(event) => setForm({ ...form, phone: event.target.value })}
+                    />
+                  </label>
+
+                  <label className="reference-wide-field">
                     Items brought (optional)
                     <input
                       maxLength="1000"
@@ -523,7 +602,12 @@ function VisitorManagement() {
 
                 <label className="gate-visitor-select">
                   Today's visit records
-                  <select aria-label="Today's visit records" value="" disabled>
+                  <select
+                    aria-label="Today's visit records"
+                    value={selectedVisit?.id ?? ''}
+                    onChange={(event) => setSelectedVisitId(event.target.value)}
+                    disabled={gateCandidates.length === 0}
+                  >
                     <option value="">Select a visit record...</option>
                     {gateCandidates.map((visitor) => (
                       <option key={visitor.id} value={visitor.id}>{visitor.name}</option>
@@ -532,16 +616,36 @@ function VisitorManagement() {
                 </label>
 
                 <div className="reference-gate-buttons">
-                  <button className="gate-check-in" type="button" disabled>
+                  <button
+                    className="gate-check-in"
+                    type="button"
+                    disabled={
+                      !selectedVisit ||
+                      selectedVisit.status !== 'Approved' ||
+                      !!selectedVisit.entryTimestamp ||
+                      selectedVisit.date !== today
+                    }
+                    onClick={() => checkInVisitor(selectedVisit?.id)}
+                  >
                     <span>⇥</span>CHECK-IN
                   </button>
-                  <button className="gate-check-out" type="button" disabled>
+                  <button
+                    className="gate-check-out"
+                    type="button"
+                    disabled={
+                      !selectedVisit ||
+                      !selectedVisit.entryTimestamp ||
+                      !!selectedVisit.exitTimestamp ||
+                      selectedVisit.date !== today
+                    }
+                    onClick={() => checkOutVisitor(selectedVisit?.id)}
+                  >
                     <span>⇤</span>CHECK-OUT
                   </button>
                 </div>
 
                 <p className="reference-gate-empty">
-                  The documented API does not provide visitor check-in or check-out endpoints.
+                  Visitor check-in and check-out are now driven by the backend contract for approved visitors.
                 </p>
 
                 <div className="reference-port-details">
@@ -575,7 +679,11 @@ function VisitorManagement() {
                     </div>
                     <time>{visit.time ? formatTime(visit.time) : '—'}</time>
                     <div className="reference-log-actions">
-                      <span className="reference-log-status scheduled">{visit.status}</span>
+                      <span className={`reference-log-status ${getStatusClass(visit.status)}`}>{visit.status}</span>
+                      <div className="reference-review-actions">
+                        <button type="button" disabled={visit.status === 'Approved' || visit.status === 'Rejected'} onClick={() => updateVisitStatus(visit.id, 'Approved')}>Approve</button>
+                        <button type="button" className="gate-row-action" disabled={visit.status === 'Rejected' || visit.status === 'Approved'} onClick={() => updateVisitStatus(visit.id, 'Rejected')}>Reject</button>
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -669,7 +777,7 @@ function GuestOnly({ children }) {
 }
 
 function AppRoutes() {
-    const { isAuthenticated, isInitializing } = useAuth();
+    const { isInitializing } = useAuth();
 
     if (isInitializing) {
         return <main className="route-loading" role="status">Checking your session…</main>;
@@ -695,9 +803,9 @@ function AppRoutes() {
             />
             <Route
                 path="/"
-                element={<Navigate to={isAuthenticated ? "/dashboard" : "/login"} replace />}
+                element={<Navigate to="/visitors" replace />}
             />
-            <Route path="*" element={<Navigate to="/" replace />} />
+            <Route path="*" element={<Navigate to="/visitors" replace />} />
         </Routes>
     );
 }
