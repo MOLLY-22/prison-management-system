@@ -1,5 +1,7 @@
 
 
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap');
+
 :root {
   --corp-navy: #0b1f36;
   --corp-navy-light: #102a43;
@@ -19,9 +21,77 @@
   --corp-red-bg: #ffe0de;
 }
 
+/* Shared module treatment for newer MUI-backed workspaces. */
+.transfer-workspace,
+.module-workspace {
+  color: var(--corp-text);
+}
+
+.transfer-workspace .MuiPaper-root,
+.module-workspace .MuiPaper-root {
+  border: 1px solid var(--corp-border);
+  border-radius: 6px;
+  background: var(--corp-white);
+  box-shadow: 0 7px 24px rgb(22 46 72 / 4%);
+}
+
+.transfer-workspace .MuiTypography-h4,
+.module-workspace .MuiTypography-h4,
+.module-workspace h1 {
+  color: var(--corp-navy);
+}
+
+.transfer-workspace .MuiTypography-h6,
+.module-workspace h2 {
+  color: var(--corp-navy);
+  font-weight: 800;
+}
+
+.transfer-workspace .MuiTableHead-root,
+.module-workspace .MuiTableHead-root {
+  background: #f5f8fa;
+}
+
+.transfer-workspace .MuiTableCell-head,
+.module-workspace .MuiTableCell-head {
+  color: #647789;
+}
+
+.transfer-workspace .MuiTableCell-body,
+.module-workspace .MuiTableCell-body {
+  border-color: #e8edf2;
+  color: #43596d;
+}
+
+.transfer-workspace .MuiInputBase-root,
+.module-workspace .MuiInputBase-root {
+  border-radius: 4px;
+}
+
+.transfer-workspace .MuiButton-containedPrimary,
+.module-workspace .MuiButton-containedPrimary {
+  background: var(--corp-navy);
+}
+
+.transfer-workspace .MuiButton-containedPrimary:hover,
+.module-workspace .MuiButton-containedPrimary:hover {
+  background: var(--corp-blue);
+}
+
+.transfer-workspace .MuiAlert-root,
+.module-workspace .MuiAlert-root {
+  border-radius: 4px;
+}
+
+@media (max-width: 700px) {
+  .transfer-workspace {
+    padding: 16px !important;
+  }
+}
+
 #root {
   min-height: 100vh;
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap');
+}
 
 :root {
   font-family: 'DM Sans', Arial, sans-serif;
@@ -1884,6 +1954,13 @@ body,
   opacity: .48;
 }
 
+.reference-gate-empty {
+  margin: 10px 0 0;
+  color: #68717b;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
 .reference-port-details {
   display: grid;
   gap: 8px;
@@ -1921,7 +1998,7 @@ body,
 .reference-log-header,
 .reference-log-row {
   display: grid;
-  grid-template-columns: minmax(90px, 1fr) 54px auto;
+  grid-template-columns: minmax(90px, 1fr) 54px minmax(80px, auto);
   align-items: center;
   gap: 8px;
   font-family: Georgia, serif;
@@ -1990,6 +2067,50 @@ body,
   background: #f5edda;
 }
 
+.reference-log-actions {
+  display: grid;
+  justify-items: start;
+  gap: 5px;
+}
+
+.reference-review-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.reference-review-actions button {
+  min-height: 23px;
+  padding: 2px 6px;
+  border: 1px solid #cfd3d8;
+  border-radius: 2px;
+  color: #24313d;
+  background: #fff;
+  font-size: 8px;
+  cursor: pointer;
+}
+
+.reference-review-actions button:first-child {
+  border-color: #2e694e;
+  color: #fff;
+  background: #2e694e;
+}
+
+.reference-review-actions .gate-row-action {
+  border-color: #246995;
+  color: #fff;
+  background: #246995;
+  cursor: pointer;
+}
+
+.reference-review-actions .gate-row-action:hover:not(:disabled) {
+  background: #1b5276;
+}
+
+.reference-review-actions button:disabled {
+  opacity: .6;
+  cursor: wait;
+}
+
 .reference-log-empty {
   padding: 12px 4px;
   color: #737a83;
@@ -2015,14 +2136,20 @@ body,
   font-size: 10px;
 }
 
-.reference-lookup-search span {
+.reference-lookup-search button {
   display: grid;
   min-width: 72px;
   place-items: center;
+  border: 0;
   color: #fff;
   background: #246995;
   font-family: Georgia, serif;
   font-size: 10px;
+  cursor: pointer;
+}
+
+.reference-lookup-search button:hover {
+  background: #174e72;
 }
 
 .reference-inmate-card {
@@ -2636,6 +2763,7 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+}
 
 .dashboard,
 .dashboard-container,
@@ -2687,6 +2815,7 @@ body {
 
 /* =========================================
    SIDEBAR
+========================================= */
 
 .sidebar {
   min-height: 100vh;
@@ -2734,6 +2863,7 @@ body {
 
 /* =========================================
    TOP NAVIGATION
+========================================= */
 
 .topbar,
 .top-banner,
@@ -2785,6 +2915,7 @@ body {
 
 /* =========================================
    SECURITY PROTOCOL BANNER
+========================================= */
 
 .security-banner {
   display: flex;
@@ -2828,6 +2959,7 @@ body {
 
 /* =========================================
    METRICS CARDS
+========================================= */
 
 .metrics-grid,
 .dashboard-metrics {
@@ -2875,6 +3007,7 @@ body {
 
 /* =========================================
    RELEASE ELIGIBILITY QUEUE
+========================================= */
 
 .queue-section {
   margin-bottom: 28px;
@@ -2915,6 +3048,7 @@ body {
 
 /* =========================================
    DATA TABLE
+========================================= */
 
 .table-container,
 .data-table-container {
@@ -2976,6 +3110,7 @@ td small {
 
 /* =========================================
    STATUS BADGES
+========================================= */
 
 .status-badge {
   display: inline-block;
@@ -3013,6 +3148,7 @@ td small {
 
 /* =========================================
    BUTTONS
+========================================= */
 
 button {
   font: inherit;
@@ -3064,6 +3200,7 @@ button {
 
 /* =========================================
    CHECKLIST AND DISCHARGE FORM
+========================================= */
 
 .bottom-panels,
 .discharge-panels {
@@ -3135,6 +3272,7 @@ button {
 
 /* =========================================
    DISCHARGE EVENT FORM
+========================================= */
 
 .discharge-form,
 .event-form {
@@ -3205,6 +3343,7 @@ button {
 
 /* =========================================
    MODALS
+========================================= */
 
 .modal-overlay {
   position: fixed;
@@ -3236,6 +3375,7 @@ button {
 
 /* =========================================
    ACCESSIBILITY
+========================================= */
 
 button:focus-visible,
 input:focus-visible,
@@ -3345,6 +3485,7 @@ a:focus-visible {
 
 /* =========================================
    APP SECTION SPACING
+   ========================================= */
 
 .dashboard-section {
   width: 100%;
@@ -3380,6 +3521,10 @@ a:focus-visible {
 
   .dashboard-section {
     margin-bottom: 18px;
+  }
+}
+
+.login-description {
   color: #53647a;
   font-size: 13px;
 }

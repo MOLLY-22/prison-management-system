@@ -1,5 +1,5 @@
 import { AppBar, Box, Button, Chip, Drawer, List, ListItemButton, ListItemText, Toolbar } from '@mui/material'
-import { InmateManagement } from '../features/inmates/InmateManagement'
+import { InmateManagement } from '../pages/InmateManagement'
 import { AppIcon } from './AppIcon'
 
 export function AppShell() {

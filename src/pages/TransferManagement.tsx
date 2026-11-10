@@ -1,357 +1,153 @@
-import { useEffect, useState, type ChangeEvent } from 'react'
+import { useState } from 'react'
 import {
   Alert,
-  Button,
-  CircularProgress,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  MenuItem,
+  Box,
   Stack,
-  TextField,
   Typography,
 } from '@mui/material'
 
-import { transferService } from '../api/transferService'
-import type { TransferRecord } from '../components/transfers/TransferTable'
+import TransferForm from '../components/TransferForm'
+import TransferTable, { type TransferRecord, type TransferStatus } from '../components/TransferTable'
+import TransferApproval from '../components/TransferApproval'
+import TransferHistory from '../components/TransferHistory'
+import './transferManagement.css'
 
-interface TransferCell {
-  id: string
-  name: string
-  cellNumber: string
-  blockName: string
-  capacity: number
-  currentOccupancy: number
-  availableSpaces: number
+interface TransferRequest {
+  inmateId: string
+  destinationPrisonId: string
+  reason: string
 }
 
-interface TransferApprovalProps {
-  transfer: TransferRecord | null
-  onApprove: (
-    transferId: string,
-    data: { cellId: string; note?: string },
-  ) => Promise<void> | void
-  onReject: (
-    transferId: string,
-    data?: { note?: string },
-  ) => Promise<void> | void
-  onClose: () => void
+function buildTransferRecord(request: TransferRequest): TransferRecord {
+  const timestamp = new Date().toISOString()
+  return {
+    id: `TR-${Date.now()}`,
+    inmateId: request.inmateId,
+    inmateName: `Inmate ${request.inmateId.slice(-4) || request.inmateId}`,
+    sourcePrisonName: 'Current Facility',
+    destinationPrisonName: `Prison ${request.destinationPrisonId.slice(-4) || request.destinationPrisonId}`,
+    destinationPrisonId: request.destinationPrisonId,
+    reason: request.reason,
+    requestedAt: timestamp,
+    status: 'PENDING',
+  }
 }
 
-function extractCells(response: unknown): TransferCell[] {
-  let items: unknown[] = []
+function TransferManagement() {
+  const [transfers, setTransfers] = useState<TransferRecord[]>([])
+  const [selectedTransfer, setSelectedTransfer] = useState<TransferRecord | null>(null)
+  const [successMessage, setSuccessMessage] = useState('')
 
-  if (Array.isArray(response)) {
-    items = response
-  } else if (
-    response &&
-    typeof response === 'object' &&
-    'content' in response &&
-    Array.isArray(response.content)
-  ) {
-    items = response.content
+  function handleCreateTransfer(request: TransferRequest) {
+    const transfer = buildTransferRecord(request)
+
+    setTransfers(current => [transfer, ...current])
+    setSuccessMessage(
+      `Transfer request for ${transfer.inmateName} was created successfully.`,
+    )
   }
 
-  return items
-    .filter(
-      (item): item is Record<string, unknown> =>
-        Boolean(item) && typeof item === 'object',
-    )
-    .map(item => {
-      const capacity = Number(item.capacity ?? 0)
-      const currentOccupancy = Number(item.currentOccupancy ?? 0)
+  function handleStatusChange(
+    transferId: string,
+    nextStatus: TransferStatus,
+  ) {
+    const currentTransfer = transfers.find(item => item.id === transferId)
 
-      return {
-        id: String(item.id ?? ''),
-        name: String(item.name ?? ''),
-        cellNumber: String(item.cellNumber ?? ''),
-        blockName: String(item.blockName ?? ''),
-        capacity,
-        currentOccupancy,
-        availableSpaces:
-          item.availableSpaces !== undefined
-            ? Number(item.availableSpaces)
-            : Math.max(0, capacity - currentOccupancy),
-      }
-    })
-    .filter(cell => cell.id && cell.availableSpaces > 0)
-}
+    if (!currentTransfer) return
 
-function getErrorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message
+    const allowedTransitions: Record<TransferStatus, TransferStatus[]> = {
+      PENDING: ['APPROVED', 'REJECTED'],
+      APPROVED: ['IN_TRANSIT'],
+      IN_TRANSIT: ['RECEIVED'],
+      RECEIVED: [],
+      CANCELLED: [],
+      REJECTED: [],
+    }
 
-  return 'Something went wrong. Please try again.'
-}
-
-function TransferApproval({
-  transfer,
-  onApprove,
-  onReject,
-  onClose,
-}: TransferApprovalProps) {
-  const [cells, setCells] = useState<TransferCell[]>([])
-  const [selectedCellId, setSelectedCellId] = useState('')
-  const [note, setNote] = useState('')
-  const [loadingCells, setLoadingCells] = useState(false)
-  const [submitting, setSubmitting] = useState(false)
-  const [errorMessage, setErrorMessage] = useState('')
-
-  const isOpen = Boolean(transfer)
-  const isPending = transfer?.status === 'PENDING'
-
-  useEffect(() => {
-    if (!transfer || !isPending) {
-      setCells([])
-      setSelectedCellId('')
+    if (!allowedTransitions[currentTransfer.status].includes(nextStatus)) {
+      setSuccessMessage(
+        `That transition is not allowed: ${currentTransfer.status} to ${nextStatus}.`,
+      )
       return
     }
 
-    const destinationPrisonId = transfer.destinationPrisonId
-    let active = true
-
-    async function loadCells() {
-      setLoadingCells(true)
-      setErrorMessage('')
-      setSelectedCellId('')
-
-      try {
-        const response = await transferService.getCells({
-          prisonId: destinationPrisonId,
-          page: 0,
-          size: 100,
-        })
-
-        if (active) {
-          setCells(extractCells(response))
-        }
-      } catch (error) {
-        if (active) {
-          setErrorMessage(getErrorMessage(error))
-        }
-      } finally {
-        if (active) {
-          setLoadingCells(false)
-        }
-      }
+    const updatedTransfer: TransferRecord = {
+      ...currentTransfer,
+      status: nextStatus,
     }
 
-    loadCells()
+    setTransfers(current =>
+      current.map(item => (item.id === transferId ? updatedTransfer : item)),
+    )
 
-    return () => {
-      active = false
-    }
-  }, [transfer, isPending])
-
-  async function handleApprove() {
-    if (!transfer || !selectedCellId) return
-
-    setSubmitting(true)
-    setErrorMessage('')
-
-    try {
-      await onApprove(transfer.id, {
-        cellId: selectedCellId,
-        ...(note.trim() ? { note: note.trim() } : {}),
-      })
-
-      setNote('')
-      onClose()
-    } catch (error) {
-      setErrorMessage(getErrorMessage(error))
-    } finally {
-      setSubmitting(false)
-    }
+    setSuccessMessage(
+      `Transfer for ${currentTransfer.inmateName} is now ${nextStatus.toLowerCase().replace('_', ' ')}.`,
+    )
   }
 
-  async function handleReject() {
-    if (!transfer) return
-
-    setSubmitting(true)
-    setErrorMessage('')
-
-    try {
-      await onReject(
-        transfer.id,
-        note.trim() ? { note: note.trim() } : {},
-      )
-
-      setNote('')
-      onClose()
-    } catch (error) {
-      setErrorMessage(getErrorMessage(error))
-    } finally {
-      setSubmitting(false)
-    }
+  async function handleApprove(
+    transferId: string,
+    _approvalData: { cellId: string; note?: string },
+  ) {
+    handleStatusChange(transferId, 'APPROVED')
   }
 
-  function handleClose() {
-    if (submitting) return
-
-    setNote('')
-    setErrorMessage('')
-    onClose()
+  async function handleReject(
+    transferId: string,
+    _data?: { note?: string },
+  ) {
+    handleStatusChange(transferId, 'REJECTED')
   }
 
   return (
-    <Dialog
-      open={isOpen}
-      onClose={handleClose}
-      fullWidth
-      maxWidth="sm"
-    >
-      {transfer && (
-        <>
-          <DialogTitle sx={{ fontWeight: 700 }}>
-            Transfer Request Details
-          </DialogTitle>
+    <Box className="transfer-workspace" sx={{ p: { xs: 2, md: 4 }, maxWidth: 1600, mx: 'auto' }}>
+      <Stack spacing={3}>
+        <Box>
+          <Typography variant="h4" sx={{ fontWeight: 700 }}>
+            Transfer Management
+          </Typography>
+          <Typography color="text.secondary" sx={{ mt: 1 }}>
+            Create transfer requests, review approvals, track movement, and
+            inspect transfer history.
+          </Typography>
+        </Box>
 
-          <DialogContent dividers>
-            <Stack spacing={2}>
-              <Stack spacing={0.5}>
-                <Typography variant="body2" color="text.secondary">
-                  Inmate
-                </Typography>
-                <Typography sx={{ fontWeight: 600 }}>
-                  {transfer.inmateName}
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  ID: {transfer.inmateId}
-                </Typography>
-              </Stack>
+        {successMessage && (
+          <Alert
+            severity={
+              successMessage.startsWith('That transition is not allowed')
+                ? 'warning'
+                : 'success'
+            }
+            onClose={() => setSuccessMessage('')}
+          >
+            {successMessage}
+          </Alert>
+        )}
 
-              <Stack spacing={0.5}>
-                <Typography variant="body2" color="text.secondary">
-                  Transfer route
-                </Typography>
-                <Typography>
-                  {transfer.sourcePrisonName} →{' '}
-                  {transfer.destinationPrisonName}
-                </Typography>
-              </Stack>
+        <TransferForm onSubmit={handleCreateTransfer} />
 
-              <Stack spacing={0.5}>
-                <Typography variant="body2" color="text.secondary">
-                  Reason for transfer
-                </Typography>
-                <Typography>
-                  {transfer.reason || 'No reason provided.'}
-                </Typography>
-              </Stack>
+        <TransferTable
+          transfers={transfers}
+          onSelectTransfer={setSelectedTransfer}
+        />
 
-              <Stack spacing={0.5}>
-                <Typography variant="body2" color="text.secondary">
-                  Current status
-                </Typography>
-                <Typography sx={{ fontWeight: 600 }}>
-                  {transfer.status.replace('_', ' ')}
-                </Typography>
-              </Stack>
+        <TransferHistory transfers={transfers} />
 
-              {errorMessage && (
-                <Alert severity="error">
-                  {errorMessage}
-                </Alert>
-              )}
+        <TransferApproval
+          transfer={selectedTransfer}
+          onApprove={handleApprove}
+          onReject={handleReject}
+          onClose={() => setSelectedTransfer(null)}
+        />
 
-              {isPending ? (
-                <>
-                  {loadingCells ? (
-                    <Stack spacing={1}>
-                      <CircularProgress size={20} />
-                      <Typography variant="body2">
-                        Loading available cells...
-                      </Typography>
-                    </Stack>
-                  ) : (
-                    <TextField
-                      select
-                      fullWidth
-                      label="Destination cell"
-                      value={selectedCellId}
-                      onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                        setSelectedCellId(event.target.value)
-                      }
-                      disabled={cells.length === 0}
-                      helperText={
-                        cells.length === 0
-                          ? 'No available cells were found at the destination prison.'
-                          : 'Select a cell with available capacity.'
-                      }
-                    >
-                      {cells.map(cell => (
-                        <MenuItem key={cell.id} value={cell.id}>
-                          {cell.blockName
-                            ? `${cell.blockName} - `
-                            : ''}
-                          {cell.name || cell.cellNumber}
-                          {' '}({cell.availableSpaces} spaces available)
-                        </MenuItem>
-                      ))}
-                    </TextField>
-                  )}
-
-                  <TextField
-                    fullWidth
-                    multiline
-                    minRows={2}
-                    label="Decision note (optional)"
-                    value={note}
-                    onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                      setNote(event.target.value)
-                    }
-                    slotProps={{
-                      htmlInput: { maxLength: 2000 },
-                    }}
-                    helperText={`${note.length}/2000 characters`}
-                  />
-                </>
-              ) : (
-                <Alert severity="info">
-                  This transfer is no longer pending, so no approval or
-                  rejection action is available.
-                </Alert>
-              )}
-            </Stack>
-          </DialogContent>
-
-          <DialogActions sx={{ p: 2 }}>
-            <Button
-              onClick={handleClose}
-              disabled={submitting}
-              color="inherit"
-            >
-              Close
-            </Button>
-
-            {isPending && (
-              <>
-                <Button
-                  onClick={handleReject}
-                  color="error"
-                  disabled={submitting}
-                >
-                  Reject
-                </Button>
-
-                <Button
-                  onClick={handleApprove}
-                  variant="contained"
-                  disabled={
-                    submitting ||
-                    loadingCells ||
-                    !selectedCellId
-                  }
-                >
-                  {submitting ? 'Processing...' : 'Approve'}
-                </Button>
-              </>
-            )}
-          </DialogActions>
-        </>
-      )}
-    </Dialog>
+        <Typography variant="caption" color="text.secondary">
+          Demo mode: transfer data is held in frontend memory. Refreshing the page
+          resets changes. Real persistence and authorization require backend integration.
+        </Typography>
+      </Stack>
+    </Box>
   )
 }
 
-export default TransferApproval
+export default TransferManagement
