@@ -1,5 +1,6 @@
 
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ChangeEvent } from 'react'
+import type { SelectChangeEvent } from '@mui/material/Select'
 import {
   Chip,
   FormControl,
@@ -18,26 +19,53 @@ import {
   Typography,
 } from '@mui/material'
 
-import type {
-  Transfer,
-  TransferStatus,
-} from '../../data/transferMockData'
+export type TransferStatus =
+  | 'PENDING'
+  | 'APPROVED'
+  | 'REJECTED'
+  | 'IN_TRANSIT'
+  | 'RECEIVED'
+  | 'CANCELLED'
 
-interface TransferTableProps {
-  transfers: Transfer[]
-  onSelectTransfer?: (transfer: Transfer) => void
+// Normalized display model. The page will map backend responses to this shape.
+export interface TransferRecord {
+  id: string
+  inmateId: string
+  inmateName: string
+  sourcePrisonName: string
+  destinationPrisonName: string
+  destinationPrisonId: string
+  reason?: string
+  requestedAt: string
+  status: TransferStatus
 }
 
-const statusColors: Record<
-  TransferStatus,
-  'default' | 'primary' | 'info' | 'success' | 'warning' | 'error'
-> = {
-  Pending: 'warning',
-  Approved: 'info',
-  'In Transit': 'primary',
-  Completed: 'success',
-  Cancelled: 'default',
-  Rejected: 'error',
+interface TransferTableProps {
+  transfers: TransferRecord[]
+  onSelectTransfer?: (transfer: TransferRecord) => void
+}
+
+const statusOptions: {
+  value: TransferStatus
+  label: string
+  color: 'default' | 'primary' | 'info' | 'success' | 'warning' | 'error'
+}[] = [
+  { value: 'PENDING', label: 'Pending', color: 'warning' },
+  { value: 'APPROVED', label: 'Approved', color: 'info' },
+  { value: 'REJECTED', label: 'Rejected', color: 'error' },
+  { value: 'IN_TRANSIT', label: 'In Transit', color: 'primary' },
+  { value: 'RECEIVED', label: 'Received', color: 'success' },
+  { value: 'CANCELLED', label: 'Cancelled', color: 'default' },
+]
+
+function formatDate(value: string): string {
+  if (!value) return '—'
+
+  const date = new Date(value)
+
+  if (Number.isNaN(date.getTime())) return value
+
+  return date.toLocaleDateString()
 }
 
 function TransferTable({
@@ -45,31 +73,21 @@ function TransferTable({
   onSelectTransfer,
 }: TransferTableProps) {
   const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState('All')
+  const [statusFilter, setStatusFilter] = useState('ALL')
   const [page, setPage] = useState(0)
   const [rowsPerPage, setRowsPerPage] = useState(5)
 
   const filteredTransfers = useMemo(() => {
     const searchTerm = search.trim().toLowerCase()
 
-    return transfers.filter((transfer) => {
-      const searchableValues = [
-        transfer.inmateNumber,
-        transfer.inmateName,
-        transfer.originFacility,
-        transfer.destinationFacility,
-        transfer.requestedBy,
-        transfer.reason,
-      ]
-
+    return transfers.filter(transfer => {
       const matchesSearch =
         !searchTerm ||
-        searchableValues.some((value) =>
-          value.toLowerCase().includes(searchTerm),
-        )
+        transfer.inmateName.toLowerCase().includes(searchTerm) ||
+        transfer.inmateId.toLowerCase().includes(searchTerm)
 
       const matchesStatus =
-        statusFilter === 'All' || transfer.status === statusFilter
+        statusFilter === 'ALL' || transfer.status === statusFilter
 
       return matchesSearch && matchesStatus
     })
@@ -80,13 +98,18 @@ function TransferTable({
     page * rowsPerPage + rowsPerPage,
   )
 
-  function handleSearchChange(value: string) {
-    setSearch(value)
+  function handleSearchChange(event: ChangeEvent<HTMLInputElement>) {
+    setSearch(event.target.value)
     setPage(0)
   }
 
-  function handleStatusChange(value: string) {
-    setStatusFilter(value)
+  function handleStatusChange(event: SelectChangeEvent) {
+    setStatusFilter(event.target.value)
+    setPage(0)
+  }
+
+  function handleRowsPerPageChange(event: ChangeEvent<HTMLInputElement>) {
+    setRowsPerPage(Number(event.target.value))
     setPage(0)
   }
 
@@ -101,18 +124,15 @@ function TransferTable({
         Transfer Records
       </Typography>
 
-      <Typography
-        variant="body2"
-        sx={{ mb: 2, color: '#475569' }}
-      >
-        Search requests or filter them by their current status.
+      <Typography variant="body2" sx={{ mb: 2, color: '#475569' }}>
+        Search by inmate name or ID, or filter by transfer status.
       </Typography>
 
       <TextField
-        label="Search transfers"
-        placeholder="Inmate, facility, officer, or reason"
+        label="Search by inmate name or ID"
+        placeholder="Enter inmate name or ID"
         value={search}
-        onChange={(event) => handleSearchChange(event.target.value)}
+        onChange={handleSearchChange}
         fullWidth
         sx={{ mb: 2 }}
       />
@@ -126,15 +146,14 @@ function TransferTable({
           labelId="transfer-status-filter-label"
           value={statusFilter}
           label="Filter by Status"
-          onChange={(event) => handleStatusChange(event.target.value)}
+          onChange={handleStatusChange}
         >
-          <MenuItem value="All">All statuses</MenuItem>
-          <MenuItem value="Pending">Pending</MenuItem>
-          <MenuItem value="Approved">Approved</MenuItem>
-          <MenuItem value="In Transit">In Transit</MenuItem>
-          <MenuItem value="Completed">Completed</MenuItem>
-          <MenuItem value="Cancelled">Cancelled</MenuItem>
-          <MenuItem value="Rejected">Rejected</MenuItem>
+          <MenuItem value="ALL">All statuses</MenuItem>
+          {statusOptions.map(option => (
+            <MenuItem key={option.value} value={option.value}>
+              {option.label}
+            </MenuItem>
+          ))}
         </Select>
       </FormControl>
 
@@ -153,7 +172,6 @@ function TransferTable({
             >
               <TableCell>Inmate</TableCell>
               <TableCell>Movement</TableCell>
-              <TableCell>Security</TableCell>
               <TableCell>Requested</TableCell>
               <TableCell>Status</TableCell>
               {onSelectTransfer && <TableCell>Action</TableCell>}
@@ -161,80 +179,82 @@ function TransferTable({
           </TableHead>
 
           <TableBody>
-            {visibleTransfers.map((transfer) => (
-              <TableRow
-                key={transfer.id}
-                hover
-                sx={{
-                  '& td': {
-                    color: '#334155',
-                    borderColor: '#e2e8f0',
-                  },
-                }}
-              >
-                <TableCell>
-                  <Typography
-                    variant="body2"
-                    sx={{ fontWeight: 600, color: '#172033' }}
-                  >
-                    {transfer.inmateName}
-                  </Typography>
+            {visibleTransfers.map(transfer => {
+              const status = statusOptions.find(
+                option => option.value === transfer.status,
+              )
 
-                  <Typography
-                    variant="caption"
-                    sx={{ color: '#475569' }}
-                  >
-                    {transfer.inmateNumber}
-                  </Typography>
-                </TableCell>
-
-                <TableCell>
-                  <Typography variant="body2" sx={{ color: '#334155' }}>
-                    {transfer.originFacility}
-                  </Typography>
-
-                  <Typography variant="body2" sx={{ color: '#475569' }}>
-                    → {transfer.destinationFacility}
-                  </Typography>
-                </TableCell>
-
-                <TableCell>{transfer.securityLevel}</TableCell>
-                <TableCell>{transfer.requestDate}</TableCell>
-
-                <TableCell>
-                  <Chip
-                    label={transfer.status}
-                    color={statusColors[transfer.status]}
-                    size="small"
-                  />
-                </TableCell>
-
-                {onSelectTransfer && (
+              return (
+                <TableRow
+                  key={transfer.id}
+                  hover
+                  sx={{
+                    '& td': {
+                      color: '#334155',
+                      borderColor: '#e2e8f0',
+                    },
+                  }}
+                >
                   <TableCell>
                     <Typography
-                      component="button"
-                      onClick={() => onSelectTransfer(transfer)}
-                      sx={{
-                        border: 0,
-                        background: 'none',
-                        color: 'primary.main',
-                        cursor: 'pointer',
-                        font: 'inherit',
-                        fontWeight: 600,
-                        textDecoration: 'underline',
-                      }}
+                      variant="body2"
+                      sx={{ fontWeight: 600, color: '#172033' }}
                     >
-                      Review
+                      {transfer.inmateName}
+                    </Typography>
+
+                    <Typography variant="caption" sx={{ color: '#475569' }}>
+                      {transfer.inmateId}
                     </Typography>
                   </TableCell>
-                )}
-              </TableRow>
-            ))}
+
+                  <TableCell>
+                    <Typography variant="body2">
+                      {transfer.sourcePrisonName || '—'}
+                    </Typography>
+
+                    <Typography variant="body2" sx={{ color: '#475569' }}>
+                      → {transfer.destinationPrisonName || '—'}
+                    </Typography>
+                  </TableCell>
+
+                  <TableCell>{formatDate(transfer.requestedAt)}</TableCell>
+
+                  <TableCell>
+                    <Chip
+                      label={status?.label ?? transfer.status}
+                      color={status?.color ?? 'default'}
+                      size="small"
+                    />
+                  </TableCell>
+
+                  {onSelectTransfer && (
+                    <TableCell>
+                      <Typography
+                        component="button"
+                        onClick={() => onSelectTransfer(transfer)}
+                        sx={{
+                          border: 0,
+                          background: 'none',
+                          color: 'primary.main',
+                          cursor: 'pointer',
+                          font: 'inherit',
+                          fontWeight: 600,
+                          textDecoration: 'underline',
+                        }}
+                      >
+                        Review
+                      </Typography>
+                    </TableCell>
+                  )}
+                </TableRow>
+              )
+            })}
 
             {visibleTransfers.length === 0 && (
               <TableRow>
                 <TableCell
-                  colSpan={onSelectTransfer ? 6 : 5}
+                  colSpan={onSelectTransfer ? 5 : 4}
                   align="center"
                   sx={{ py: 4, color: '#475569' }}
                 >
@@ -252,17 +272,11 @@ function TransferTable({
         page={page}
         onPageChange={(_, newPage) => setPage(newPage)}
         rowsPerPage={rowsPerPage}
-        onRowsPerPageChange={(event) => {
-          setRowsPerPage(Number(event.target.value))
-          setPage(0)
-        }}
+        onRowsPerPageChange={handleRowsPerPageChange}
         rowsPerPageOptions={[5, 10, 25]}
       />
 
-      <Typography
-        variant="caption"
-        sx={{ color: '#475569' }}
-      >
+      <Typography variant="caption" sx={{ color: '#475569' }}>
         Showing {filteredTransfers.length} matching transfer record(s).
       </Typography>
     </Paper>
