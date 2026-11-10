@@ -1,0 +1,1047 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <meta content="web_dashboard" name="shell-type" />
+    <style>
+      @layer base {
+        html,
+        body {
+          margin: 0;
+          padding: 0;
+        }
+        body {
+          overscroll-behavior: none;
+        }
+        main > :first-child {
+          margin-top: 0 !important;
+        }
+        main > :last-child {
+          margin-bottom: 0 !important;
+        }
+      }
+      ::-webkit-scrollbar {
+        display: none;
+      }
+    </style>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "tertiary-fixed": "#ffdcc3",
+              "primary-container": "#0a2540",
+              "primary-fixed": "#d2e4ff",
+              "on-primary-container": "#768dad",
+              "primary-fixed-dim": "#b0c8eb",
+              primary: "#000f22",
+              "on-secondary": "#ffffff",
+              "inverse-primary": "#b0c8eb",
+              "error-container": "#ffdad6",
+              "on-tertiary-fixed-variant": "#6e3900",
+              "secondary-container": "#87c0fe",
+              "on-tertiary": "#ffffff",
+              "surface-tint": "#49607e",
+              "on-surface": "#191c1e",
+              "on-surface-variant": "#43474d",
+              "on-primary": "#ffffff",
+              outline: "#74777e",
+              "tertiary-fixed-dim": "#ffb77d",
+              "secondary-fixed-dim": "#9ccaff",
+              "on-error-container": "#93000a",
+              "outline-variant": "#c4c6ce",
+              "on-tertiary-container": "#d27200",
+              "on-primary-fixed": "#001c37",
+              "surface-container-low": "#f2f4f6",
+              "on-secondary-fixed-variant": "#00497b",
+              "inverse-on-surface": "#eff1f3",
+              "surface-container-lowest": "#ffffff",
+              "surface-variant": "#e0e3e5",
+              error: "#ba1a1a",
+              "on-background": "#191c1e",
+              "on-secondary-container": "#004e82",
+              "surface-bright": "#f8f9fb",
+              tertiary: "#1c0a00",
+              "surface-dim": "#d8dadc",
+              "on-primary-fixed-variant": "#314865",
+              surface: "#f8f9fb",
+              "inverse-surface": "#2d3133",
+              "secondary-fixed": "#d0e4ff",
+              "on-secondary-fixed": "#001d35",
+              background: "#f8f9fb",
+              secondary: "#1e629a",
+              "on-tertiary-fixed": "#2f1500",
+              "surface-container-highest": "#e0e3e5",
+              "surface-container": "#eceef0",
+              "on-error": "#ffffff",
+              "surface-container-high": "#e6e8ea",
+              "tertiary-container": "#3b1c00",
+            },
+            borderRadius: {
+              DEFAULT: "0.125rem",
+              lg: "0.25rem",
+              xl: "0.5rem",
+              full: "0.75rem",
+            },
+            spacing: {
+              "space-sm": "0.5rem",
+              "space-lg": "1.5rem",
+              "space-md": "1rem",
+              margin: "2rem",
+              "space-xl": "2.5rem",
+              "space-xs": "0.25rem",
+              gutter: "1.5rem",
+            },
+            fontFamily: {
+              "display-lg-mobile": ["Inter"],
+              "body-md": ["Inter"],
+              "headline-sm": ["Inter"],
+              "headline-md-mobile": ["Inter"],
+              "body-lg": ["Inter"],
+              "label-sm": ["Inter"],
+              "body-sm": ["Inter"],
+              "display-lg": ["Inter"],
+              "headline-md": ["Inter"],
+              "label-md": ["Inter"],
+            },
+            fontSize: {
+              "display-lg-mobile": [
+                "28px",
+                {
+                  lineHeight: "36px",
+                  letterSpacing: "-0.01em",
+                  fontWeight: "700",
+                },
+              ],
+              "body-md": ["14px", { lineHeight: "20px", fontWeight: "400" }],
+              "headline-sm": [
+                "18px",
+                { lineHeight: "24px", fontWeight: "600" },
+              ],
+              "headline-md-mobile": [
+                "20px",
+                { lineHeight: "28px", fontWeight: "600" },
+              ],
+              "body-lg": ["16px", { lineHeight: "24px", fontWeight: "400" }],
+              "label-sm": ["12px", { lineHeight: "16px", fontWeight: "500" }],
+              "body-sm": ["12px", { lineHeight: "16px", fontWeight: "400" }],
+              "display-lg": [
+                "36px",
+                {
+                  lineHeight: "44px",
+                  letterSpacing: "-0.02em",
+                  fontWeight: "700",
+                },
+              ],
+              "headline-md": [
+                "24px",
+                {
+                  lineHeight: "32px",
+                  letterSpacing: "-0.01em",
+                  fontWeight: "600",
+                },
+              ],
+              "label-md": ["14px", { lineHeight: "20px", fontWeight: "500" }],
+            },
+          },
+        },
+      };
+    </script>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body class="bg-surface font-body-md text-on-surface">
+    <aside
+      class="fixed left-0 top-0 h-full w-72 bg-surface-container-low z-50 flex flex-col pt-space-md pb-space-lg border-r border-outline-variant/30"
+    >
+      <div class="px-space-lg mb-space-lg flex items-center gap-space-sm">
+        <span class="material-symbols-outlined text-primary text-[24px]"
+          >shield_locked</span
+        ><span
+          class="text-headline-sm font-bold text-primary uppercase tracking-wider"
+          >CORP-SEC</span
+        >
+      </div>
+      <nav
+        class="flex-1 px-space-md space-y-space-xs"
+        data-active-classes="bg-primary-container text-on-primary-container font-semibold rounded-lg"
+      >
+        <a
+          class="flex items-center px-space-md py-space-sm rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-all"
+          data-path="inmate-management"
+          href="#"
+          ><span class="material-symbols-outlined mr-space-md text-[20px]"
+            >group</span
+          >Inmate Management</a
+        ><a
+          class="flex items-center px-space-md py-space-sm rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-all"
+          data-path="sentence-custody"
+          href="#"
+          ><span class="material-symbols-outlined mr-space-md text-[20px]"
+            >gavel</span
+          >Sentence &amp; Custody</a
+        ><a
+          class="flex items-center px-space-md py-space-sm rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-all"
+          data-path="transfer-management"
+          href="#"
+          ><span class="material-symbols-outlined mr-space-md text-[20px]"
+            >local_shipping</span
+          >Transfer Management</a
+        ><a
+          class="flex items-center px-space-md py-space-sm rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-all"
+          data-path="visitor-management"
+          href="#"
+          ><span class="material-symbols-outlined mr-space-md text-[20px]"
+            >badge</span
+          >Visitor Management</a
+        ><a
+          class="flex items-center px-space-md py-space-sm rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-all"
+          data-path="release-discharge"
+          href="#"
+          ><span class="material-symbols-outlined mr-space-md text-[20px]"
+            >lock_open</span
+          >Release &amp; Discharge</a
+        ><a
+          class="flex items-center px-space-md py-space-sm rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-all"
+          data-path="user-access-control"
+          href="#"
+          ><span class="material-symbols-outlined mr-space-md text-[20px]"
+            >admin_panel_settings</span
+          >User &amp; Access Control</a
+        >
+      </nav>
+      <div
+        class="px-space-lg pt-space-md border-t border-outline-variant/30 text-label-sm text-on-surface-variant"
+      >
+        Secure Gateway v4.2.0
+      </div>
+    </aside>
+    <div class="pl-72">
+      <header
+        class="fixed top-0 left-72 right-0 h-16 bg-surface/80 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)] z-40 flex items-center justify-between px-space-lg border-b border-outline-variant/30"
+      >
+        <div class="flex items-center gap-space-md">
+          <div
+            class="flex items-center gap-space-xs px-space-sm py-1 bg-surface-container rounded text-label-sm font-medium text-on-surface"
+          >
+            <span class="w-2 h-2 rounded-full bg-secondary"></span>System Secure
+          </div>
+          <div
+            class="flex items-center gap-space-xs text-on-surface-variant text-label-sm"
+          >
+            <span class="material-symbols-outlined text-[16px]">verified</span
+            >Security Badge #SEC-992
+          </div>
+        </div>
+        <div class="flex items-center gap-space-md">
+          <div class="flex items-center gap-space-xs">
+            <span class="text-label-sm text-on-surface-variant">Role:</span
+            ><select
+              class="bg-surface-container border border-outline-variant text-label-sm rounded px-2 py-1 text-on-surface focus:outline-none"
+            >
+              <option>Officer-in-Charge</option>
+              <option>Senior Officer</option>
+              <option>Gatekeeper</option>
+            </select>
+          </div>
+          <div
+            class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"
+          >
+            <span class="material-symbols-outlined text-on-primary text-[18px]"
+              >person</span
+            >
+          </div>
+        </div>
+      </header>
+      <main class="relative pt-16 bg-surface min-h-screen">
+        <div class="flex flex-col w-full pb-16">
+          <!-- Top Stats Banner -->
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-gutter p-gutter">
+            <div
+              class="bg-surface-container-low p-space-md rounded-lg flex flex-col justify-between"
+            >
+              <div
+                class="flex items-center justify-between text-on-surface-variant"
+              >
+                <span
+                  class="text-label-sm font-semibold uppercase tracking-wider"
+                  >Active Personnels</span
+                >
+                <span
+                  class="material-symbols-outlined text-[20px] text-secondary"
+                  >group</span
+                >
+              </div>
+              <div class="mt-space-md flex items-baseline gap-space-xs">
+                <span class="text-headline-md font-bold text-primary">142</span>
+                <span class="text-body-sm text-on-surface-variant"
+                  >+3 this week</span
+                >
+              </div>
+            </div>
+            <div
+              class="bg-surface-container-low p-space-md rounded-lg flex flex-col justify-between"
+            >
+              <div
+                class="flex items-center justify-between text-on-surface-variant"
+              >
+                <span
+                  class="text-label-sm font-semibold uppercase tracking-wider"
+                  >Privilege Escalations</span
+                >
+                <span class="material-symbols-outlined text-[20px] text-error"
+                  >security</span
+                >
+              </div>
+              <div class="mt-space-md flex items-baseline gap-space-xs">
+                <span class="text-headline-md font-bold text-primary">0</span>
+                <span class="text-body-sm text-secondary"
+                  >Optimal Security</span
+                >
+              </div>
+            </div>
+            <div
+              class="bg-surface-container-low p-space-md rounded-lg flex flex-col justify-between"
+            >
+              <div
+                class="flex items-center justify-between text-on-surface-variant"
+              >
+                <span
+                  class="text-label-sm font-semibold uppercase tracking-wider"
+                  >Failed Auth Attempts</span
+                >
+                <span
+                  class="material-symbols-outlined text-[20px] text-tertiary-container"
+                  >warning</span
+                >
+              </div>
+              <div class="mt-space-md flex items-baseline gap-space-xs">
+                <span class="text-headline-md font-bold text-primary">12</span>
+                <span class="text-body-sm text-error">Requires Audit</span>
+              </div>
+            </div>
+            <div
+              class="bg-surface-container-low p-space-md rounded-lg flex flex-col justify-between"
+            >
+              <div
+                class="flex items-center justify-between text-on-surface-variant"
+              >
+                <span
+                  class="text-label-sm font-semibold uppercase tracking-wider"
+                  >Active Guards</span
+                >
+                <span class="material-symbols-outlined text-[20px] text-primary"
+                  >shield</span
+                >
+              </div>
+              <div class="mt-space-md flex items-baseline gap-space-xs">
+                <span class="text-headline-md font-bold text-primary">4</span>
+                <span class="text-body-sm text-on-surface-variant"
+                  >Levels Configured</span
+                >
+              </div>
+            </div>
+          </div>
+          <!-- Main Content Grid -->
+          <div class="px-gutter space-y-gutter">
+            <!-- Section 1: Authentication & Role Assignment Management Table -->
+            <div class="bg-surface-container-low rounded-lg p-space-lg">
+              <div
+                class="flex flex-col md:flex-row md:items-center justify-between gap-space-md mb-space-lg"
+              >
+                <div>
+                  <h2 class="text-headline-md font-bold text-primary">
+                    Personnel Authentication &amp; Roles
+                  </h2>
+                  <p class="text-body-md text-on-surface-variant">
+                    Manage security clearances and active role allocations
+                    across facilities.
+                  </p>
+                </div>
+                <div class="flex items-center gap-space-sm">
+                  <div class="relative">
+                    <span
+                      class="material-symbols-outlined absolute left-3 top-2.5 text-outline text-[18px]"
+                      >search</span
+                    >
+                    <input
+                      class="bg-surface border border-outline-variant text-body-md rounded-lg pl-9 pr-4 py-2 text-on-surface focus:outline-none focus:border-primary w-64"
+                      placeholder="Search personnel..."
+                      type="text"
+                    />
+                  </div>
+                  <button
+                    class="bg-primary text-on-primary text-label-md px-space-md py-2 rounded-lg flex items-center gap-space-xs hover:bg-primary-container transition-colors"
+                  >
+                    <span class="material-symbols-outlined text-[18px]"
+                      >person_add</span
+                    >
+                    Assign Role
+                  </button>
+                </div>
+              </div>
+              <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse">
+                  <thead>
+                    <tr
+                      class="border-b border-outline-variant/40 text-label-sm text-on-surface-variant uppercase tracking-wider"
+                    >
+                      <th class="py-3 px-4 font-semibold">Personnel Name</th>
+                      <th class="py-3 px-4 font-semibold">Badge ID</th>
+                      <th class="py-3 px-4 font-semibold">Assigned Role</th>
+                      <th class="py-3 px-4 font-semibold">Facility Sector</th>
+                      <th class="py-3 px-4 font-semibold">Status</th>
+                      <th class="py-3 px-4 font-semibold text-right">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody
+                    class="text-body-md divide-y divide-outline-variant/20"
+                  >
+                    <tr class="hover:bg-surface-container transition-colors">
+                      <td
+                        class="py-3 px-4 font-medium text-primary flex items-center gap-space-sm"
+                      >
+                        <div
+                          class="w-7 h-7 rounded-full bg-primary-fixed flex items-center justify-center text-on-primary-fixed font-bold text-label-sm"
+                        >
+                          JD
+                        </div>
+                        Commander John Davis
+                      </td>
+                      <td
+                        class="py-3 px-4 font-mono text-on-surface-variant text-body-sm"
+                      >
+                        SEC-00412
+                      </td>
+                      <td class="py-3 px-4">
+                        <span
+                          class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-label-sm font-medium bg-primary-container text-on-primary-container"
+                        >
+                          <span class="material-symbols-outlined text-[14px]"
+                            >admin_panel_settings</span
+                          >
+                          Officer-in-Charge
+                        </span>
+                      </td>
+                      <td class="py-3 px-4 text-on-surface-variant">
+                        Block A - Maximum
+                      </td>
+                      <td class="py-3 px-4">
+                        <span
+                          class="inline-flex items-center gap-1 text-label-sm text-secondary font-medium"
+                        >
+                          <span
+                            class="w-1.5 h-1.5 rounded-full bg-secondary"
+                          ></span>
+                          Active
+                        </span>
+                      </td>
+                      <td class="py-3 px-4 text-right">
+                        <button class="text-primary hover:text-secondary p-1">
+                          <span class="material-symbols-outlined text-[18px]"
+                            >edit</span
+                          >
+                        </button>
+                        <button
+                          class="text-on-surface-variant hover:text-error p-1"
+                        >
+                          <span class="material-symbols-outlined text-[18px]"
+                            >block</span
+                          >
+                        </button>
+                      </td>
+                    </tr>
+                    <tr class="hover:bg-surface-container transition-colors">
+                      <td
+                        class="py-3 px-4 font-medium text-primary flex items-center gap-space-sm"
+                      >
+                        <div
+                          class="w-7 h-7 rounded-full bg-secondary-fixed flex items-center justify-center text-on-secondary-fixed font-bold text-label-sm"
+                        >
+                          SM
+                        </div>
+                        Sarah Miller
+                      </td>
+                      <td
+                        class="py-3 px-4 font-mono text-on-surface-variant text-body-sm"
+                      >
+                        SEC-00891
+                      </td>
+                      <td class="py-3 px-4">
+                        <span
+                          class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-label-sm font-medium bg-secondary-container text-on-secondary-container"
+                        >
+                          <span class="material-symbols-outlined text-[14px]"
+                            >verified_user</span
+                          >
+                          Senior Prison Officer
+                        </span>
+                      </td>
+                      <td class="py-3 px-4 text-on-surface-variant">
+                        Block B - Medium
+                      </td>
+                      <td class="py-3 px-4">
+                        <span
+                          class="inline-flex items-center gap-1 text-label-sm text-secondary font-medium"
+                        >
+                          <span
+                            class="w-1.5 h-1.5 rounded-full bg-secondary"
+                          ></span>
+                          Active
+                        </span>
+                      </td>
+                      <td class="py-3 px-4 text-right">
+                        <button class="text-primary hover:text-secondary p-1">
+                          <span class="material-symbols-outlined text-[18px]"
+                            >edit</span
+                          >
+                        </button>
+                        <button
+                          class="text-on-surface-variant hover:text-error p-1"
+                        >
+                          <span class="material-symbols-outlined text-[18px]"
+                            >block</span
+                          >
+                        </button>
+                      </td>
+                    </tr>
+                    <tr class="hover:bg-surface-container transition-colors">
+                      <td
+                        class="py-3 px-4 font-medium text-primary flex items-center gap-space-sm"
+                      >
+                        <div
+                          class="w-7 h-7 rounded-full bg-surface-container-high flex items-center justify-center text-on-surface font-bold text-label-sm"
+                        >
+                          RK
+                        </div>
+                        Robert King
+                      </td>
+                      <td
+                        class="py-3 px-4 font-mono text-on-surface-variant text-body-sm"
+                      >
+                        SEC-01104
+                      </td>
+                      <td class="py-3 px-4">
+                        <span
+                          class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-label-sm font-medium bg-surface-container-high text-on-surface"
+                        >
+                          <span class="material-symbols-outlined text-[14px]"
+                            >shield_person</span
+                          >
+                          Prison Officer
+                        </span>
+                      </td>
+                      <td class="py-3 px-4 text-on-surface-variant">
+                        Block C - General
+                      </td>
+                      <td class="py-3 px-4">
+                        <span
+                          class="inline-flex items-center gap-1 text-label-sm text-secondary font-medium"
+                        >
+                          <span
+                            class="w-1.5 h-1.5 rounded-full bg-secondary"
+                          ></span>
+                          Active
+                        </span>
+                      </td>
+                      <td class="py-3 px-4 text-right">
+                        <button class="text-primary hover:text-secondary p-1">
+                          <span class="material-symbols-outlined text-[18px]"
+                            >edit</span
+                          >
+                        </button>
+                        <button
+                          class="text-on-surface-variant hover:text-error p-1"
+                        >
+                          <span class="material-symbols-outlined text-[18px]"
+                            >block</span
+                          >
+                        </button>
+                      </td>
+                    </tr>
+                    <tr class="hover:bg-surface-container transition-colors">
+                      <td
+                        class="py-3 px-4 font-medium text-primary flex items-center gap-space-sm"
+                      >
+                        <div
+                          class="w-7 h-7 rounded-full bg-tertiary-fixed flex items-center justify-center text-on-tertiary-fixed font-bold text-label-sm"
+                        >
+                          AL
+                        </div>
+                        Alan Lee
+                      </td>
+                      <td
+                        class="py-3 px-4 font-mono text-on-surface-variant text-body-sm"
+                      >
+                        SEC-01459
+                      </td>
+                      <td class="py-3 px-4">
+                        <span
+                          class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-label-sm font-medium bg-tertiary-fixed text-on-tertiary-fixed"
+                        >
+                          <span class="material-symbols-outlined text-[14px]"
+                            >door_front</span
+                          >
+                          Gatekeeper
+                        </span>
+                      </td>
+                      <td class="py-3 px-4 text-on-surface-variant">
+                        Main Security Checkpoint
+                      </td>
+                      <td class="py-3 px-4">
+                        <span
+                          class="inline-flex items-center gap-1 text-label-sm text-error font-medium"
+                        >
+                          <span
+                            class="w-1.5 h-1.5 rounded-full bg-error"
+                          ></span>
+                          Off-Duty
+                        </span>
+                      </td>
+                      <td class="py-3 px-4 text-right">
+                        <button class="text-primary hover:text-secondary p-1">
+                          <span class="material-symbols-outlined text-[18px]"
+                            >edit</span
+                          >
+                        </button>
+                        <button
+                          class="text-on-surface-variant hover:text-error p-1"
+                        >
+                          <span class="material-symbols-outlined text-[18px]"
+                            >block</span
+                          >
+                        </button>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div
+                class="mt-space-md flex items-center justify-between text-body-sm text-on-surface-variant"
+              >
+                <span>Showing 4 of 142 personnel entries</span>
+                <div class="flex items-center gap-space-xs">
+                  <button
+                    class="px-3 py-1 bg-surface border border-outline-variant rounded disabled:opacity-50"
+                    disabled=""
+                  >
+                    Previous
+                  </button>
+                  <button
+                    class="px-3 py-1 bg-surface border border-outline-variant rounded hover:bg-surface-container"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            </div>
+            <!-- Section 2: Role-Aware Navigation & UI Permission Matrix -->
+            <div class="bg-surface-container-low rounded-lg p-space-lg">
+              <div class="mb-space-lg">
+                <h2 class="text-headline-md font-bold text-primary">
+                  UI Permission Matrix (Least Privilege Principle)
+                </h2>
+                <p class="text-body-md text-on-surface-variant">
+                  Configure exact feature access limits per operational role
+                  tier.
+                </p>
+              </div>
+              <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse">
+                  <thead>
+                    <tr
+                      class="border-b border-outline-variant/40 text-label-sm text-on-surface-variant uppercase tracking-wider"
+                    >
+                      <th class="py-3 px-4 font-semibold">
+                        Module / Feature Scope
+                      </th>
+                      <th class="py-3 px-4 font-semibold text-center">
+                        Officer-in-Charge
+                      </th>
+                      <th class="py-3 px-4 font-semibold text-center">
+                        Senior Prison Officer
+                      </th>
+                      <th class="py-3 px-4 font-semibold text-center">
+                        Prison Officer
+                      </th>
+                      <th class="py-3 px-4 font-semibold text-center">
+                        Gatekeeper
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody
+                    class="text-body-md divide-y divide-outline-variant/20"
+                  >
+                    <tr>
+                      <td class="py-3 px-4 font-medium text-primary">
+                        Inmate Management (Records, Bios)
+                      </td>
+                      <td class="py-3 px-4 text-center">
+                        <span
+                          class="material-symbols-outlined text-secondary text-[20px]"
+                          >check_circle</span
+                        >
+                      </td>
+                      <td class="py-3 px-4 text-center">
+                        <span
+                          class="material-symbols-outlined text-secondary text-[20px]"
+                          >check_circle</span
+                        >
+                      </td>
+                      <td class="py-3 px-4 text-center">
+                        <span
+                          class="material-symbols-outlined text-on-surface-variant text-[20px]"
+                          >visibility</span
+                        >
+                      </td>
+                      <td class="py-3 px-4 text-center">
+                        <span
+                          class="material-symbols-outlined text-outline-variant text-[20px]"
+                          >cancel</span
+                        >
+                      </td>
+                    </tr>
+                    <tr>
+                      <td class="py-3 px-4 font-medium text-primary">
+                        Sentence &amp; Custody Modification
+                      </td>
+                      <td class="py-3 px-4 text-center">
+                        <span
+                          class="material-symbols-outlined text-secondary text-[20px]"
+                          >check_circle</span
+                        >
+                      </td>
+                      <td class="py-3 px-4 text-center">
+                        <span
+                          class="material-symbols-outlined text-secondary text-[20px]"
+                          >check_circle</span
+                        >
+                      </td>
+                      <td class="py-3 px-4 text-center">
+                        <span
+                          class="material-symbols-outlined text-outline-variant text-[20px]"
+                          >cancel</span
+                        >
+                      </td>
+                      <td class="py-3 px-4 text-center">
+                        <span
+                          class="material-symbols-outlined text-outline-variant text-[20px]"
+                          >cancel</span
+                        >
+                      </td>
+                    </tr>
+                    <tr>
+                      <td class="py-3 px-4 font-medium text-primary">
+                        Transfer Management &amp; Authorization
+                      </td>
+                      <td class="py-3 px-4 text-center">
+                        <span
+                          class="material-symbols-outlined text-secondary text-[20px]"
+                          >check_circle</span
+                        >
+                      </td>
+                      <td class="py-3 px-4 text-center">
+                        <span
+                          class="material-symbols-outlined text-secondary text-[20px]"
+                          >check_circle</span
+                        >
+                      </td>
+                      <td class="py-3 px-4 text-center">
+                        <span
+                          class="material-symbols-outlined text-outline-variant text-[20px]"
+                          >cancel</span
+                        >
+                      </td>
+                      <td class="py-3 px-4 text-center">
+                        <span
+                          class="material-symbols-outlined text-outline-variant text-[20px]"
+                          >cancel</span
+                        >
+                      </td>
+                    </tr>
+                    <tr>
+                      <td class="py-3 px-4 font-medium text-primary">
+                        Visitor Pass Issuance &amp; Verification
+                      </td>
+                      <td class="py-3 px-4 text-center">
+                        <span
+                          class="material-symbols-outlined text-secondary text-[20px]"
+                          >check_circle</span
+                        >
+                      </td>
+                      <td class="py-3 px-4 text-center">
+                        <span
+                          class="material-symbols-outlined text-secondary text-[20px]"
+                          >check_circle</span
+                        >
+                      </td>
+                      <td class="py-3 px-4 text-center">
+                        <span
+                          class="material-symbols-outlined text-secondary text-[20px]"
+                          >check_circle</span
+                        >
+                      </td>
+                      <td class="py-3 px-4 text-center">
+                        <span
+                          class="material-symbols-outlined text-secondary text-[20px]"
+                          >check_circle</span
+                        >
+                      </td>
+                    </tr>
+                    <tr>
+                      <td class="py-3 px-4 font-medium text-primary">
+                        Release &amp; Discharge Processing
+                      </td>
+                      <td class="py-3 px-4 text-center">
+                        <span
+                          class="material-symbols-outlined text-secondary text-[20px]"
+                          >check_circle</span
+                        >
+                      </td>
+                      <td class="py-3 px-4 text-center">
+                        <span
+                          class="material-symbols-outlined text-outline-variant text-[20px]"
+                          >cancel</span
+                        >
+                      </td>
+                      <td class="py-3 px-4 text-center">
+                        <span
+                          class="material-symbols-outlined text-outline-variant text-[20px]"
+                          >cancel</span
+                        >
+                      </td>
+                      <td class="py-3 px-4 text-center">
+                        <span
+                          class="material-symbols-outlined text-outline-variant text-[20px]"
+                          >cancel</span
+                        >
+                      </td>
+                    </tr>
+                    <tr>
+                      <td class="py-3 px-4 font-medium text-primary">
+                        User &amp; Access Control (Admin)
+                      </td>
+                      <td class="py-3 px-4 text-center">
+                        <span
+                          class="material-symbols-outlined text-secondary text-[20px]"
+                          >check_circle</span
+                        >
+                      </td>
+                      <td class="py-3 px-4 text-center">
+                        <span
+                          class="material-symbols-outlined text-outline-variant text-[20px]"
+                          >cancel</span
+                        >
+                      </td>
+                      <td class="py-3 px-4 text-center">
+                        <span
+                          class="material-symbols-outlined text-outline-variant text-[20px]"
+                          >cancel</span
+                        >
+                      </td>
+                      <td class="py-3 px-4 text-center">
+                        <span
+                          class="material-symbols-outlined text-outline-variant text-[20px]"
+                          >cancel</span
+                        >
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <!-- Section 3: Restricted Operation Guard Configuration & Audit Logs -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-gutter">
+              <!-- Guard Config Form -->
+              <div
+                class="bg-surface-container-low rounded-lg p-space-lg flex flex-col justify-between"
+              >
+                <div>
+                  <div class="flex items-center justify-between mb-space-md">
+                    <h3 class="text-headline-sm font-bold text-primary">
+                      Restricted Operation Guard
+                    </h3>
+                    <span class="material-symbols-outlined text-secondary"
+                      >security_update_warning</span
+                    >
+                  </div>
+                  <p class="text-body-sm text-on-surface-variant mb-space-lg">
+                    Configure strict multi-factor or biometric guard rails for
+                    elevated actions.
+                  </p>
+                  <div class="space-y-space-md">
+                    <div>
+                      <label
+                        class="block text-label-sm font-medium text-on-surface mb-1"
+                        >Require Secondary Approval</label
+                      >
+                      <select
+                        class="w-full bg-surface border border-outline-variant text-body-md rounded px-3 py-2 text-on-surface focus:outline-none"
+                      >
+                        <option>For All Releases &amp; Discharges</option>
+                        <option>For Transfers Above Medium Security</option>
+                        <option>Never (Single Officer)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label
+                        class="block text-label-sm font-medium text-on-surface mb-1"
+                        >Auto-Lockout Threshold</label
+                      >
+                      <input
+                        class="w-full bg-surface border border-outline-variant text-body-md rounded px-3 py-2 text-on-surface focus:outline-none"
+                        type="text"
+                        value="3 Failed Attempts"
+                      />
+                    </div>
+                    <div class="flex items-center justify-between pt-space-xs">
+                      <span class="text-body-sm font-medium text-on-surface"
+                        >Immediate IP Geofencing Alert</span
+                      >
+                      <input
+                        checked=""
+                        class="w-4 h-4 text-primary rounded border-outline-variant focus:ring-0"
+                        type="checkbox"
+                      />
+                    </div>
+                  </div>
+                </div>
+                <div class="mt-space-xl">
+                  <button
+                    class="w-full bg-primary text-on-primary py-2 rounded font-medium hover:bg-primary-container transition-colors"
+                  >
+                    Save Guard Configuration
+                  </button>
+                </div>
+              </div>
+              <!-- Failed Authorization Audit Logs -->
+              <div
+                class="bg-surface-container-low rounded-lg p-space-lg lg:col-span-2"
+              >
+                <div class="flex items-center justify-between mb-space-md">
+                  <div>
+                    <h3 class="text-headline-sm font-bold text-primary">
+                      Failed Authorization Audit Logs
+                    </h3>
+                    <p class="text-body-sm text-on-surface-variant">
+                      Real-time log stream of unauthorized module access
+                      attempts.
+                    </p>
+                  </div>
+                  <button
+                    class="text-body-sm text-secondary hover:underline flex items-center gap-1 font-medium"
+                  >
+                    <span class="material-symbols-outlined text-[16px]"
+                      >download</span
+                    >
+                    Export CSV
+                  </button>
+                </div>
+                <div
+                  class="space-y-space-sm max-h-[300px] overflow-y-auto pr-1"
+                >
+                  <div
+                    class="bg-surface p-3 rounded border-l-4 border-error flex items-center justify-between"
+                  >
+                    <div class="flex items-center gap-space-md">
+                      <span
+                        class="material-symbols-outlined text-error text-[20px]"
+                        >gpp_bad</span
+                      >
+                      <div>
+                        <div class="text-body-md font-medium text-primary">
+                          Unauthorized Release Attempt
+                        </div>
+                        <div class="text-body-sm text-on-surface-variant">
+                          Badge #SEC-01459 (Gatekeeper Alan Lee) attempted to
+                          access
+                          <code class="text-error font-mono"
+                            >Release &amp; Discharge</code
+                          >
+                        </div>
+                      </div>
+                    </div>
+                    <div class="text-right">
+                      <span
+                        class="text-label-sm font-mono text-on-surface-variant"
+                        >Today, 14:22:05</span
+                      >
+                      <div class="text-body-sm text-error font-medium">
+                        Blocked
+                      </div>
+                    </div>
+                  </div>
+                  <div
+                    class="bg-surface p-3 rounded border-l-4 border-error flex items-center justify-between"
+                  >
+                    <div class="flex items-center gap-space-md">
+                      <span
+                        class="material-symbols-outlined text-error text-[20px]"
+                        >gpp_bad</span
+                      >
+                      <div>
+                        <div class="text-body-md font-medium text-primary">
+                          Privilege Escalation Warning
+                        </div>
+                        <div class="text-body-sm text-on-surface-variant">
+                          Badge #SEC-01104 (Prison Officer Robert King)
+                          requested Admin Token
+                        </div>
+                      </div>
+                    </div>
+                    <div class="text-right">
+                      <span
+                        class="text-label-sm font-mono text-on-surface-variant"
+                        >Today, 11:05:41</span
+                      >
+                      <div class="text-body-sm text-error font-medium">
+                        Rejected
+                      </div>
+                    </div>
+                  </div>
+                  <div
+                    class="bg-surface p-3 rounded border-l-4 border-tertiary-container flex items-center justify-between"
+                  >
+                    <div class="flex items-center gap-space-md">
+                      <span
+                        class="material-symbols-outlined text-tertiary-container text-[20px]"
+                        >warning</span
+                      >
+                      <div>
+                        <div class="text-body-md font-medium text-primary">
+                          Invalid Badge Identifier
+                        </div>
+                        <div class="text-body-sm text-on-surface-variant">
+                          External IP 192.168.4.102 provided malformed security
+                          hash
+                        </div>
+                      </div>
+                    </div>
+                    <div class="text-right">
+                      <span
+                        class="text-label-sm font-mono text-on-surface-variant"
+                        >Yesterday, 23:14:00</span
+                      >
+                      <div
+                        class="text-body-sm text-tertiary-container font-medium"
+                      >
+                        IP Flagged
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  </body>
+</html>

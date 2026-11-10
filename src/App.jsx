@@ -1,4 +1,17 @@
-﻿import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import Login from './pages/Login'
+import SuperAdmin from './dashboard/superadmin'
+import Topbanner from './components/Topbanner'
+import ReleaseEligibilityQueueDashboard from './components/ReleaseEligibilityQueueDashboard'
+import OfficerinChargeReleaseAuthorizationModal from './components/OfficerinChargeReleaseAuthorizationModal'
+import DischargeEventRecording from './components/DischargeEventRecording'
+import DischageClearance from './components/DischageClearance'
+import DashboardMetricsQueueHeader from './components/DashboardMetrics&QueueHeader '
+import DischargeClearanceList from './components/DischargeClearanceChecklist'
+import DataTable from './components/DataTable'
+import { AuthProvider } from './context/AuthContext.jsx'
+import { useAuth } from './context/authContext'
 import './App.css'
 
 const DEFAULT_API_BASE = 'http://localhost:8080/api/v1'
@@ -6,14 +19,10 @@ const API_BASE = (import.meta.env.VITE_API_URL || DEFAULT_API_BASE).replace(/\/+
 
 const EMPTY_FORM = {
   name: '',
-  nationalId: '',
-  phone: '',
-  relationshipToInmate: '',
-  inmate: '',
-  purpose: '',
-  checkedItems: [],
+  itemsBrought: '',
   date: '',
-  time: '09:00',
+  startTime: '09:00',
+  endTime: '10:00',
 }
 
 function readJson(response) {
@@ -36,25 +45,25 @@ function getStoredToken() {
 function formatTime(value) {
   if (!value) return '—'
 
-  const raw = String(value)
-  if (raw.includes('T')) {
-    const timePart = raw.split('T')[1]?.slice(0, 5)
-    if (timePart) {
-      const [hours, minutes] = timePart.split(':')
-      const hourNumber = Number(hours)
-      const suffix = hourNumber >= 12 ? 'PM' : 'AM'
-      return `${hourNumber % 12 || 12}:${minutes} ${suffix}`
-    }
-  }
+  const timePart = String(value).split('T').at(-1)
+  const match = timePart.match(/^(\d{1,2}):(\d{2})/)
+  if (!match) return String(value)
 
-  if (raw.length <= 5) {
-    const [hours, minutes] = raw.split(':')
-    const hourNumber = Number(hours)
-    const suffix = hourNumber >= 12 ? 'PM' : 'AM'
-    return `${hourNumber % 12 || 12}:${minutes} ${suffix}`
-  }
+  const hourNumber = Number(match[1])
+  const suffix = hourNumber >= 12 ? 'PM' : 'AM'
+  return `${hourNumber % 12 || 12}:${match[2]} ${suffix}`
+}
 
-  return raw
+function toApiTime(value) {
+  return value.length === 5 ? `${value}:00` : value
+}
+
+function getInmateName(inmate) {
+  return inmate.fullName || [inmate.firstName, inmate.lastName].filter(Boolean).join(' ') || 'Unknown inmate'
+}
+
+function normalizeInmate(inmate) {
+  return { ...inmate, fullName: getInmateName(inmate) }
 }
 
 function buildVisitPayload(form, inmate) {
@@ -62,38 +71,33 @@ function buildVisitPayload(form, inmate) {
     throw new Error('Select a valid inmate before registering the visit.')
   }
 
-  const [hours, minutes] = (form.time || '09:00').split(':').map(Number)
-  const totalMinutes = hours * 60 + minutes + 60
-  const endHour = Math.floor(totalMinutes / 60) % 24
-  const endMinute = totalMinutes % 60
-
   return {
     visitorFullName: form.name.trim(),
     inmateId: inmate.id,
     visitDate: form.date,
-    startTime: form.time,
-    endTime: `${String(endHour).padStart(2, '0')}:${String(endMinute).padStart(2, '0')}`,
-    itemsBrought: form.checkedItems.length ? form.checkedItems.join(', ') : form.purpose.trim(),
+    startTime: toApiTime(form.startTime),
+    endTime: toApiTime(form.endTime),
+    itemsBrought: form.itemsBrought.trim(),
   }
 }
 
 function normalizeVisit(record) {
   return {
     id: record.id || record.visitId || record._id,
-    name: record.visitorFullName || record.visitorName || 'Unknown visitor',
-    inmate: record.inmateName || record.inmate?.fullName || 'Unknown inmate',
-    status: record.status || 'Logged',
+    name: record.visitorFullName || record.visitorName || record.visitor?.fullName || 'Unknown visitor',
+    inmate: record.inmateName || (record.inmate ? getInmateName(record.inmate) : 'Unknown inmate'),
+    status: record.status || 'Recorded',
     date: record.visitDate || record.date || '',
-    time: record.startTime || record.time || '',
+    time: record.startTime || record.visitStartTime || record.time || '',
     endTime: record.endTime || '',
     itemsBrought: record.itemsBrought || '',
-    loggedBy: record.loggedBy || record.loggingUserName || '',
+    loggedBy: record.loggedBy || record.loggingUserName || record.loggedByName || '',
     inmateId: record.inmateId || record.inmate?.id || '',
     source: record,
   }
 }
 
-function App() {
+function VisitorManagement() {
   const [visits, setVisits] = useState([])
   const [notice, setNotice] = useState('')
   const [loading, setLoading] = useState(true)
@@ -114,15 +118,16 @@ function App() {
 
   const visitCount = visits.length
   const todayLogCount = visits.filter((visit) => visit.date === today).length
-  const activeVisitorCount = visits.filter((visit) => visit.date === today).length
-  const pendingCount = visits.filter((visit) => visit.status === 'Pending').length
+  const visitorsToday = new Set(
+    visits.filter((visit) => visit.date === today).map((visit) => visit.name.toLowerCase()),
+  ).size
 
   const gateCandidates = useMemo(
     () => visits.filter((visit) => visit.date === today),
     [visits, today],
   )
 
-  async function fetchJson(url, options = {}) {
+  const fetchJson = useCallback(async (url, options = {}) => {
     const requestHeaders = {
       'Content-Type': 'application/json',
       ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
@@ -141,33 +146,42 @@ function App() {
     }
 
     return readJson(response)
-  }
-
-  async function loadVisits() {
-    setLoading(true)
-
-    try {
-      const response = await fetchJson(`${API_BASE}/visits?page=0&size=20`)
-      const rows = Array.isArray(response)
-        ? response
-        : Array.isArray(response?.content)
-          ? response.content
-          : []
-
-      setVisits(rows.map(normalizeVisit))
-      setNotice('')
-    } catch (error) {
-      console.error('Loading visits failed:', error)
-      setNotice(`Cannot load the live PMS backend. Check the API at ${API_BASE} and provide a valid bearer token.`)
-      setVisits([])
-    } finally {
-      setLoading(false)
-    }
-  }
+  }, [authToken])
 
   useEffect(() => {
+    let active = true
+
+    async function loadVisits() {
+      setLoading(true)
+
+      try {
+        const response = await fetchJson(`${API_BASE}/visits?page=0&size=20`)
+        const rows = Array.isArray(response)
+          ? response
+          : Array.isArray(response?.content)
+            ? response.content
+            : []
+
+        if (!active) return
+
+        setVisits(rows.map(normalizeVisit))
+        setNotice('')
+      } catch (error) {
+        console.error('Loading visits failed:', error)
+        if (!active) return
+        setNotice(`Cannot load the live PMS backend. Check the API at ${API_BASE} and provide a valid bearer token.`)
+        setVisits([])
+      } finally {
+        if (active) setLoading(false)
+      }
+    }
+
     void loadVisits()
-  }, [authToken])
+
+    return () => {
+      active = false
+    }
+  }, [fetchJson])
 
   useEffect(() => {
     const query = inmateSearch.trim()
@@ -185,7 +199,7 @@ function App() {
             ? response.content
             : []
 
-        if (!cancelled) setInmateResults(rows)
+        if (!cancelled) setInmateResults(rows.map(normalizeInmate))
       } catch (error) {
         if (!cancelled) {
           console.error('Search inmates failed:', error)
@@ -201,7 +215,7 @@ function App() {
       cancelled = true
       clearTimeout(timer)
     }
-  }, [inmateSearch, selectedInmate, authToken])
+  }, [fetchJson, inmateSearch, selectedInmate])
 
   function resetRegistrationForm() {
     setForm({ ...EMPTY_FORM, date: today })
@@ -220,7 +234,10 @@ function App() {
 
     const payload = buildVisitPayload(form, selectedInmate)
 
-    if (!payload.visitorFullName || !payload.visitDate || !payload.startTime || !payload.endTime) {
+    const startMinutes = form.startTime.split(':').map(Number).reduce((hours, value) => hours * 60 + value)
+    const endMinutes = form.endTime.split(':').map(Number).reduce((hours, value) => hours * 60 + value)
+
+    if (!payload.visitorFullName || !payload.visitDate || !payload.startTime || !payload.endTime || endMinutes < startMinutes) {
       setNotice('Please complete all required visit details.')
       return
     }
@@ -245,7 +262,6 @@ function App() {
       setFormBusy(false)
     }
   }
-
   function handleUseToken() {
     const trimmed = tokenInput.trim()
     if (!trimmed) {
@@ -306,20 +322,20 @@ function App() {
           <section className="stats-grid" aria-label="Visitor statistics">
             <article className="stat-card">
               <div className="stat-top">
-                <span className="stat-label">Active visitors on site</span>
+                <span className="stat-label">Visitors today</span>
                 <span className="stat-icon stat-blue">♙</span>
               </div>
-              <div className="stat-number">{activeVisitorCount}</div>
-              <p className="stat-footnote">Live visit records for today</p>
+              <div className="stat-number">{visitorsToday}</div>
+              <p className="stat-footnote">Unique visitors in loaded records</p>
             </article>
 
             <article className="stat-card">
               <div className="stat-top">
-                <span className="stat-label">Pending review</span>
+                <span className="stat-label">Today's total visits</span>
                 <span className="stat-icon stat-amber">◷</span>
               </div>
-              <div className="stat-number">{pendingCount}</div>
-              <p className="stat-footnote">Status is tracked by the backend</p>
+              <div className="stat-number">{todayLogCount}</div>
+              <p className="stat-footnote">From the current search page</p>
             </article>
 
             <article className="stat-card">
@@ -327,8 +343,8 @@ function App() {
                 <span className="stat-label">Gatehouse status</span>
                 <span className="stat-icon stat-green">♙</span>
               </div>
-              <div className="stat-number secure-word">SECURE</div>
-              <p className="stat-footnote">Live PMS API connected</p>
+              <div className="stat-number secure-word">API ONLY</div>
+              <p className="stat-footnote">No check-in/out routes documented</p>
             </article>
 
             <article className="stat-card">
@@ -336,8 +352,8 @@ function App() {
                 <span className="stat-label">Today's total logs</span>
                 <span className="stat-icon stat-purple">◴</span>
               </div>
-              <div className="stat-number">{todayLogCount}</div>
-              <p className="stat-footnote">Visit records recorded today</p>
+              <div className="stat-number">{visitCount}</div>
+              <p className="stat-footnote">Visit records on this page</p>
             </article>
           </section>
 
@@ -361,45 +377,6 @@ function App() {
                         onChange={(event) => setForm({ ...form, name: event.target.value })}
                       />
                     </label>
-
-                    <label>
-                      National ID / Passport
-                      <input
-                        maxLength="60"
-                        placeholder="US-99482103-X"
-                        value={form.nationalId}
-                        onChange={(event) => setForm({ ...form, nationalId: event.target.value })}
-                      />
-                    </label>
-
-                    <label>
-                      Contact Details
-                      <input
-                        type="tel"
-                        maxLength="30"
-                        placeholder="+1 (555) 019-2834"
-                        value={form.phone}
-                        onChange={(event) => setForm({ ...form, phone: event.target.value })}
-                      />
-                    </label>
-
-                    <label>
-                      Relationship to Inmate
-                      <select
-                        value={form.relationshipToInmate}
-                        onChange={(event) => setForm({ ...form, relationshipToInmate: event.target.value })}
-                      >
-                        <option value="">Select relationship</option>
-                        <option>Legal Counsel / Attorney</option>
-                        <option>Spouse</option>
-                        <option>Parent</option>
-                        <option>Child</option>
-                        <option>Sibling</option>
-                        <option>Relative</option>
-                        <option>Friend</option>
-                        <option>Other</option>
-                      </select>
-                    </label>
                   </div>
 
                   <label className="reference-wide-field">
@@ -410,7 +387,6 @@ function App() {
                       onChange={(event) => {
                         setInmateSearch(event.target.value)
                         setSelectedInmate(null)
-                        setForm({ ...form, inmate: '' })
                       }}
                     />
                   </label>
@@ -425,13 +401,12 @@ function App() {
                           key={inmate.id || inmate.fullName}
                           onClick={() => {
                             setSelectedInmate(inmate)
-                            setForm({ ...form, inmate: inmate.fullName })
                             setInmateSearch(inmate.fullName)
                             setInmateResults([])
                           }}
                         >
                           <strong>{inmate.fullName}</strong>
-                          <span>{inmate.cellBlock || 'Cell block not provided'} · {inmate.visitationAllowed ? 'Visitation allowed' : 'Restricted'}</span>
+                          <span>{inmate.prisonName || 'Prison not provided'} · ID {inmate.id}</span>
                         </button>
                       ))}
                     </div>
@@ -446,7 +421,6 @@ function App() {
                         onClick={() => {
                           setSelectedInmate(null)
                           setInmateSearch('')
-                          setForm({ ...form, inmate: '' })
                         }}
                       >
                         Change
@@ -455,34 +429,14 @@ function App() {
                   )}
 
                   <label className="reference-wide-field">
-                    Purpose of Visit
+                    Items brought (optional)
                     <input
-                      maxLength="500"
-                      placeholder="Brief reason for visit"
-                      value={form.purpose}
-                      onChange={(event) => setForm({ ...form, purpose: event.target.value })}
+                      maxLength="1000"
+                      placeholder="List any items brought"
+                      value={form.itemsBrought}
+                      onChange={(event) => setForm({ ...form, itemsBrought: event.target.value })}
                     />
                   </label>
-
-                  <fieldset className="reference-gate-checks">
-                    <legend>Checked Items at Gate (Security Screening)</legend>
-                    {['Valid ID', 'Metal Detector Clear', 'No Electronics', 'Bag Tagged'].map((item) => (
-                      <label key={item}>
-                        <input
-                          type="checkbox"
-                          checked={form.checkedItems.includes(item)}
-                          onChange={(event) => {
-                            const checkedItems = event.target.checked
-                              ? [...form.checkedItems, item]
-                              : form.checkedItems.filter((checked) => checked !== item)
-
-                            setForm({ ...form, checkedItems })
-                          }}
-                        />
-                        {item}
-                      </label>
-                    ))}
-                  </fieldset>
 
                   <div className="reference-form-footer">
                     <label>
@@ -497,12 +451,22 @@ function App() {
                     </label>
 
                     <label>
-                      Visit time
+                      Start time
                       <input
                         required
                         type="time"
-                        value={form.time}
-                        onChange={(event) => setForm({ ...form, time: event.target.value })}
+                        value={form.startTime}
+                        onChange={(event) => setForm({ ...form, startTime: event.target.value })}
+                      />
+                    </label>
+
+                    <label>
+                      End time
+                      <input
+                        required
+                        type="time"
+                        value={form.endTime}
+                        onChange={(event) => setForm({ ...form, endTime: event.target.value })}
                       />
                     </label>
 
@@ -539,10 +503,10 @@ function App() {
                     </div>
                     <div>
                       <h3>{selectedInmate.fullName}</h3>
-                      <p>Cell Block: <strong>{selectedInmate.cellBlock || 'Not available'}</strong></p>
+                      <p>Prison: <strong>{selectedInmate.prisonName || 'Not available'}</strong></p>
                       <small>✓ Verified minimum information displayed</small>
                     </div>
-                    <button type="button" onClick={() => setForm({ ...form, inmate: selectedInmate.fullName })}>Attach to Visit</button>
+                    <button type="button" disabled>Selected for visit</button>
                   </div>
                 ) : (
                   <p className="reference-lookup-empty">Search for an inmate to attach to the visit record.</p>
@@ -558,9 +522,9 @@ function App() {
                 </div>
 
                 <label className="gate-visitor-select">
-                  Approved visitor
-                  <select aria-label="Select an approved visitor" value="">
-                    <option value="">Select visitor...</option>
+                  Today's visit records
+                  <select aria-label="Today's visit records" value="" disabled>
+                    <option value="">Select a visit record...</option>
                     {gateCandidates.map((visitor) => (
                       <option key={visitor.id} value={visitor.id}>{visitor.name}</option>
                     ))}
@@ -577,7 +541,7 @@ function App() {
                 </div>
 
                 <p className="reference-gate-empty">
-                  The live PMS backend records visits through /api/v1/visits; entry and exit timestamps are managed separately by the API contract.
+                  The documented API does not provide visitor check-in or check-out endpoints.
                 </p>
 
                 <div className="reference-port-details">
@@ -629,6 +593,121 @@ function App() {
       </main>
     </div>
   )
+
 }
 
-export default App
+function ReleaseDischargeDashboard() {
+  const [search, setSearch] = useState('')
+  const [eligibilityStatus, setEligibilityStatus] = useState('all')
+
+  return (
+      <div className="dashboard-container">
+        <main className="main-content">
+          <section className="dashboard-section">
+            <Topbanner />
+          </section>
+
+          <section className="dashboard-section">
+            <ReleaseEligibilityQueueDashboard
+              search={search}
+              setSearch={setSearch}
+              eligibilityStatus={eligibilityStatus}
+              setEligibilityStatus={setEligibilityStatus}
+            />
+          </section>
+
+          <section className="dashboard-section">
+            <DashboardMetricsQueueHeader />
+          </section>
+
+          <section className="dashboard-section">
+            <DataTable
+              search={search}
+              eligibilityStatus={eligibilityStatus}
+            />
+          </section>
+
+          <section className="dashboard-section">
+            <DischargeClearanceList />
+          </section>
+
+          <section className="dashboard-section">
+            <DischageClearance />
+          </section>
+
+          <section className="dashboard-section">
+            <DischargeEventRecording />
+          </section>
+        </main>
+
+        <OfficerinChargeReleaseAuthorizationModal />
+      </div>
+  )
+}
+
+function RequireAuth({ children }) {
+    const { isAuthenticated, isInitializing } = useAuth();
+    const location = useLocation();
+
+    if (isInitializing) {
+        return <main className="route-loading" role="status">Checking your session…</main>;
+    }
+
+    return isAuthenticated
+        ? children
+        : <Navigate to="/login" replace state={{ from: location }} />;
+}
+
+function GuestOnly({ children }) {
+    const { isAuthenticated, isInitializing } = useAuth();
+
+    if (isInitializing) {
+        return <main className="route-loading" role="status">Checking your session…</main>;
+    }
+
+    return isAuthenticated ? <Navigate to="/dashboard" replace /> : children;
+}
+
+function AppRoutes() {
+    const { isAuthenticated, isInitializing } = useAuth();
+
+    if (isInitializing) {
+        return <main className="route-loading" role="status">Checking your session…</main>;
+    }
+
+    return (
+        <Routes>
+            <Route
+                path="/login"
+                element={<GuestOnly><Login /></GuestOnly>}
+            />
+            <Route
+                path="/dashboard"
+                element={<RequireAuth><SuperAdmin /></RequireAuth>}
+            />
+            <Route
+              path="/release-discharge"
+              element={<RequireAuth><ReleaseDischargeDashboard /></RequireAuth>}
+            />
+            <Route
+              path="/visitors"
+              element={<VisitorManagement />}
+            />
+            <Route
+                path="/"
+                element={<Navigate to={isAuthenticated ? "/dashboard" : "/login"} replace />}
+            />
+            <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+    );
+}
+
+export default function App() {
+    return (
+        <AuthProvider>
+            <BrowserRouter>
+                <AppRoutes />
+            </BrowserRouter>
+        </AuthProvider>
+    );
+}

@@ -1,26 +1,18 @@
-# Corp-Sec Visitor Management Demo
+# Prison Management System
 
-A React/Vite visitor-management dashboard with an Express and SQLite mock API.
+## Trial mock backend
 
-## Run locally
+The discharge dashboard runs against a browser-local mock backend; it does not
+connect to a server or production data. The queue is seeded with sample records,
+and discharge events and saved clearance checklists persist in the current
+browser's local storage.
 
-Install dependencies once from the project root and backend folder:
+The trial storage keys are:
 
-```powershell
-npm install
-npm --prefix mock-backend install
-```
+- `prison-management.trial.inmates`
+- `prison-management.trial.discharge-events`
+- `prison-management.trial.checklists`
 
-Open two terminals at the project root:
-
-```powershell
-npm run dev:backend
-```
-
-```powershell
-npm run dev
-```
-
-Open the Vite URL shown in the second terminal. The development server proxies `/api` requests to the backend on port `5000`.
-
-The backend persists demo data in `mock-backend/visitors.db`. It exposes visitor registration, status approval/rejection, gate entry/exit, deletion, inmate search, and `/api/health`.
+To restore the sample records and clear saved trial changes, remove those keys
+from the browser's local storage for this app. This mock backend is for UI
+testing only and is not suitable for real records or operational decisions.
