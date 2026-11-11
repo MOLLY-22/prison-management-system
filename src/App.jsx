@@ -10,12 +10,10 @@ import DischageClearance from './components/DischageClearance'
 import DashboardMetricsQueueHeader from './components/DashboardMetrics&QueueHeader '
 import DischargeClearanceList from './components/DischargeClearanceChecklist'
 import DataTable from './components/DataTable'
+import { API_BASE_URL } from './api/apiConfig'
 import { AuthProvider } from './context/AuthContext.jsx'
 import { useAuth } from './context/authContext'
 import './App.css'
-
-const DEFAULT_API_BASE = 'http://localhost:5000/api'
-const API_BASE = (import.meta.env.VITE_API_URL || DEFAULT_API_BASE).replace(/\/+$/, '')
 
 const EMPTY_FORM = {
   name: '',
@@ -180,7 +178,7 @@ function VisitorManagement() {
       setLoading(true)
 
       try {
-        const response = await fetchJson(`${API_BASE}/visitors?page=0&size=20`)
+        const response = await fetchJson(`${API_BASE_URL}/visitors?page=0&size=20`)
         const rows = Array.isArray(response)
           ? response
           : Array.isArray(response?.content)
@@ -194,7 +192,7 @@ function VisitorManagement() {
       } catch (error) {
         console.error('Loading visits failed:', error)
         if (!active) return
-        setNotice(`Cannot load the live PMS backend. Check the API at ${API_BASE} and provide a valid bearer token.`)
+        setNotice(`Cannot load the PMS backend. Check the API at ${API_BASE_URL} and provide a valid bearer token.`)
         setVisits([])
       } finally {
         if (active) setLoading(false)
@@ -217,7 +215,7 @@ function VisitorManagement() {
     async function searchInmates() {
       setLookingUpInmates(true)
       try {
-        const response = await fetchJson(`${API_BASE}/inmates?search=${encodeURIComponent(query)}&page=0&size=10`)
+        const response = await fetchJson(`${API_BASE_URL}/inmates?search=${encodeURIComponent(query)}&page=0&size=10`)
         const rows = Array.isArray(response)
           ? response
           : Array.isArray(response?.content)
@@ -253,7 +251,7 @@ function VisitorManagement() {
     if (!visitId) return
 
     try {
-      const updated = normalizeVisit(await fetchJson(`${API_BASE}/visitors/${visitId}/status`, {
+      const updated = normalizeVisit(await fetchJson(`${API_BASE_URL}/visitors/${visitId}/status`, {
         method: 'PATCH',
         body: JSON.stringify({ status }),
       }))
@@ -270,7 +268,7 @@ function VisitorManagement() {
     if (!visitId) return
 
     try {
-      const updated = normalizeVisit(await fetchJson(`${API_BASE}/visitors/${visitId}/entry`, { method: 'POST' }))
+      const updated = normalizeVisit(await fetchJson(`${API_BASE_URL}/visitors/${visitId}/entry`, { method: 'POST' }))
       setVisits((current) => current.map((visit) => String(visit.id) === String(updated.id) ? updated : visit))
       setNotice('Visitor checked in successfully.')
     } catch (error) {
@@ -283,7 +281,7 @@ function VisitorManagement() {
     if (!visitId) return
 
     try {
-      const updated = normalizeVisit(await fetchJson(`${API_BASE}/visitors/${visitId}/exit`, { method: 'POST' }))
+      const updated = normalizeVisit(await fetchJson(`${API_BASE_URL}/visitors/${visitId}/exit`, { method: 'POST' }))
       setVisits((current) => current.map((visit) => String(visit.id) === String(updated.id) ? updated : visit))
       setNotice('Visitor checked out successfully.')
     } catch (error) {
@@ -314,7 +312,7 @@ function VisitorManagement() {
     setNotice('')
 
     try {
-      const created = await fetchJson(`${API_BASE}/visitors`, {
+      const created = await fetchJson(`${API_BASE_URL}/visitors`, {
         method: 'POST',
         body: JSON.stringify(payload),
       })
@@ -356,7 +354,7 @@ function VisitorManagement() {
 
           <div className="reference-topbar-right">
             <span className="secure-pill">● System Secure</span>
-            <span>◉ API: {API_BASE}</span>
+            <span>◉ API: {API_BASE_URL}</span>
             <input
               aria-label="Bearer token"
               type="password"

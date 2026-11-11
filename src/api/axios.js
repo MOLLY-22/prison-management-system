@@ -1,4 +1,5 @@
-const BASE_URL = import.meta.env.VITE_API_URL || '/api';
+import { API_BASE_URL } from './apiConfig'
+
 const TIMEOUT_MS = 10000;
 
 async function request(endpoint, options = {}) {
@@ -8,7 +9,7 @@ async function request(endpoint, options = {}) {
 
   const url = endpoint.startsWith('http')
     ? endpoint
-    : `${BASE_URL.replace(/\/$/, '')}/${endpoint.replace(/^\//, '')}`;
+    : `${API_BASE_URL}/${endpoint.replace(/^\//, '')}`;
 
   const config = {
     ...options,
