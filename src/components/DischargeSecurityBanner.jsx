@@ -1,5 +1,4 @@
-
-export default function Topbanner() {
+export default function DischargeSecurityBanner() {
   return (
     <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 p-5 bg-[#0B2541] text-white rounded-md shadow-sm">
       <div className="flex items-center gap-4">

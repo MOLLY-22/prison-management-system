@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import Login from './pages/Login'
 import SuperAdmin from './dashboard/superadmin'
-import Topbanner from './components/Topbanner'
+import DischargeSecurityBanner from './components/DischargeSecurityBanner'
 import ReleaseEligibilityQueueDashboard from './components/ReleaseEligibilityQueueDashboard'
 import OfficerinChargeReleaseAuthorizationModal from './components/OfficerinChargeReleaseAuthorizationModal'
 import DischargeEventRecording from './components/DischargeEventRecording'
@@ -710,7 +710,7 @@ function ReleaseDischargeDashboard() {
       <div className="dashboard-container">
         <main className="main-content">
           <section className="dashboard-section">
-            <Topbanner />
+            <DischargeSecurityBanner />
           </section>
 
           <section className="dashboard-section">

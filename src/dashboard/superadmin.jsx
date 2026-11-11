@@ -2,7 +2,7 @@ import { useNavigate } from "react-router-dom";
 import SectionOne from "../components/sectionOne";
 import SectionTwo from "../components/sectionTwo";
 import SectionThree from "../components/sectionThree";
-import TopBanner from "../components/topBanner";
+import AdminMetricsBanner from "../components/AdminMetricsBanner";
 import { useAuth } from "../context/authContext";
 
 const navigation = [
@@ -47,7 +47,7 @@ export default function SuperAdmin() {
                     </div>
                 </header>
                 <main className="dashboard-content">
-                    <TopBanner />
+                    <AdminMetricsBanner />
                     <SectionOne />
                     <SectionTwo />
                     <SectionThree />
