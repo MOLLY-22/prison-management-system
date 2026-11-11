@@ -1,0 +1,84 @@
+.login-page {
+  --login-navy: #0c2d4b;
+  --login-blue: #1d5f86;
+  --login-line: #d5dee7;
+  --login-muted: #718294;
+  background:
+    radial-gradient(circle at 8% 15%, rgb(30 98 154 / 8%), transparent 25%),
+    #f4f7fb !important;
+}
+
+.login-page .login-card {
+  border: 1px solid #dfe6ed;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 24px 70px rgb(22 46 72 / 10%);
+}
+
+.login-page .login-card aside {
+  min-height: 580px;
+  background: var(--login-navy);
+}
+.login-page .login-card aside,
+.login-page .login-card aside .text-white,
+.login-page .login-card aside h2,
+.login-page .login-card aside p {
+  color: #fff !important;
+}
+
+.login-page .login-card aside p.text-\[\#b0c8eb\] {
+  color: #b0c8eb !important;
+}
+
+.login-page .login-card > div:last-child {
+  min-height: 580px;
+  padding: 48px 56px;
+  background: #fff;
+}
+
+.login-page h1 {
+  /* color: #191c1e !important; */
+  font: 800 clamp(28px, 4vw, 36px)/1.1 "Manrope", "DM Sans", sans-serif;
+  letter-spacing: -.045em !important;
+}
+
+.login-page form label > span:first-child {
+  color: #52677d !important;
+  font-size: 11px !important;
+  font-weight: 800 !important;
+  letter-spacing: .02em;
+}
+
+.login-page form input:not([type="checkbox"]) {
+  border-radius: 3px !important;
+  box-shadow: inset 0 0 0 1px var(--login-line) !important;
+  font-size: 12px !important;
+}
+
+.login-page form input:not([type="checkbox"]):focus {
+  box-shadow: inset 0 0 0 2px var(--login-blue) !important;
+}
+
+.login-page form button[type="submit"] {
+  border-radius: 3px !important;
+  background: var(--login-navy) !important;
+  box-shadow: none !important;
+  font-size: 12px !important;
+  letter-spacing: .01em;
+}
+
+.login-page form button[type="submit"]:hover {
+  background: var(--login-blue) !important;
+}
+
+.login-page .login-card > div:last-child > div:last-child button {
+  color: var(--login-muted) !important;
+  font-size: 11px;
+}
+
+@media (max-width: 700px) {
+  .login-page .login-card > div:last-child {
+    min-height: 0;
+    padding: 34px 24px;
+  }
+}

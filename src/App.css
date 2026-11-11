@@ -1,5 +1,7 @@
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap');
 
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap');
+
 :root {
   --corp-navy: #0b1f36;
   --corp-navy-light: #102a43;
@@ -17,6 +19,74 @@
   --corp-amber-bg: #fef3c7;
   --corp-red: #a31919;
   --corp-red-bg: #ffe0de;
+}
+
+/* Shared module treatment for newer MUI-backed workspaces. */
+.transfer-workspace,
+.module-workspace {
+  color: var(--corp-text);
+}
+
+.transfer-workspace .MuiPaper-root,
+.module-workspace .MuiPaper-root {
+  border: 1px solid var(--corp-border);
+  border-radius: 6px;
+  background: var(--corp-white);
+  box-shadow: 0 7px 24px rgb(22 46 72 / 4%);
+}
+
+.transfer-workspace .MuiTypography-h4,
+.module-workspace .MuiTypography-h4,
+.module-workspace h1 {
+  color: var(--corp-navy);
+}
+
+.transfer-workspace .MuiTypography-h6,
+.module-workspace h2 {
+  color: var(--corp-navy);
+  font-weight: 800;
+}
+
+.transfer-workspace .MuiTableHead-root,
+.module-workspace .MuiTableHead-root {
+  background: #f5f8fa;
+}
+
+.transfer-workspace .MuiTableCell-head,
+.module-workspace .MuiTableCell-head {
+  color: #647789;
+}
+
+.transfer-workspace .MuiTableCell-body,
+.module-workspace .MuiTableCell-body {
+  border-color: #e8edf2;
+  color: #43596d;
+}
+
+.transfer-workspace .MuiInputBase-root,
+.module-workspace .MuiInputBase-root {
+  border-radius: 4px;
+}
+
+.transfer-workspace .MuiButton-containedPrimary,
+.module-workspace .MuiButton-containedPrimary {
+  background: var(--corp-navy);
+}
+
+.transfer-workspace .MuiButton-containedPrimary:hover,
+.module-workspace .MuiButton-containedPrimary:hover {
+  background: var(--corp-blue);
+}
+
+.transfer-workspace .MuiAlert-root,
+.module-workspace .MuiAlert-root {
+  border-radius: 4px;
+}
+
+@media (max-width: 700px) {
+  .transfer-workspace {
+    padding: 16px !important;
+  }
 }
 
 #root {
@@ -3415,7 +3485,11 @@ a:focus-visible {
 
 /* =========================================
    APP SECTION SPACING
+<<<<<<< HEAD
 ========================================= */
+=======
+   ========================================= */
+>>>>>>> origin/master
 
 .dashboard-section {
   width: 100%;
@@ -3452,6 +3526,14 @@ a:focus-visible {
   .dashboard-section {
     margin-bottom: 18px;
   }
+<<<<<<< HEAD
+=======
+}
+
+.login-description {
+  color: #53647a;
+  font-size: 13px;
+>>>>>>> origin/master
 }
 
 .remember-option input {

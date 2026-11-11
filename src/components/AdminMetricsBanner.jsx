@@ -1,3 +1,4 @@
+// @ts-nocheck
 const metrics = [
     { label: "Active personnel", value: "142", note: "+3 this week" },
     { label: "Privilege escalations", value: "0", note: "Optimal security" },
