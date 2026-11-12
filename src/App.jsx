@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import './App.css'
 import './visitorStyles.css'
 import { InmateManagement } from './features/inmates/InmateManagement'
+import { PrisonRegistry } from './features/prisons/PrisonRegistry'
 import TransferManagement from './pages/TransferManagement'
 import UserAccess from './UsersAccess/UserAccess'
 import ReleaseManagement from './pages/ReleaseManagement'
@@ -37,11 +38,11 @@ function formatTime(time) {
 }
 
 const navItems = [
-  ['dashboard', 'Dashboard', 'dashboard:view'], ['inmates', 'Inmate management', 'inmates:view'], ['visitors', 'Visitor management', 'visitors:manage'],
+  ['dashboard', 'Dashboard', 'dashboard:view'], ['inmates', 'Inmate management', 'inmates:view'], ['prisons', 'Prison registry', 'prisons:view'], ['visitors', 'Visitor management', 'visitors:manage'],
   ['transfers', 'Transfer management', 'transfers:manage'], ['releases', 'Release & discharge', 'releases:manage'], ['access', 'Users & access', 'users:manage'],
 ]
 function NavIcon({ name }) {
-  const paths = { dashboard: 'M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z', inmates: 'M16 11c1.7 0 3-1.3 3-3s-1.3-3-3-3-3 1.3-3 3 1.3 3 3 3zM8 11c1.7 0 3-1.3 3-3S9.7 5 8 5 5 6.3 5 8s1.3 3 3 3zm0 2c-2.3 0-7 1.2-7 3.5V19h14v-2.5C15 14.2 10.3 13 8 13zm8 0c-.3 0-.6 0-1 .1 1.2.8 2 2 2 3.4V19h6v-2.5c0-2.3-4.7-3.5-7-3.5z', visitors: 'M12 12c2.2 0 4-1.8 4-4s-1.8-4-4-4-4 1.8-4 4 1.8 4 4 4zm0 2c-2.7 0-8 1.3-8 4v2h16v-2c0-2.7-5.3-4-8-4z', transfers: 'M7 7h11l-3.5-3.5L16 2l6 6-6 6-1.5-1.5L18 9H7V7zm10 10H6l3.5 3.5L8 22l-6-6 6-6 1.5 1.5L6 15h11v2z', releases: 'M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm-2 15-5-5 1.4-1.4 3.6 3.6 7.6-7.6L19 8z', access: 'M12 1 3 5v6c0 5.6 3.8 10.7 9 12 5.2-1.3 9-6.4 9-12V5l-9-4zm0 4a3 3 0 1 1 0 6 3 3 0 0 1 0-6zm5.1 12A9.7 9.7 0 0 1 12 20.9 9.7 9.7 0 0 1 6.9 17c.1-1.7 3.4-2.6 5.1-2.6s5.1.9 5.1 2.6z' }
+  const paths = { dashboard: 'M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z', inmates: 'M16 11c1.7 0 3-1.3 3-3s-1.3-3-3-3-3 1.3-3 3 1.3 3 3 3zM8 11c1.7 0 3-1.3 3-3S9.7 5 8 5 5 6.3 5 8s1.3 3 3 3zm0 2c-2.3 0-7 1.2-7 3.5V19h14v-2.5C15 14.2 10.3 13 8 13zm8 0c-.3 0-.6 0-1 .1 1.2.8 2 2 2 3.4V19h6v-2.5c0-2.3-4.7-3.5-7-3.5z', prisons: 'M12 7V3H2v18h20V7H12zM6 19H4v-2h2v2zm0-4H4v-2h2v2zm0-4H4V9h2v2zm0-4H4V5h2v2zm4 12H8v-2h2v2zm0-4H8v-2h2v2zm0-4H8V9h2v2zm0-4H8V5h2v2zm10 12h-8v-2h2v-2h-2v-2h2v-2h-2V9h8v10zm-2-8h-2v2h2v-2zm0 4h-2v2h2v-2z', visitors: 'M12 12c2.2 0 4-1.8 4-4s-1.8-4-4-4-4 1.8-4 4 1.8 4 4 4zm0 2c-2.7 0-8 1.3-8 4v2h16v-2c0-2.7-5.3-4-8-4z', transfers: 'M7 7h11l-3.5-3.5L16 2l6 6-6 6-1.5-1.5L18 9H7V7zm10 10H6l3.5 3.5L8 22l-6-6 6-6 1.5 1.5L6 15h11v2z', releases: 'M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm-2 15-5-5 1.4-1.4 3.6 3.6 7.6-7.6L19 8z', access: 'M12 1 3 5v6c0 5.6 3.8 10.7 9 12 5.2-1.3 9-6.4 9-12V5l-9-4zm0 4a3 3 0 1 1 0 6 3 3 0 0 1 0-6zm5.1 12A9.7 9.7 0 0 1 12 20.9 9.7 9.7 0 0 1 6.9 17c.1-1.7 3.4-2.6 5.1-2.6s5.1.9 5.1 2.6z' }
   return <svg viewBox="0 0 24 24" aria-hidden="true"><path d={paths[name]} /></svg>
 }
 
@@ -428,7 +429,7 @@ function OperationsApp({ user, onSignOut }) {
             <span>Prison Management System</span>
             <span>Visitor Management · Frontend demonstration</span>
           </footer>
-        </div> : <div className="module-host">{activeModule === 'inmates' && <InmateManagement canAdmit={hasPermission(user, 'admissions:create')} />}{activeModule === 'transfers' && <TransferManagement />}{activeModule === 'releases' && hasPermission(user, 'releases:manage') && <ReleaseManagement />}{activeModule === 'access' && hasPermission(user, 'users:manage') && <UserAccess />}{activeModule === 'dashboard' && <section className="dashboard-placeholder"><p>OPERATIONS / OVERVIEW</p><h1>Operations dashboard</h1><span>Select a module from the navigation to manage institutional records and workflows.</span></section>}</div>}
+        </div> : <div className="module-host">{activeModule === 'inmates' && <InmateManagement canAdmit={hasPermission(user, 'admissions:create')} />}{activeModule === 'prisons' && hasPermission(user, 'prisons:view') && <PrisonRegistry canManage={hasPermission(user, 'prisons:manage')} />}{activeModule === 'transfers' && <TransferManagement />}{activeModule === 'releases' && hasPermission(user, 'releases:manage') && <ReleaseManagement />}{activeModule === 'access' && hasPermission(user, 'users:manage') && <UserAccess />}{activeModule === 'dashboard' && <section className="dashboard-placeholder"><p>OPERATIONS / OVERVIEW</p><h1>Operations dashboard</h1><span>Select a module from the navigation to manage institutional records and workflows.</span></section>}</div>}
       </main>
 
       {showForm && (

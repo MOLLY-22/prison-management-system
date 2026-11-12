@@ -10,7 +10,8 @@ export const developmentUser = {
 }
 
 const rolePermissions = {
-  'Super Admin': ['dashboard:view', 'inmates:view', 'admissions:create', 'visitors:manage', 'transfers:manage', 'releases:manage', 'users:manage'],
+  'Super Admin': ['dashboard:view', 'inmates:view', 'admissions:create', 'visitors:manage', 'transfers:manage', 'releases:manage', 'users:manage', 'prisons:view', 'prisons:manage'],
+  'Records Officer': ['dashboard:view', 'inmates:view', 'prisons:view', 'transfers:manage'],
   'Officer-in-Charge': ['dashboard:view', 'inmates:view', 'admissions:create', 'visitors:manage', 'transfers:manage', 'releases:manage', 'users:manage'],
   'Senior Prison Officer': ['dashboard:view', 'inmates:view', 'admissions:create', 'visitors:manage', 'transfers:manage', 'releases:manage'],
   'Prison Officer': ['inmates:view', 'admissions:create', 'visitors:manage', 'transfers:manage'],
