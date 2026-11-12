@@ -6,7 +6,7 @@ const metrics = [
     { label: "Active guards", value: "4", note: "Levels configured" },
 ];
 
-export default function TopBanner() {
+export default function AdminMetricsBanner() {
     return (
         <section className="metric-grid" id="overview" aria-label="Access control summary">
             {metrics.map((metric) => (

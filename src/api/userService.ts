@@ -1,17 +1,27 @@
 import api from "./axios";
 import { asRecord, collectionFrom, firstValue, itemFrom } from "./dataContract";
 
+export type role = "SUPER_ADMIN" | "RECORDS_OFFICER" | "VISITOR_OFFICER" | "DUTY_OFFICER" | "OFFICE_IN_CHARGE";
+
 export type User = {
     id: string;
-    name: string;
+    fullname: string;
     badgeId: string;
-    role: string;
-    facility: string;
+    role: role;
     status: string;
     email?: string;
-    permissions?: string[];
     username?: string;
+    prisonId: number;
 };
+
+// // {
+//   "fullName": "Records Officer",
+//   "username": "records01",
+//   "email": "records01@example.test",
+//   "password": "Records123!",
+//   "role": "Records Officer",
+//   "prisonId": "<prison-uuid>"
+// }
 
 type UserDetails = {
     fullName: string;
@@ -32,11 +42,13 @@ function userDetails(user: Partial<User> & { id?: string }): UserDetails {
 }
 
 export const userService = {
+    // GET /api/v1/users
     async getUsers(): Promise<User[]> {
         const response = await api.get("/users");
         return collectionFrom(response.data).map(normalizeUser);
     },
 
+    // POST /api/v1/users
     async createUser(userData: Omit<User, "id"> & { password?: string }): Promise<User> {
         const response = await api.post("/users", {
             fullName: userData.name,
@@ -44,19 +56,24 @@ export const userService = {
             email: userData.email || undefined,
             password: userData.password,
             role: userData.role,
+            prisonId: userData.prisonId
         });
         return normalizeUser(itemFrom(response.data));
     },
 
+    // PATCH /api/v1/users/{userId}
     async updateUserRole(id: string, newRole: string): Promise<User> {
-        return this.updateUser({ id, role: newRole });
+        return this.updateUser({ id, role: newRole as role });
     },
+
+
 
     async updateUser(userData: Partial<User> & Pick<User, "id">): Promise<User> {
         const response = await api.patch(`/users/${encodeURIComponent(userData.id)}`, userDetails(userData));
         return normalizeUser(itemFrom(response.data));
     },
 
+    // active or deactivated
     async setUserStatus(id: string, active: boolean): Promise<User> {
         const response = await api.patch(`/users/${encodeURIComponent(id)}/${active ? "reactivate" : "deactivate"}`);
         return normalizeUser(itemFrom(response.data));
@@ -69,11 +86,12 @@ function normalizeUser(payload: unknown): User {
         id: String(firstValue(record, ["id", "userId", "user_id"], "")),
         name: String(firstValue(record, ["fullName", "full_name", "name"], "")),
         badgeId: String(firstValue(record, ["username", "badgeId", "badge_id"], "")),
-        role: String(firstValue(record, ["role", "roleName", "role_name"], "")),
+        role: String(firstValue(record, ["role", "roleName", "role_name"], "")) as role,
         facility: String(firstValue(record, ["facility", "facilityName", "facility_name", "sector"], "")),
         status: String(firstValue(record, ["status", "accountStatus", "account_status"], "ACTIVE")).toUpperCase() === "ACTIVE" ? "Active" : "Inactive",
         email: firstValue(record, ["email", "emailAddress", "email_address"], undefined) as string | undefined,
         permissions: Array.isArray(record.permissions) ? record.permissions as string[] : [],
         username: String(firstValue(record, ["username", "badgeId", "badge_id"], "")),
+        prisonId: Number(firstValue(record, ["prisonId", "prison_id"], 0)),
     };
 }
