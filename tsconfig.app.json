@@ -23,14 +23,9 @@
     "noFallthroughCasesInSwitch": true
   },
   "include": [
-    "src/App.tsx",
-    "src/main.tsx",
-    "src/index.css",
-    "src/vite-env.d.ts",
-    "src/context/AuthContext.tsx",
-    "src/api/axios.ts",
-    "src/api/authService.ts",
-    "src/pages/Login/LoginForm.tsx",
-    "src/Dashboard/Dashboard.tsx"
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "src/**/*.d.ts",
+    "src/**/*.css"
   ]
 }
