@@ -290,7 +290,7 @@ function ModuleView({ view }: { view: View }) {
 }
 
 export default function Dashboard() {
-  //const { user, logout } = useAuth();
+  const { user, logout } = useAuth();
   const [view, setView] = useState<View>("overview");
   const active = navigation.find((item) => item.id === view) ?? navigation[0];
   return (
@@ -339,7 +339,7 @@ export default function Dashboard() {
               {view === "overview" ? "Facility overview" : active.label}
             </h1>
           </div>
-          {/* <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3">
             <div className="hidden text-right sm:block">
               <p className="text-[13px] font-bold">
                 {user?.name ?? "Administrator"}
@@ -354,7 +354,7 @@ export default function Dashboard() {
             >
               Sign out
             </button>
-          </div> */}
+          </div>
         </header>
         <div className="p-5 sm:p-8">
           <div className="mb-7 flex items-center gap-2 overflow-x-auto lg:hidden">

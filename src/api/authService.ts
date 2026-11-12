@@ -5,7 +5,7 @@ import type { AuthResponse, LoginCredentials } from "../context/AuthContext";
 export const authService = {
     login: async (credentials: LoginCredentials): Promise<AuthResponse> => {
         const response = await api.post("/auth/login", {
-            username: credentials.username,
+            usernameOrEmail: credentials.username,
             password: credentials.password,
         });
         const payload = asRecord(itemFrom(response.data));
@@ -29,10 +29,10 @@ export const authService = {
     },
 
     forgotPassword: async (email: string): Promise<void> => {
-        await api.post("/auth/password/forgot", { email });
+        await api.post("/auth/password/forgot", { userEmail: email });
     },
 
-    resetPassword: async (code : number , newPassword: string): Promise<void> => {
+    resetPassword: async (code: string, newPassword: string): Promise<void> => {
         await api.post("/auth/password/reset", { code, newPassword });
     },
 

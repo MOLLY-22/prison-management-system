@@ -17,7 +17,20 @@ export function firstValue<T>(record: UnknownRecord, keys: string[], fallback: T
 export function collectionFrom<T = unknown>(payload: unknown): T[] {
     if (Array.isArray(payload)) return payload as T[];
     const record = asRecord(payload);
-    const collectionKeys = ["content", "items", "records", "results", "visitors", "inmates", "users", "transfers"];
+    const collectionKeys = [
+        "content",
+        "items",
+        "records",
+        "results",
+        "visitors",
+        "visits",
+        "inmates",
+        "users",
+        "transfers",
+        "prisons",
+        "blocks",
+        "cells",
+    ];
     for (const key of collectionKeys) {
         if (Array.isArray(record[key])) return record[key] as T[];
     }

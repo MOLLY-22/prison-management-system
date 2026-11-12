@@ -191,6 +191,7 @@ export function InmateManagement({ canAdmit }: Props) {
   const [status, setStatus] = useState("All");
   const [records, setRecords] = useState<Inmate[]>([]);
   const [loading, setLoading] = useState(true);
+  const [censusLoadError, setCensusLoadError] = useState(false);
   const [admissionOpen, setAdmissionOpen] = useState(false);
   const [admission, setAdmission] = useState<AdmissionForm>(emptyAdmission);
   const [savingAdmission, setSavingAdmission] = useState(false);
@@ -203,7 +204,16 @@ export function InmateManagement({ canAdmit }: Props) {
   useEffect(() => {
     inmateService.getInmates()
       .then((data) => setRecords(data.map(toDirectoryRecord)))
-      .catch(() => setNotice("Could not load inmate records."))
+      .catch((error: unknown) => {
+        setCensusLoadError(true);
+        if (axios.isAxiosError(error) && error.response?.status === 403) {
+          setNotice("Access denied: inmate records require a Records Officer or Super Admin account.");
+        } else if (axios.isAxiosError(error) && error.response?.data?.message) {
+          setNotice(error.response.data.message);
+        } else {
+          setNotice("Could not load inmate records. Check the API connection and try again.");
+        }
+      })
       .finally(() => setLoading(false));
   }, []);
   useEffect(() => {
@@ -245,9 +255,14 @@ export function InmateManagement({ canAdmit }: Props) {
       ["sentence end date", admission.sentenceEndDate],
       ["cell", admission.cell],
     ].filter(([, value]) => !value).map(([field]) => field);
-
     if (missingFields.length) {
       setAdmissionError(`Complete the following required fields: ${missingFields.join(", ")}.`);
+      return;
+    }
+
+    const selectedCell = cells.find((cell) => cell.id === admission.cell);
+    if (!selectedCell?.prisonId) {
+      setAdmissionError("The selected cell has no prison assignment. Reload the cell list and try again.");
       return;
     }
 
@@ -261,6 +276,7 @@ export function InmateManagement({ canAdmit }: Props) {
       offence: admission.offense,
       sentenceStartDate: admission.sentenceStartDate,
       sentenceEndDate: admission.sentenceEndDate,
+      prisonId: selectedCell.prisonId,
       cellId: admission.cell,
     };
     setSavingAdmission(true);
@@ -356,8 +372,8 @@ export function InmateManagement({ canAdmit }: Props) {
       <Box className="census-metrics">
         <Metric
           label="Active census"
-          value="2,418"
-          note={`${records.length} records loaded`}
+          value={censusLoadError ? "—" : records.length.toLocaleString()}
+          note={censusLoadError ? "Records could not be loaded" : "Records loaded from the API"}
           tone="blue"
         />
         <Metric
