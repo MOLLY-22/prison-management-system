@@ -1,0 +1,18 @@
+.module-host .census-metrics.prison-metrics { grid-template-columns: repeat(4, 1fr); }
+.module-host .filter-bar.prison-filter-bar { grid-template-columns: 2fr 1fr auto; }
+.module-host .block-card { margin-bottom: 18px; }
+.module-host .block-title { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+.module-host .cell-state { font-weight: 600; color: #123c65; }
+.module-host .cell-state.full { color: #9f2635; }
+
+.block-editors { display: grid; gap: 14px; }
+.block-editor { display: grid; gap: 12px; padding: 14px; border: 1px solid #e2e8f0; border-radius: 8px; background: #fbfcfe; }
+.block-editor-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.block-hint { color: #64748b; font-size: 12px; }
+.cell-rows { display: grid; gap: 10px; }
+.cell-row { display: grid; grid-template-columns: 1fr 1fr auto; align-items: center; gap: 10px; }
+
+@media (max-width: 760px) {
+  .module-host .census-metrics.prison-metrics { grid-template-columns: repeat(2, 1fr); }
+  .module-host .filter-bar.prison-filter-bar { grid-template-columns: 1fr; }
+}
