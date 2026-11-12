@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import {
+  Button,
   Chip,
   FormControl,
   InputLabel,
@@ -17,6 +18,7 @@ import {
   Typography,
 } from "@mui/material";
 import type { TransferRecord, TransferStatus } from "../api/transferService";
+export type { TransferRecord } from "../api/transferService";
 
 type TransferTableProps = {
   transfers: TransferRecord[];
@@ -45,7 +47,13 @@ const statusColors: Record<
 };
 
 function displayStatus(status: TransferStatus) {
-  return status.replaceAll("_", " ");
+  return status.replace(/_/g, " ");
+}
+
+function formatDate(value: string) {
+  if (!value) return "—";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
 }
 
 function TransferTable({ transfers, onSelectTransfer }: TransferTableProps) {
@@ -59,6 +67,7 @@ function TransferTable({ transfers, onSelectTransfer }: TransferTableProps) {
     return transfers.filter((transfer) => {
       const searchable = [
         transfer.inmateName,
+        transfer.inmateNumber,
         transfer.inmateId,
         transfer.sourcePrisonName,
         transfer.destinationPrisonName,
@@ -131,7 +140,7 @@ function TransferTable({ transfers, onSelectTransfer }: TransferTableProps) {
                     {transfer.inmateName || "Inmate"}
                   </Typography>
                   <Typography variant="caption" color="text.secondary">
-                    {transfer.inmateId}
+                    {transfer.inmateNumber || transfer.inmateId}
                   </Typography>
                 </TableCell>
                 <TableCell>
@@ -140,14 +149,12 @@ function TransferTable({ transfers, onSelectTransfer }: TransferTableProps) {
                   → {transfer.destinationPrisonName || transfer.destinationPrisonId}
                 </TableCell>
                 <TableCell>{transfer.reason}</TableCell>
-                <TableCell>{transfer.requestedAt || "—"}</TableCell>
+                <TableCell>{formatDate(transfer.requestedAt)}</TableCell>
                 <TableCell>
                   <Chip label={displayStatus(transfer.status)} color={statusColors[transfer.status]} size="small" />
                 </TableCell>
                 <TableCell>
-                  <button type="button" onClick={() => onSelectTransfer(transfer)}>
-                    Review
-                  </button>
+                  <Button size="small" onClick={() => onSelectTransfer(transfer)}>Review</Button>
                 </TableCell>
               </TableRow>
             ))}

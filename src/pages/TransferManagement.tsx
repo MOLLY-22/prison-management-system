@@ -63,10 +63,18 @@ function TransferManagement() {
     setError("");
     setSuccessMessage("");
     try {
-      await action();
-      await loadTransfers();
+      const updatedTransfer = await action();
+      setTransfers((current) => [
+        updatedTransfer,
+        ...current.filter((item) => item.id !== updatedTransfer.id),
+      ]);
       setSelectedTransfer(null);
       setSuccessMessage(success);
+      try {
+        await loadTransfers();
+      } catch {
+        // The successful action is retained; loadTransfers displays the refresh error.
+      }
     } finally {
       setSaving(false);
     }
@@ -76,7 +84,7 @@ function TransferManagement() {
     try {
       await loadTransfers();
     } catch {
-      // loadTransfers exposes the API error in the page alert.
+      // loadTransfers displays the API error in the page alert.
     }
   }
 
