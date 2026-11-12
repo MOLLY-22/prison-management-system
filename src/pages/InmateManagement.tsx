@@ -348,7 +348,7 @@ export function InmateManagement({ canAdmit }: Props) {
         </Typography>
         <Box className="portal-title-row">
           <Box>
-            <Typography component="h1">Inmate census</Typography>
+            <Typography component="h1">Inmate Records</Typography>
             <Typography>
               Search active records, review custody details, and manage new
               admissions.

@@ -1,17 +1,24 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import axios from "axios";
-import { userService } from "../api/userService";
-import type { User } from "../api/userService";
+import { prisonService, type Prison } from "../api/prisonService";
+import { userService, type CreateUserRequest, type User, type UserRole } from "../api/userService";
 
-type UserForm = Omit<User, "id"> & { password?: string };
+type UserForm = {
+    name: string;
+    username: string;
+    email: string;
+    password: string;
+    role: UserRole | string;
+    prisonId: string;
+};
 
 const emptyUserForm: UserForm = {
     name: "",
-    badgeId: "",
-    role: "Records Officer",
-    facility: "",
-    status: "Active",
+    username: "",
+    email: "",
     password: "",
+    role: "Records Officer",
+    prisonId: "",
 };
 
 type AddUserFormProps = {
@@ -21,7 +28,17 @@ type AddUserFormProps = {
     onUserUpdated: (user: User) => void;
 };
 
-const roles = ["Records Officer"];
+const roles: UserRole[] = [
+    "Super Admin",
+    "Records Officer",
+    "Disciplinary Officer",
+    "Case Officer",
+    "Visitor Officer",
+    "Rehabilitation Officer",
+    "Instructor",
+    "Medical Officer",
+    "Duty Officer",
+];
 
 function getErrorMessage(error: unknown) {
     if (axios.isAxiosError<{ message?: string }>(error)) {
@@ -30,18 +47,59 @@ function getErrorMessage(error: unknown) {
     return error instanceof Error ? error.message : "Could not save this user.";
 }
 
-export default function AddUserForm({ onClose, onUserCreated, userToEdit, onUserUpdated }: AddUserFormProps) {
-    const [newUser, setNewUser] = useState<UserForm>(() => userToEdit
-        ? { name: userToEdit.name, badgeId: userToEdit.badgeId, role: userToEdit.role, facility: userToEdit.facility, status: userToEdit.status }
-        : emptyUserForm);
+function formFromUser(user: User | null): UserForm {
+    if (!user) return emptyUserForm;
+    return {
+        name: user.name,
+        username: user.username || user.badgeId,
+        email: user.email || "",
+        password: "",
+        role: user.role,
+        prisonId: user.prisonId || "",
+    };
+}
+
+export default function AddUserForm({
+    onClose,
+    onUserCreated,
+    userToEdit,
+    onUserUpdated,
+}: AddUserFormProps) {
+    const [newUser, setNewUser] = useState<UserForm>(() => formFromUser(userToEdit));
+    const [prisons, setPrisons] = useState<Prison[]>([]);
+    const [loadingPrisons, setLoadingPrisons] = useState(true);
+    const [prisonLoadError, setPrisonLoadError] = useState("");
     const [formError, setFormError] = useState("");
+    const [saving, setSaving] = useState(false);
     const isEditing = Boolean(userToEdit);
-    const roleOptions = userToEdit && !roles.includes(userToEdit.role)
+    const isSuperAdmin = newUser.role === "Super Admin";
+    const roleOptions = userToEdit && !roles.includes(userToEdit.role as UserRole)
         ? [userToEdit.role, ...roles]
         : roles;
 
+    useEffect(() => {
+        let mounted = true;
+        prisonService.getPrisons({ active: true, size: 100 })
+            .then((items) => {
+                if (mounted) setPrisons(items);
+            })
+            .catch((error: unknown) => {
+                if (mounted) setPrisonLoadError(getErrorMessage(error));
+            })
+            .finally(() => {
+                if (mounted) setLoadingPrisons(false);
+            });
+        return () => {
+            mounted = false;
+        };
+    }, []);
+
     const handleFieldChange = (field: keyof UserForm, value: string) => {
-        setNewUser((currentUser) => ({ ...currentUser, [field]: value }));
+        setNewUser((currentUser) => ({
+            ...currentUser,
+            [field]: value,
+            ...(field === "role" && value === "Super Admin" ? { prisonId: "" } : {}),
+        }));
         if (formError) setFormError("");
     };
 
@@ -49,29 +107,62 @@ export default function AddUserForm({ onClose, onUserCreated, userToEdit, onUser
         event.preventDefault();
 
         const name = newUser.name.trim();
-        const badgeId = newUser.badgeId.trim();
-        const password = newUser.password?.trim() || "";
+        const username = newUser.username.trim();
+        const email = newUser.email.trim();
+        const password = newUser.password;
 
-        if (!name || !badgeId || (!isEditing && !password)) {
-            setFormError(isEditing ? "Name and username are required." : "Name, username, and password are required.");
+        if (!name || !username) {
+            setFormError("Full name and username are required.");
+            return;
+        }
+        if (username.length > 16) {
+            setFormError("Username must be 16 characters or fewer.");
+            return;
+        }
+        if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+            setFormError("Enter a valid email address.");
+            return;
+        }
+        if (!isEditing && (!password || password.length < 8 || password.length > 16 || !/\d/.test(password) || !/[^\w\s]/.test(password))) {
+            setFormError("Password must be 8–16 characters and include at least one digit and one punctuation mark.");
+            return;
+        }
+        if (!isSuperAdmin && !newUser.prisonId) {
+            setFormError("Select a prison for this user role.");
             return;
         }
 
-        const savedUser: UserForm & { password?: string } = { ...newUser, name, badgeId, password };
-
+        setSaving(true);
+        setFormError("");
         try {
-            const persistedUser = isEditing
-                ? await userService.updateUser({ ...savedUser, id: userToEdit!.id })
-                : await userService.createUser(savedUser);
-
-            if (isEditing) {
+            let persistedUser: User;
+            if (isEditing && userToEdit) {
+                persistedUser = await userService.updateUser({
+                    id: userToEdit.id,
+                    name,
+                    username,
+                    email: email || undefined,
+                    role: newUser.role,
+                    prisonId: isSuperAdmin ? null : newUser.prisonId,
+                });
                 onUserUpdated(persistedUser);
             } else {
+                const payload: CreateUserRequest = {
+                    fullName: name,
+                    username,
+                    email: email || undefined,
+                    password,
+                    role: newUser.role,
+                    ...(!isSuperAdmin ? { prisonId: newUser.prisonId } : {}),
+                };
+                persistedUser = await userService.createUser(payload);
                 onUserCreated(persistedUser);
             }
             onClose();
         } catch (error: unknown) {
             setFormError(getErrorMessage(error));
+        } finally {
+            setSaving(false);
         }
     };
 
@@ -102,20 +193,33 @@ export default function AddUserForm({ onClose, onUserCreated, userToEdit, onUser
 
                     <div className="modal-fields">
                         <label className="modal-field">
-                            Name
+                            Full name
                             <input
                                 type="text"
                                 value={newUser.name}
                                 onChange={(event) => handleFieldChange("name", event.target.value)}
                                 autoComplete="name"
+                                required
                             />
                         </label>
                         <label className="modal-field">
-                            Badge ID
+                            Username
                             <input
                                 type="text"
-                                value={newUser.badgeId}
-                                onChange={(event) => handleFieldChange("badgeId", event.target.value)}
+                                value={newUser.username}
+                                onChange={(event) => handleFieldChange("username", event.target.value)}
+                                autoComplete="username"
+                                maxLength={16}
+                                required
+                            />
+                        </label>
+                        <label className="modal-field">
+                            Email (optional)
+                            <input
+                                type="email"
+                                value={newUser.email}
+                                onChange={(event) => handleFieldChange("email", event.target.value)}
+                                autoComplete="email"
                             />
                         </label>
                         <label className="modal-field">
@@ -127,28 +231,52 @@ export default function AddUserForm({ onClose, onUserCreated, userToEdit, onUser
                                 {roleOptions.map((role) => <option key={role} value={role}>{role}</option>)}
                             </select>
                         </label>
-                        <label className="modal-field">
-                            Password {isEditing ? "(leave blank to keep current)" : ""}
-                            <input type="password" value={newUser.password || ""} onChange={(event) => handleFieldChange("password", event.target.value)} />
-                        </label>
-                        <label className="modal-field">
-                            Status
-                            <select
-                                value={newUser.status}
-                                onChange={(event) => handleFieldChange("status", event.target.value)}
-                            >
-                                <option value="Active">Active</option>
-                                <option value="Inactive">Inactive</option>
-                            </select>
-                        </label>
+                        {!isSuperAdmin && (
+                            <label className="modal-field">
+                                Assigned prison
+                                <select
+                                    value={newUser.prisonId}
+                                    onChange={(event) => handleFieldChange("prisonId", event.target.value)}
+                                    disabled={loadingPrisons || Boolean(prisonLoadError)}
+                                    required
+                                >
+                                    <option value="">
+                                        {loadingPrisons ? "Loading prisons…" : "Select a prison"}
+                                    </option>
+                                    {prisons.map((prison) => (
+                                        <option key={prison.id} value={prison.id}>{prison.name}</option>
+                                    ))}
+                                    {userToEdit?.prisonId && !prisons.some((prison) => prison.id === userToEdit.prisonId) && (
+                                        <option value={userToEdit.prisonId}>
+                                            {userToEdit.prisonName || userToEdit.facility || "Current prison"}
+                                        </option>
+                                    )}
+                                </select>
+                                {prisonLoadError && <span role="alert">{prisonLoadError}</span>}
+                            </label>
+                        )}
+                        {!isEditing && (
+                            <label className="modal-field">
+                                Password
+                                <input
+                                    type="password"
+                                    value={newUser.password}
+                                    onChange={(event) => handleFieldChange("password", event.target.value)}
+                                    autoComplete="new-password"
+                                    minLength={8}
+                                    maxLength={16}
+                                    required
+                                />
+                            </label>
+                        )}
                     </div>
 
                     {formError && <p className="modal-error" role="alert">{formError}</p>}
 
                     <div className="modal-actions">
-                        <button type="button" className="modal-cancel" onClick={onClose}>Cancel</button>
-                        <button type="submit" className="primary-button">
-                            {isEditing ? "Save changes" : "Save user"}
+                        <button type="button" className="modal-cancel" onClick={onClose} disabled={saving}>Cancel</button>
+                        <button type="submit" className="primary-button" disabled={saving || (!isSuperAdmin && loadingPrisons)}>
+                            {saving ? "Saving…" : isEditing ? "Save changes" : "Save user"}
                         </button>
                     </div>
                 </form>

@@ -1,5 +1,5 @@
 import api from "./axios";
-import { asRecord, collectionFrom, firstValue, itemFrom } from "./dataContract";
+import { asRecord, collectionFrom, fetchAllPages, firstValue, itemFrom } from "./dataContract";
 
 export type VisitorStatus = "Scheduled";
 
@@ -83,8 +83,15 @@ export function normalizeVisitor(payload: unknown): Visitor {
 
 export const visitorService = {
     async getVisitors(params?: VisitListParams): Promise<Visitor[]> {
-        const response = await api.get("/visits", { params: { size: 100, ...params } });
-        return collectionFrom(response.data).map(normalizeVisitor);
+        const query = { size: 100, ...params };
+        if (params?.page !== undefined) {
+            const response = await api.get("/visits", { params: query });
+            return collectionFrom(response.data).map(normalizeVisitor);
+        }
+        const records = await fetchAllPages<unknown>((page) =>
+            api.get("/visits", { params: { ...query, page } }).then(({ data }) => data),
+        );
+        return records.map(normalizeVisitor);
     },
 
     async getInmateVisitHistory(inmateId: string, params?: Omit<VisitListParams, "visitId" | "inmateId" | "inmateName" | "loggedBy">): Promise<Visitor[]> {
@@ -97,8 +104,10 @@ export const visitorService = {
         return normalizeInmates(response.data);
     },
     async getInmates(): Promise<InmateLookup[]> {
-        const response = await api.get("/inmates", { params: { size: 100 } });
-        return normalizeInmates(response.data);
+        const records = await fetchAllPages<unknown>((page) =>
+            api.get("/inmates", { params: { page, size: 100 } }).then(({ data }) => data),
+        );
+        return normalizeInmates(records);
     },
     async registerVisitor(payload: VisitRequest): Promise<Visitor> {
         const response = await api.post("/visits", payload);

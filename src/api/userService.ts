@@ -1,5 +1,5 @@
 import api from "./axios";
-import { asRecord, collectionFrom, firstValue, itemFrom } from "./dataContract";
+import { asRecord, collectionFrom, fetchAllPages, firstValue, itemFrom } from "./dataContract";
 
 export type UserRole =
     | "Super Admin"
@@ -68,8 +68,15 @@ function userDetails(user: Partial<User> & { name?: string; fullname?: string })
 export const userService = {
     // GET /api/v1/users
     async getUsers(params?: UserListParams): Promise<User[]> {
-        const response = await api.get("/users", { params });
-        return collectionFrom(response.data).map(normalizeUser);
+        const query = { size: 100, ...params };
+        if (params?.page !== undefined) {
+            const response = await api.get("/users", { params: query });
+            return collectionFrom(response.data).map(normalizeUser);
+        }
+        const records = await fetchAllPages<unknown>((page) =>
+            api.get("/users", { params: { ...query, page } }).then(({ data }) => data),
+        );
+        return records.map(normalizeUser);
     },
 
     async getUser(id: string): Promise<User> {
@@ -78,19 +85,8 @@ export const userService = {
     },
 
     // POST /api/v1/users
-    async createUser(userData: CreateUserRequest | (Omit<User, "id"> & { password?: string; fullName?: string })): Promise<User> {
-        const fullName = "fullName" in userData && userData.fullName
-            ? userData.fullName
-            : "name" in userData ? userData.name : "";
-        const username = userData.username ?? ("badgeId" in userData ? userData.badgeId : "");
-        const response = await api.post("/users", {
-            fullName,
-            username,
-            email: userData.email || undefined,
-            password: userData.password,
-            role: userData.role,
-            prisonId: userData.prisonId,
-        });
+    async createUser(userData: CreateUserRequest): Promise<User> {
+        const response = await api.post("/users", userData);
         return normalizeUser(itemFrom(response.data));
     },
 
@@ -109,6 +105,9 @@ export const userService = {
 
     async setUserStatus(id: string, active: boolean): Promise<User> {
         const response = await api.patch(`/users/${encodeURIComponent(id)}/${active ? "reactivate" : "deactivate"}`);
+        if (response.status === 204 || !response.data) {
+            return this.getUser(id);
+        }
         return normalizeUser(itemFrom(response.data));
     },
 };

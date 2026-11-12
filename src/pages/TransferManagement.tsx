@@ -1,218 +1,137 @@
-
-import { useState } from 'react'
+import { useCallback, useEffect, useState } from "react";
+import axios from "axios";
+import { Alert, Box, Button, Stack, Typography } from "@mui/material";
+import TransferForm from "../components/TransferForm";
+import TransferTable from "../components/TransferTable";
+import TransferApproval from "../components/TransferApproval";
 import {
-  Alert,
-  Box,
-  Stack,
-  Typography,
-} from '@mui/material'
+  transferService,
+  type CreateTransferRequest,
+  type TransferRecord,
+} from "../api/transferService";
+import "./transferManagement.css";
 
-import TransferForm from '../components/TransferForm'
-import TransferTable from '../components/TransferTable'
-import TransferApproval from '../components/TransferApproval'
-import TransferHistory from '../components/TransferHistory'
-import './transferManagement.css'
-
-import {
-  type Transfer,
-  type TransferAuditEntry,
-  type TransferStatus,
-} from '../types/transfer'
-
-function getLocalDate(): string {
-  const now = new Date()
-  const year = now.getFullYear()
-  const month = String(now.getMonth() + 1).padStart(2, '0')
-  const day = String(now.getDate()).padStart(2, '0')
-
-  return `${year}-${month}-${day}`
+function messageFrom(error: unknown) {
+  if (axios.isAxiosError<{ message?: string }>(error)) {
+    return error.response?.data?.message || error.message;
+  }
+  return error instanceof Error ? error.message : "The transfer request failed.";
 }
 
 function TransferManagement() {
-  const [transfers, setTransfers] = useState<Transfer[]>([])
-  const [auditEntries, setAuditEntries] =
-    useState<TransferAuditEntry[]>([])
-  const [selectedTransfer, setSelectedTransfer] =
-    useState<Transfer | null>(null)
-  const [successMessage, setSuccessMessage] = useState('')
+  const [transfers, setTransfers] = useState<TransferRecord[]>([]);
+  const [selectedTransfer, setSelectedTransfer] = useState<TransferRecord | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
 
-  function recordAudit(
-    transferId: number,
-    action: string,
-    performedBy: string,
-    details: string,
+  const loadTransfers = useCallback(async () => {
+    setError("");
+    try {
+      setTransfers(await transferService.getTransfers());
+    } catch (reason: unknown) {
+      setError(messageFrom(reason));
+      throw reason;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadTransfers().catch(() => undefined);
+  }, [loadTransfers]);
+
+  async function createTransfer(payload: CreateTransferRequest) {
+    setSaving(true);
+    setError("");
+    setSuccessMessage("");
+    try {
+      const created = await transferService.createTransfer(payload);
+      setTransfers((current) => [created, ...current.filter((item) => item.id !== created.id)]);
+      setSuccessMessage("Transfer request created successfully.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function performAction(
+    action: () => Promise<TransferRecord>,
+    success: string,
   ) {
-    const entry: TransferAuditEntry = {
-      id: Date.now(),
-      transferId,
-      action,
-      performedBy,
-      date: new Date().toLocaleString(),
-      details,
+    setSaving(true);
+    setError("");
+    setSuccessMessage("");
+    try {
+      await action();
+      await loadTransfers();
+      setSelectedTransfer(null);
+      setSuccessMessage(success);
+    } finally {
+      setSaving(false);
     }
-
-    setAuditEntries(current => [entry, ...current])
   }
 
-  function handleCreateTransfer(transfer: Transfer) {
-    setTransfers(current => [transfer, ...current])
-
-    recordAudit(
-      transfer.id,
-      'Transfer requested',
-      transfer.requestedBy,
-      'Transfer request submitted for supervisory review.',
-    )
-
-    setSuccessMessage(
-      `Transfer request for ${transfer.inmateName} was created successfully.`,
-    )
-  }
-
-  function handleStatusChange(
-    transferId: number,
-    nextStatus: TransferStatus,
-  ) {
-    const currentTransfer = transfers.find(
-      item => item.id === transferId,
-    )
-
-    if (!currentTransfer) return
-
-    const allowedTransitions: Record<TransferStatus, TransferStatus[]> = {
-      Pending: ['Approved', 'Rejected'],
-      Approved: ['In Transit'],
-      'In Transit': ['Completed'],
-      Completed: [],
-      Cancelled: [],
-      Rejected: [],
+  async function refreshTransfers() {
+    try {
+      await loadTransfers();
+    } catch {
+      // loadTransfers exposes the API error in the page alert.
     }
-
-    if (!allowedTransitions[currentTransfer.status].includes(nextStatus)) {
-      setSuccessMessage(
-        `That transition is not allowed: ${currentTransfer.status} to ${nextStatus}.`,
-      )
-      return
-    }
-
-    const isDecision =
-      nextStatus === 'Approved' || nextStatus === 'Rejected'
-
-    const actingOfficer = isDecision
-      ? 'Supervisor (Demo)'
-      : 'Transfer Officer (Demo)'
-
-    const updatedTransfer: Transfer = {
-      ...currentTransfer,
-      status: nextStatus,
-      approvedBy:
-        nextStatus === 'Approved'
-          ? actingOfficer
-          : currentTransfer.approvedBy,
-      transitDate:
-        nextStatus === 'In Transit'
-          ? getLocalDate()
-          : currentTransfer.transitDate,
-    }
-
-    setTransfers(current =>
-      current.map(item =>
-        item.id === transferId ? updatedTransfer : item,
-      ),
-    )
-
-    const auditDetails: Record<TransferStatus, string> = {
-      Pending: 'Transfer request is awaiting supervisory review.',
-      Approved: 'Transfer request approved by a demo supervisor.',
-      'In Transit': 'Transport movement started and the transit date was recorded.',
-      Completed: 'Arrival at the destination facility was recorded.',
-      Cancelled: 'Transfer request was cancelled.',
-      Rejected: 'Transfer request was rejected by a demo supervisor.',
-    }
-
-    recordAudit(
-      transferId,
-      `Transfer ${nextStatus.toLowerCase()}`,
-      actingOfficer,
-      auditDetails[nextStatus],
-    )
-
-    setSuccessMessage(
-      `Transfer for ${currentTransfer.inmateName} is now ${nextStatus}.`,
-    )
-  }
-
-  function handleApprove(transferId: number) {
-    handleStatusChange(transferId, 'Approved')
-  }
-
-  function handleReject(transferId: number) {
-    handleStatusChange(transferId, 'Rejected')
-  }
-
-  function handleMarkInTransit(transferId: number) {
-    handleStatusChange(transferId, 'In Transit')
-  }
-
-  function handleMarkCompleted(transferId: number) {
-    handleStatusChange(transferId, 'Completed')
   }
 
   return (
-    <Box className="transfer-workspace" sx={{ p: { xs: 2, md: 4 }, maxWidth: 1600, mx: 'auto' }}>
+    <Box className="transfer-workspace" sx={{ p: { xs: 2, md: 4 }, maxWidth: 1600, mx: "auto" }}>
       <Stack spacing={3}>
         <Box>
-          <Typography variant="h4" sx={{ fontWeight: 700 }}>
-            Transfer Management
-          </Typography>
+          <Typography variant="h4" sx={{ fontWeight: 700 }}>Transfer Management</Typography>
           <Typography color="text.secondary" sx={{ mt: 1 }}>
-            Create transfer requests, review approvals, track movement, and
-            inspect transfer history.
+            Create transfer requests, review decisions, and track their API status.
           </Typography>
         </Box>
 
-        {successMessage && (
+        {error && (
           <Alert
-            severity={
-              successMessage.startsWith('That transition is not allowed')
-                ? 'warning'
-                : 'success'
-            }
-            onClose={() => setSuccessMessage('')}
+            severity="error"
+            action={<Button color="inherit" size="small" onClick={() => void refreshTransfers()}>Retry</Button>}
           >
+            {error}
+          </Alert>
+        )}
+        {successMessage && (
+          <Alert severity="success" onClose={() => setSuccessMessage("")}>
             {successMessage}
           </Alert>
         )}
 
-        <TransferForm onSubmit={handleCreateTransfer} />
+        <TransferForm onSubmit={createTransfer} />
 
-        <TransferTable
-          transfers={transfers}
-          onSelectTransfer={setSelectedTransfer}
-        />
-
-        <TransferHistory
-          entries={auditEntries}
-          transfers={transfers}
-        />
+        {loading ? (
+          <Typography role="status">Loading transfer records…</Typography>
+        ) : (
+          <TransferTable transfers={transfers} onSelectTransfer={setSelectedTransfer} />
+        )}
 
         <TransferApproval
           transfer={selectedTransfer}
-          onApprove={handleApprove}
-          onReject={handleReject}
-          onMarkInTransit={handleMarkInTransit}
-          onMarkCompleted={handleMarkCompleted}
+          saving={saving}
+          onApprove={(id, cellId) => performAction(
+            () => transferService.approveTransfer(id, cellId),
+            "Transfer approved and destination cell assigned.",
+          )}
+          onReject={(id) => performAction(
+            () => transferService.rejectTransfer(id),
+            "Transfer rejected.",
+          )}
+          onCancel={(id) => performAction(
+            () => transferService.cancelTransfer(id),
+            "Transfer cancelled.",
+          )}
           onClose={() => setSelectedTransfer(null)}
         />
-
-        <Typography variant="caption" color="text.secondary">
-          Demo mode: transfer and audit data are held in frontend memory.
-          Refreshing the page resets changes. Real persistence and
-          authorization require backend integration.
-        </Typography>
       </Stack>
     </Box>
-  )
+  );
 }
 
-export default TransferManagement
+export default TransferManagement;

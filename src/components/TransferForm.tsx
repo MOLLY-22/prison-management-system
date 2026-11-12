@@ -1,378 +1,187 @@
-
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from "react";
+import axios from "axios";
 import {
   Alert,
   Box,
   Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
   MenuItem,
   Paper,
   Stack,
   TextField,
   Typography,
-} from '@mui/material'
+} from "@mui/material";
+import { inmateService, type Inmate } from "../api/inmateService";
+import { prisonService, type Prison } from "../api/prisonService";
+import type { CreateTransferRequest } from "../api/transferService";
 
-import type {
-  SecurityLevel,
-  Transfer,
-} from '../types/transfer'
+type TransferFormProps = {
+  onSubmit: (transfer: CreateTransferRequest) => Promise<void>;
+};
 
-interface TransferFormProps {
-  onSubmit: (transfer: Transfer) => void
-}
-
-interface FormValues {
-  inmateNumber: string
-  inmateName: string
-  originFacility: string
-  destinationFacility: string
-  securityLevel: SecurityLevel | ''
-  reason: string
-}
-
-type FieldErrors = Partial<Record<keyof FormValues, string>>
-
-const initialValues: FormValues = {
-  inmateNumber: '',
-  inmateName: '',
-  originFacility: '',
-  destinationFacility: '',
-  securityLevel: '',
-  reason: '',
-}
-
-function getLocalDate(): string {
-  const now = new Date()
-  const year = now.getFullYear()
-  const month = String(now.getMonth() + 1).padStart(2, '0')
-  const day = String(now.getDate()).padStart(2, '0')
-
-  return `${year}-${month}-${day}`
+function messageFrom(error: unknown) {
+  if (axios.isAxiosError<{ message?: string }>(error)) {
+    return error.response?.data?.message || error.message;
+  }
+  return error instanceof Error ? error.message : "Could not submit transfer request.";
 }
 
 function TransferForm({ onSubmit }: TransferFormProps) {
-  const [values, setValues] = useState<FormValues>(initialValues)
-  const [errors, setErrors] = useState<FieldErrors>({})
-  const [formError, setFormError] = useState('')
-  const [confirmationOpen, setConfirmationOpen] = useState(false)
-  const [pendingTransfer, setPendingTransfer] = useState<Transfer | null>(null)
+  const [inmates, setInmates] = useState<Inmate[]>([]);
+  const [prisons, setPrisons] = useState<Prison[]>([]);
+  const [inmateId, setInmateId] = useState("");
+  const [destinationPrisonId, setDestinationPrisonId] = useState("");
+  const [reason, setReason] = useState("");
+  const [loadingOptions, setLoadingOptions] = useState(true);
+  const [optionsError, setOptionsError] = useState("");
+  const [formError, setFormError] = useState("");
+  const [saving, setSaving] = useState(false);
 
-  function handleChange(field: keyof FormValues, value: string) {
-    setValues(current => ({
-      ...current,
-      [field]: value,
-    }))
+  useEffect(() => {
+    let active = true;
+    setLoadingOptions(true);
+    Promise.all([inmateService.getInmates(), prisonService.getPrisons({ active: true })])
+      .then(([inmateRecords, prisonRecords]) => {
+        if (!active) return;
+        setInmates(inmateRecords);
+        setPrisons(prisonRecords);
+      })
+      .catch((error: unknown) => {
+        if (active) setOptionsError(messageFrom(error));
+      })
+      .finally(() => {
+        if (active) setLoadingOptions(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
-    // Remove this field's error as the user corrects it.
-    setErrors(current => ({
-      ...current,
-      [field]: undefined,
-    }))
+  const selectedInmate = inmates.find((inmate) => inmate.id === inmateId);
+  const destinationOptions = prisons.filter(
+    (prison) => prison.id !== selectedInmate?.prisonId,
+  );
 
-    setFormError('')
-  }
-
-  function validateForm(): boolean {
-    const nextErrors: FieldErrors = {}
-
-    if (!values.inmateNumber.trim()) {
-      nextErrors.inmateNumber = 'Inmate Number is required.'
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setFormError("");
+    if (!selectedInmate?.prisonId) {
+      setFormError("Select an inmate with an assigned source prison.");
+      return;
+    }
+    if (!destinationPrisonId || destinationPrisonId === selectedInmate.prisonId) {
+      setFormError("Select a destination prison different from the inmate's current prison.");
+      return;
+    }
+    if (!reason.trim()) {
+      setFormError("Enter a reason for the transfer.");
+      return;
+    }
+    if (reason.trim().length > 2000) {
+      setFormError("Transfer reason must be 2,000 characters or fewer.");
+      return;
     }
 
-    if (!values.inmateName.trim()) {
-      nextErrors.inmateName = 'Inmate Full Name is required.'
+    setSaving(true);
+    try {
+      await onSubmit({
+        inmateId: selectedInmate.id,
+        destinationPrisonId,
+        reason: reason.trim(),
+      });
+      setInmateId("");
+      setDestinationPrisonId("");
+      setReason("");
+    } catch (error: unknown) {
+      setFormError(messageFrom(error));
+    } finally {
+      setSaving(false);
     }
-
-    if (!values.originFacility.trim()) {
-      nextErrors.originFacility = 'Origin Facility is required.'
-    }
-
-    if (!values.destinationFacility.trim()) {
-      nextErrors.destinationFacility = 'Destination Facility is required.'
-    }
-
-    if (!values.securityLevel) {
-      nextErrors.securityLevel = 'Please select a transport security level.'
-    }
-
-    if (!values.reason.trim()) {
-      nextErrors.reason = 'Transfer Reason is required.'
-    }
-
-    if (
-      values.originFacility.trim() &&
-      values.destinationFacility.trim() &&
-      values.originFacility.trim().toLowerCase() ===
-        values.destinationFacility.trim().toLowerCase()
-    ) {
-      nextErrors.destinationFacility =
-        'Destination must be different from the origin facility.'
-    }
-
-    setErrors(nextErrors)
-
-    const hasErrors = Object.keys(nextErrors).length > 0
-
-    if (hasErrors) {
-      setFormError(
-        `Please correct ${Object.keys(nextErrors).length} ${
-          Object.keys(nextErrors).length === 1 ? 'error' : 'errors'
-        } before reviewing this transfer.`,
-      )
-      return false
-    }
-
-    setFormError('')
-    return true
-  }
-
-  function handleReview(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-
-    if (!validateForm()) {
-      return
-    }
-
-    // Validation guarantees the required values are present.
-    const transfer: Transfer = {
-      id: Date.now(),
-      inmateNumber: values.inmateNumber.trim(),
-      inmateName: values.inmateName.trim(),
-      originFacility: values.originFacility.trim(),
-      destinationFacility: values.destinationFacility.trim(),
-      securityLevel: values.securityLevel as SecurityLevel,
-      reason: values.reason.trim(),
-      requestDate: getLocalDate(),
-      status: 'Pending',
-      requestedBy: 'Current User (Demo)',
-      approvedBy: null,
-      transitDate: null,
-    }
-
-    setPendingTransfer(transfer)
-    setConfirmationOpen(true)
-  }
-
-  function handleConfirm() {
-    if (!pendingTransfer) return
-
-    onSubmit(pendingTransfer)
-
-    setValues(initialValues)
-    setErrors({})
-    setFormError('')
-    setPendingTransfer(null)
-    setConfirmationOpen(false)
-  }
-
-  function handleConfirmationClose() {
-    // Preserve form values if the user chooses to go back.
-    setConfirmationOpen(false)
-    setPendingTransfer(null)
   }
 
   return (
-    <>
-      <Paper variant="outlined" sx={{ p: { xs: 2, md: 3 } }}>
-        <Stack spacing={2}>
-          <Box>
-            <Typography variant="h6" sx={{ fontWeight: 700 }}>
-              Create Transfer Request
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Complete all required fields before submitting a transfer for
-              supervisory review.
-            </Typography>
-          </Box>
+    <Paper variant="outlined" sx={{ p: { xs: 2, md: 3 } }}>
+      <Stack spacing={2}>
+        <Box>
+          <Typography variant="h6" sx={{ fontWeight: 700 }}>
+            Create Transfer Request
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Choose an inmate and destination. The source prison is taken from the inmate record.
+          </Typography>
+        </Box>
 
-          {formError && (
-            <Alert severity="error" role="alert">
-              {formError}
-            </Alert>
-          )}
+        {optionsError && <Alert severity="error">{optionsError}</Alert>}
+        {formError && <Alert severity="error" role="alert">{formError}</Alert>}
 
-          <Box
-            component="form"
-            onSubmit={handleReview}
-            noValidate
-            sx={{
-              display: 'grid',
-              gridTemplateColumns: {
-                xs: '1fr',
-                sm: 'repeat(2, minmax(0, 1fr))',
-              },
-              gap: 2,
+        <Box
+          component="form"
+          onSubmit={handleSubmit}
+          sx={{
+            display: "grid",
+            gridTemplateColumns: { xs: "1fr", sm: "repeat(2, minmax(0, 1fr))" },
+            gap: 2,
+          }}
+        >
+          <TextField
+            select
+            label="Inmate"
+            value={inmateId}
+            onChange={(event) => {
+              setInmateId(event.target.value);
+              setDestinationPrisonId("");
             }}
+            disabled={loadingOptions || Boolean(optionsError)}
+            required
           >
-            <TextField
-              label="Inmate Number"
-              value={values.inmateNumber}
-              onChange={event =>
-                handleChange('inmateNumber', event.target.value)
-              }
-              error={Boolean(errors.inmateNumber)}
-              helperText={errors.inmateNumber || ' '}
-              required
-              fullWidth
-              slotProps={{ htmlInput: { maxLength: 30 } }}
-            />
+            <MenuItem value="">
+              {loadingOptions ? "Loading inmates…" : "Select an inmate"}
+            </MenuItem>
+            {inmates.map((inmate) => (
+              <MenuItem key={inmate.id} value={inmate.id}>
+                {inmate.firstName} {inmate.lastName} · {inmate.prisonName || "No source prison"}
+              </MenuItem>
+            ))}
+          </TextField>
 
-            <TextField
-              label="Inmate Full Name"
-              value={values.inmateName}
-              onChange={event =>
-                handleChange('inmateName', event.target.value)
-              }
-              error={Boolean(errors.inmateName)}
-              helperText={errors.inmateName || ' '}
-              required
-              fullWidth
-              slotProps={{ htmlInput: { maxLength: 100 } }}
-            />
+          <TextField
+            select
+            label="Destination prison"
+            value={destinationPrisonId}
+            onChange={(event) => setDestinationPrisonId(event.target.value)}
+            disabled={loadingOptions || Boolean(optionsError) || !selectedInmate}
+            required
+          >
+            <MenuItem value="">Select a destination prison</MenuItem>
+            {destinationOptions.map((prison) => (
+              <MenuItem key={prison.id} value={prison.id}>
+                {prison.name} · {prison.location}
+              </MenuItem>
+            ))}
+          </TextField>
 
-            <TextField
-              label="Origin Facility"
-              value={values.originFacility}
-              onChange={event =>
-                handleChange('originFacility', event.target.value)
-              }
-              error={Boolean(errors.originFacility)}
-              helperText={errors.originFacility || ' '}
-              required
-              fullWidth
-              slotProps={{ htmlInput: { maxLength: 100 } }}
-            />
-
-            <TextField
-              label="Destination Facility"
-              value={values.destinationFacility}
-              onChange={event =>
-                handleChange('destinationFacility', event.target.value)
-              }
-              error={Boolean(errors.destinationFacility)}
-              helperText={errors.destinationFacility || ' '}
-              required
-              fullWidth
-              slotProps={{ htmlInput: { maxLength: 100 } }}
-            />
-
-            <TextField
-              select
-              label="Transport Security Level"
-              value={values.securityLevel}
-              onChange={event =>
-                handleChange('securityLevel', event.target.value)
-              }
-              error={Boolean(errors.securityLevel)}
-              helperText={errors.securityLevel || ' '}
-              required
-              fullWidth
-            >
-              <MenuItem value="Low">Low</MenuItem>
-              <MenuItem value="Medium">Medium</MenuItem>
-              <MenuItem value="High">High</MenuItem>
-            </TextField>
-
-            <TextField
-              label="Transfer Reason"
-              value={values.reason}
-              onChange={event => handleChange('reason', event.target.value)}
-              error={Boolean(errors.reason)}
-              helperText={errors.reason || ' '}
-              required
-              fullWidth
-              multiline
-              minRows={2}
-              slotProps={{ htmlInput: { maxLength: 500 } }}
-              sx={{
-                gridColumn: { xs: 'auto', sm: '1 / -1' },
-              }}
-            />
-
-            <Box
-              sx={{
-                gridColumn: { xs: 'auto', sm: '1 / -1' },
-                display: 'flex',
-                justifyContent: 'flex-end',
-              }}
-            >
-              <Button type="submit" variant="contained">
-                Review Transfer
-              </Button>
-            </Box>
-          </Box>
-        </Stack>
-      </Paper>
-
-      <Dialog
-        open={confirmationOpen}
-        onClose={handleConfirmationClose}
-        fullWidth
-        maxWidth="sm"
-        aria-labelledby="transfer-confirmation-title"
-      >
-        <DialogTitle id="transfer-confirmation-title">
-          Confirm Transfer Request
-        </DialogTitle>
-
-        <DialogContent dividers>
-          {pendingTransfer && (
-            <Stack spacing={1.5}>
-              <Alert severity="warning">
-                Please verify these details before submitting the request.
-              </Alert>
-
-              <Typography>
-                <strong>Inmate:</strong> {pendingTransfer.inmateName}
-              </Typography>
-
-              <Typography>
-                <strong>Inmate Number:</strong> {pendingTransfer.inmateNumber}
-              </Typography>
-
-              <Typography>
-                <strong>Origin:</strong> {pendingTransfer.originFacility}
-              </Typography>
-
-              <Typography>
-                <strong>Destination:</strong>{' '}
-                {pendingTransfer.destinationFacility}
-              </Typography>
-
-              <Typography>
-                <strong>Security Level:</strong> {pendingTransfer.securityLevel}
-              </Typography>
-
-              <Typography>
-                <strong>Reason:</strong> {pendingTransfer.reason}
-              </Typography>
-
-              <Typography>
-                <strong>Initial Status:</strong> Pending supervisory review
-              </Typography>
-            </Stack>
-          )}
-        </DialogContent>
-
-        <DialogActions sx={{ p: 2 }}>
-          <Button onClick={handleConfirmationClose} color="inherit">
-            Go Back
-          </Button>
+          <TextField
+            label="Transfer reason"
+            value={reason}
+            onChange={(event) => setReason(event.target.value)}
+            slotProps={{ htmlInput: { maxLength: 2000 } }}
+            multiline
+            minRows={2}
+            required
+            sx={{ gridColumn: { sm: "1 / -1" } }}
+          />
 
           <Button
-            onClick={handleConfirm}
+            type="submit"
             variant="contained"
-            disabled={!pendingTransfer}
+            disabled={saving || loadingOptions || Boolean(optionsError)}
+            sx={{ justifySelf: "start" }}
           >
-            Confirm and Submit
+            {saving ? "Submitting…" : "Submit transfer request"}
           </Button>
-        </DialogActions>
-      </Dialog>
-    </>
-  )
+        </Box>
+      </Stack>
+    </Paper>
+  );
 }
 
-export default TransferForm
+export default TransferForm;

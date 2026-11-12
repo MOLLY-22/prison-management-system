@@ -1,5 +1,5 @@
-
-import { useState } from 'react'
+import { useEffect, useState } from "react";
+import axios from "axios";
 import {
   Alert,
   Button,
@@ -7,237 +7,165 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
-  Paper,
+  MenuItem,
   Stack,
+  TextField,
   Typography,
-} from '@mui/material'
+} from "@mui/material";
+import { inmateService, type Cell } from "../api/inmateService";
+import type { TransferRecord } from "../api/transferService";
 
-import type { Transfer } from '../types/transfer'
+type TransferApprovalProps = {
+  transfer: TransferRecord | null;
+  saving: boolean;
+  onApprove: (transferId: string, destinationCellId: string) => Promise<void>;
+  onReject: (transferId: string) => Promise<void>;
+  onCancel: (transferId: string) => Promise<void>;
+  onClose: () => void;
+};
 
-interface TransferApprovalProps {
-  transfer: Transfer | null
-  onApprove: (transferId: number) => void
-  onReject: (transferId: number) => void
-  onMarkInTransit: (transferId: number) => void
-  onMarkCompleted: (transferId: number) => void
-  onClose: () => void
+function messageFrom(error: unknown) {
+  if (axios.isAxiosError<{ message?: string }>(error)) {
+    return error.response?.data?.message || error.message;
+  }
+  return error instanceof Error ? error.message : "Could not load destination cells.";
 }
-
-type ApprovalAction = 'approve' | 'reject' | 'in-transit' | 'complete'
 
 function TransferApproval({
   transfer,
+  saving,
   onApprove,
   onReject,
-  onMarkInTransit,
-  onMarkCompleted,
+  onCancel,
   onClose,
 }: TransferApprovalProps) {
-  const [confirmationAction, setConfirmationAction] =
-    useState<ApprovalAction | null>(null)
+  const [cells, setCells] = useState<Cell[]>([]);
+  const [destinationCellId, setDestinationCellId] = useState("");
+  const [loadingCells, setLoadingCells] = useState(false);
+  const [cellError, setCellError] = useState("");
+  const [actionError, setActionError] = useState("");
 
-  function handleConfirm() {
-    if (!transfer || !confirmationAction) return
-
-    switch (confirmationAction) {
-      case 'approve':
-        onApprove(transfer.id)
-        break
-      case 'reject':
-        onReject(transfer.id)
-        break
-      case 'in-transit':
-        onMarkInTransit(transfer.id)
-        break
-      case 'complete':
-        onMarkCompleted(transfer.id)
-        break
+  useEffect(() => {
+    setDestinationCellId("");
+    setActionError("");
+    setCellError("");
+    if (!transfer || transfer.status !== "PENDING" || !transfer.destinationPrisonId) {
+      setCells([]);
+      return;
     }
 
-    setConfirmationAction(null)
-    onClose()
-  }
+    let active = true;
+    setLoadingCells(true);
+    inmateService.getCells({ prisonId: transfer.destinationPrisonId })
+      .then((records) => {
+        if (active) setCells(records.filter((cell) => cell.availableSpaces > 0));
+      })
+      .catch((error: unknown) => {
+        if (active) setCellError(messageFrom(error));
+      })
+      .finally(() => {
+        if (active) setLoadingCells(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [transfer]);
 
-  function handleClose() {
-    setConfirmationAction(null)
-    onClose()
-  }
-
-  const statusDescription: Record<Transfer['status'], string> = {
-    Pending: 'This request is waiting for a supervisor to approve or reject it.',
-    Approved: 'This transfer has been authorized. Mark it In Transit when the movement actually begins.',
-    'In Transit': 'The inmate is being transported. Mark the transfer Completed only after arrival has been recorded.',
-    Completed: 'This transfer has been completed. Its status is read-only.',
-    Rejected: 'A supervisor rejected this request. It cannot proceed to transport.',
-    Cancelled: 'This request was cancelled or withdrawn. It cannot proceed to transport.',
-  }
-
-  const confirmationText: Record<ApprovalAction, string> = {
-    approve: `Approve the transfer for ${transfer?.inmateName}?`,
-    reject: `Reject the transfer request for ${transfer?.inmateName}?`,
-    'in-transit': `Record that the transfer for ${transfer?.inmateName} has started?`,
-    complete: `Confirm that ${transfer?.inmateName} has arrived at the destination facility?`,
-  }
-
-  const confirmationTitle: Record<ApprovalAction, string> = {
-    approve: 'Confirm Approval',
-    reject: 'Confirm Rejection',
-    'in-transit': 'Confirm Transfer Started',
-    complete: 'Confirm Arrival and Completion',
+  async function runAction(action: () => Promise<void>) {
+    setActionError("");
+    try {
+      await action();
+      onClose();
+    } catch (error: unknown) {
+      setActionError(messageFrom(error));
+    }
   }
 
   return (
-    <>
-      <Dialog
-        open={Boolean(transfer)}
-        onClose={handleClose}
-        fullWidth
-        maxWidth="sm"
-        aria-labelledby="transfer-review-title"
-      >
-        <DialogTitle id="transfer-review-title">
-          Review Transfer
-        </DialogTitle>
+    <Dialog
+      open={Boolean(transfer)}
+      onClose={saving ? undefined : onClose}
+      fullWidth
+      maxWidth="sm"
+      aria-labelledby="transfer-review-title"
+    >
+      <DialogTitle id="transfer-review-title">Review Transfer</DialogTitle>
+      <DialogContent dividers>
+        {transfer && (
+          <Stack spacing={2}>
+            {actionError && <Alert severity="error" role="alert">{actionError}</Alert>}
+            <Alert severity={transfer.status === "PENDING" ? "warning" : "info"}>
+              Status: {transfer.status.replace(/_/g, " ")}
+            </Alert>
+            <Typography><strong>Inmate:</strong> {transfer.inmateName || transfer.inmateId}</Typography>
+            <Typography><strong>Source:</strong> {transfer.sourcePrisonName || transfer.sourcePrisonId}</Typography>
+            <Typography><strong>Destination:</strong> {transfer.destinationPrisonName || transfer.destinationPrisonId}</Typography>
+            <Typography><strong>Reason:</strong> {transfer.reason}</Typography>
+            <Typography><strong>Requested by:</strong> {transfer.requestedBy || "—"}</Typography>
+            <Typography><strong>Requested at:</strong> {transfer.requestedAt || "—"}</Typography>
 
-        <DialogContent dividers>
-          {transfer && (
-            <Stack spacing={2}>
-              <Alert
-                severity={
-                  transfer.status === 'Pending'
-                    ? 'warning'
-                    : transfer.status === 'Rejected' ||
-                        transfer.status === 'Cancelled'
-                      ? 'error'
-                      : transfer.status === 'Completed'
-                        ? 'success'
-                        : 'info'
-                }
-              >
-                <strong>Status: {transfer.status}</strong>
-                <br />
-                {statusDescription[transfer.status]}
-              </Alert>
-
-              <Paper variant="outlined" sx={{ p: 2 }}>
-                <Stack spacing={1}>
-                  <Typography>
-                    <strong>Inmate:</strong> {transfer.inmateName}
-                  </Typography>
-                  <Typography>
-                    <strong>Inmate Number:</strong> {transfer.inmateNumber}
-                  </Typography>
-                  <Typography>
-                    <strong>Origin:</strong> {transfer.originFacility}
-                  </Typography>
-                  <Typography>
-                    <strong>Destination:</strong> {transfer.destinationFacility}
-                  </Typography>
-                  <Typography>
-                    <strong>Security Level:</strong> {transfer.securityLevel}
-                  </Typography>
-                  <Typography>
-                    <strong>Reason:</strong> {transfer.reason}
-                  </Typography>
-                  <Typography>
-                    <strong>Requested By:</strong> {transfer.requestedBy}
-                  </Typography>
-                  <Typography>
-                    <strong>Request Date:</strong> {transfer.requestDate}
-                  </Typography>
-                  <Typography>
-                    <strong>Approved By:</strong> {transfer.approvedBy ?? 'Not approved'}
-                  </Typography>
-                  <Typography>
-                    <strong>Transit Date:</strong> {transfer.transitDate ?? 'Not started'}
-                  </Typography>
-                </Stack>
-              </Paper>
-            </Stack>
-          )}
-        </DialogContent>
-
-        <DialogActions sx={{ p: 2, flexWrap: 'wrap', gap: 1 }}>
-          <Button onClick={handleClose} color="inherit">
-            Close
-          </Button>
-
-          {transfer?.status === 'Pending' && (
-            <>
-              <Button
-                color="error"
-                variant="outlined"
-                onClick={() => setConfirmationAction('reject')}
-              >
-                Reject
-              </Button>
-              <Button
-                variant="contained"
-                onClick={() => setConfirmationAction('approve')}
-              >
-                Approve
-              </Button>
-            </>
-          )}
-
-          {transfer?.status === 'Approved' && (
+            {transfer.status === "PENDING" && (
+              <>
+                {cellError && <Alert severity="error">{cellError}</Alert>}
+                <TextField
+                  select
+                  label="Destination cell"
+                  value={destinationCellId}
+                  onChange={(event) => setDestinationCellId(event.target.value)}
+                  disabled={loadingCells || Boolean(cellError) || saving}
+                  required
+                >
+                  <MenuItem value="">
+                    {loadingCells ? "Loading available cells…" : "Select an available cell"}
+                  </MenuItem>
+                  {cells.map((cell) => (
+                    <MenuItem key={cell.id} value={cell.id}>
+                      {cell.blockName} · {cell.name} · {cell.availableSpaces} spaces
+                    </MenuItem>
+                  ))}
+                </TextField>
+                {!loadingCells && !cellError && cells.length === 0 && (
+                  <Alert severity="warning">No available cells were returned for the destination prison.</Alert>
+                )}
+              </>
+            )}
+          </Stack>
+        )}
+      </DialogContent>
+      <DialogActions sx={{ p: 2, flexWrap: "wrap", gap: 1 }}>
+        <Button onClick={onClose} color="inherit" disabled={saving}>Close</Button>
+        {transfer?.status === "PENDING" && (
+          <>
+            <Button
+              color="error"
+              variant="outlined"
+              onClick={() => void runAction(() => onReject(transfer.id))}
+              disabled={saving}
+            >
+              Reject
+            </Button>
             <Button
               variant="contained"
-              onClick={() => setConfirmationAction('in-transit')}
+              onClick={() => void runAction(() => onApprove(transfer.id, destinationCellId))}
+              disabled={saving || loadingCells || !destinationCellId}
             >
-              Mark In Transit
+              {saving ? "Saving…" : "Approve and assign cell"}
             </Button>
-          )}
-
-          {transfer?.status === 'In Transit' && (
-            <Button
-              variant="contained"
-              color="success"
-              onClick={() => setConfirmationAction('complete')}
-            >
-              Mark Completed
-            </Button>
-          )}
-        </DialogActions>
-      </Dialog>
-
-      <Dialog
-        open={confirmationAction !== null}
-        onClose={() => setConfirmationAction(null)}
-        aria-labelledby="transfer-confirmation-title"
-      >
-        <DialogTitle id="transfer-confirmation-title">
-          {confirmationAction ? confirmationTitle[confirmationAction] : 'Confirm Action'}
-        </DialogTitle>
-
-        <DialogContent>
-          <Typography>
-            {confirmationAction ? confirmationText[confirmationAction] : ''}
-          </Typography>
-
-          <Alert severity="warning" sx={{ mt: 2 }}>
-            This action updates the transfer in the current demo only.
-          </Alert>
-        </DialogContent>
-
-        <DialogActions>
+          </>
+        )}
+        {(transfer?.status === "PENDING" || transfer?.status === "APPROVED" || transfer?.status === "IN_TRANSIT") && (
           <Button
-            onClick={() => setConfirmationAction(null)}
-            color="inherit"
+            color="warning"
+            variant="outlined"
+            onClick={() => void runAction(() => onCancel(transfer.id))}
+            disabled={saving}
           >
-            Go Back
+            Cancel transfer
           </Button>
-          <Button
-            onClick={handleConfirm}
-            variant="contained"
-            color={confirmationAction === 'reject' ? 'error' : 'primary'}
-          >
-            Confirm
-          </Button>
-        </DialogActions>
-      </Dialog>
-    </>
-  )
+        )}
+      </DialogActions>
+    </Dialog>
+  );
 }
 
-export default TransferApproval
+export default TransferApproval;

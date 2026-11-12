@@ -19,11 +19,11 @@ type RecordItem = Record<string, string | number | boolean | null>;
 
 const navigation: { id: View; label: string; short: string }[] = [
   { id: "overview", label: "Overview", short: "OV" },
-  { id: "inmates", label: "Inmate census", short: "IN" },
+  { id: "inmates", label: "Inmate Management", short: "IN" },
   { id: "visitors", label: "Visitors", short: "VI" },
   { id: "transfers", label: "Transfers", short: "TR" },
   { id: "release", label: "Release & discharge", short: "RD" },
-  { id: "access", label: "User access", short: "UA" },
+  { id: "access", label: "User Management", short: "UA" },
 ];
 
 const endpointFor: Partial<Record<View, string>> = {
@@ -197,22 +197,22 @@ void DataView;
 function Overview({ onNavigate }: { onNavigate: (view: View) => void }) {
   const cards: { label: string; id: View; note: string }[] = [
     {
-      label: "Inmate census",
+      label: "Inmate Management",
       id: "inmates",
       note: "Records and custody status",
     },
     {
-      label: "Visitor control",
+      label: "Visitor Management",
       id: "visitors",
       note: "Appointments and gate events",
     },
     {
-      label: "Transfer desk",
+      label: "Transfer Management",
       id: "transfers",
       note: "Movement requests and approvals",
     },
     {
-      label: "Release control",
+      label: "Release Management",
       id: "release",
       note: "Eligibility and discharge",
     },
@@ -254,20 +254,7 @@ function Overview({ onNavigate }: { onNavigate: (view: View) => void }) {
           </button>
         ))}
       </section>
-      <section className="relative mt-6 overflow-hidden rounded-[5px] bg-[#173a59] p-7 text-white shadow-[0_18px_50px_rgba(23,50,77,0.16)]">
-        <div className="absolute right-[-48px] top-[-72px] size-52 rounded-full border border-[#72b7c8]/20" />
-        <div className="absolute right-[-20px] top-[-42px] size-32 rounded-full border border-[#c58a36]/25" />
-        <p className="relative text-[10px] font-extrabold uppercase tracking-[0.2em] text-[#8bd8df]">
-          Operations brief
-        </p>
-        <p className="relative mt-3 max-w-2xl font-['Georgia',_'Times_New_Roman',serif] text-3xl font-medium tracking-[-0.04em] text-white">
-          One command surface for a safer facility.
-        </p>
-        <p className="relative mt-3 max-w-xl text-sm leading-6 text-[#d5e4ec]">
-          Use the navigation to move between related records. Connected tables
-          read through the authenticated API client and share the same session.
-        </p>
-      </section>
+      
     </>
   );
 }
@@ -342,7 +329,7 @@ export default function Dashboard() {
           <div className="flex items-center gap-3">
             <div className="hidden text-right sm:block">
               <p className="text-[13px] font-bold">
-                {user?.name ?? "Administrator"}
+                {user?.name ?? "Authorized officer"}
               </p>
               <p className="text-[10px] text-[#7a8898]">
                 {user?.role ?? "Authorized officer"}

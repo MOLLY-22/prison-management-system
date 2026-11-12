@@ -43,6 +43,22 @@ export function collectionFrom<T = unknown>(payload: unknown): T[] {
     return [];
 }
 
+export async function fetchAllPages<T>(
+    fetchPage: (page: number) => Promise<unknown>,
+): Promise<T[]> {
+    const firstPage = await fetchPage(0);
+    const records = collectionFrom<T>(firstPage);
+    const totalPages = Number(asRecord(firstPage).totalPages);
+
+    if (!Number.isInteger(totalPages) || totalPages < 2) return records;
+
+    for (let page = 1; page < totalPages; page += 1) {
+        records.push(...collectionFrom<T>(await fetchPage(page)));
+    }
+
+    return records;
+}
+
 export function itemFrom<T>(payload: unknown): T {
     const record = asRecord(payload);
     if (record.data && typeof record.data === "object") {

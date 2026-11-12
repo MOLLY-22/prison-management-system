@@ -1,5 +1,5 @@
 import api from "./axios";
-import { asRecord, collectionFrom, firstValue, itemFrom } from "./dataContract";
+import { asRecord, collectionFrom, fetchAllPages, firstValue, itemFrom } from "./dataContract";
 
 export type TransferStatus =
     | "PENDING"
@@ -42,8 +42,15 @@ export type TransferListParams = {
 
 export const transferService = {
     async getTransfers(params?: TransferListParams): Promise<TransferRecord[]> {
-        const response = await api.get("/transfers", { params });
-        return collectionFrom(response.data).map(normalizeTransfer);
+        const query = { size: 100, ...params };
+        if (params?.page !== undefined) {
+            const response = await api.get("/transfers", { params: query });
+            return collectionFrom(response.data).map(normalizeTransfer);
+        }
+        const records = await fetchAllPages<unknown>((page) =>
+            api.get("/transfers", { params: { ...query, page } }).then(({ data }) => data),
+        );
+        return records.map(normalizeTransfer);
     },
 
     async createTransfer(payload: CreateTransferRequest): Promise<TransferRecord> {
@@ -51,8 +58,11 @@ export const transferService = {
         return normalizeTransfer(itemFrom(response.data));
     },
 
-    async approveTransfer(id: string): Promise<TransferRecord> {
-        const response = await api.post(`/transfers/${encodeURIComponent(id)}/approve`);
+    async approveTransfer(id: string, destinationCellId: string): Promise<TransferRecord> {
+        const response = await api.post(
+            `/transfers/${encodeURIComponent(id)}/approve`,
+            { destinationCellId },
+        );
         return normalizeTransfer(itemFrom(response.data));
     },
 

@@ -1,5 +1,5 @@
 import api from "./axios";
-import { asRecord, collectionFrom, firstValue, itemFrom } from "./dataContract";
+import { asRecord, collectionFrom, fetchAllPages, firstValue, itemFrom } from "./dataContract";
 
 export type Inmate = {
     id: string;
@@ -77,8 +77,15 @@ export type CellAllocation = {
 
 export const inmateService = {
     async getInmates(params?: InmateListParams): Promise<Inmate[]> {
-        const response = await api.get("/inmates", { params });
-        return collectionFrom(response.data).map(normalizeInmate);
+        const query = { size: 100, ...params };
+        if (params?.page !== undefined) {
+            const response = await api.get("/inmates", { params: query });
+            return collectionFrom(response.data).map(normalizeInmate);
+        }
+        const records = await fetchAllPages<unknown>((page) =>
+            api.get("/inmates", { params: { ...query, page } }).then(({ data }) => data),
+        );
+        return records.map(normalizeInmate);
     },
     async createInmate(payload: InmateRequest): Promise<Inmate> {
         const response = await api.post("/inmates", payload);
@@ -95,8 +102,15 @@ export const inmateService = {
     },
 
     async getCells(params?: CellListParams): Promise<Cell[]> {
-        const response = await api.get("/cells", { params });
-        return collectionFrom(response.data).map(normalizeCell);
+        const query = { size: 100, ...params };
+        if (params?.page !== undefined) {
+            const response = await api.get("/cells", { params: query });
+            return collectionFrom(response.data).map(normalizeCell);
+        }
+        const records = await fetchAllPages<unknown>((page) =>
+            api.get("/cells", { params: { ...query, page } }).then(({ data }) => data),
+        );
+        return records.map(normalizeCell);
     },
 
     async getCell(id: string): Promise<Cell> {

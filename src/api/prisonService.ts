@@ -1,5 +1,5 @@
 import api from "./axios";
-import { asBoolean, asRecord, collectionFrom, firstValue, itemFrom } from "./dataContract";
+import { asBoolean, asRecord, collectionFrom, fetchAllPages, firstValue, itemFrom } from "./dataContract";
 
 export type PrisonCell = {
     id: string;
@@ -58,8 +58,15 @@ export type PrisonListParams = {
 
 export const prisonService = {
     async getPrisons(params?: PrisonListParams): Promise<Prison[]> {
-        const response = await api.get("/prisons", { params });
-        return collectionFrom(response.data).map(normalizePrison);
+        const query = { size: 100, ...params };
+        if (params?.page !== undefined) {
+            const response = await api.get("/prisons", { params: query });
+            return collectionFrom(response.data).map(normalizePrison);
+        }
+        const records = await fetchAllPages<unknown>((page) =>
+            api.get("/prisons", { params: { ...query, page } }).then(({ data }) => data),
+        );
+        return records.map(normalizePrison);
     },
 
     async getPrison(id: string): Promise<Prison> {
