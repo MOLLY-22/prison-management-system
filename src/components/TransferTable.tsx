@@ -1,5 +1,6 @@
 import { useMemo, useState, type ChangeEvent } from 'react'
 import type { SelectChangeEvent } from '@mui/material/Select'
+import type { Transfer, TransferStatus } from '../types/transfer'
 import {
   Chip,
   FormControl,
@@ -18,25 +19,8 @@ import {
   Typography,
 } from '@mui/material'
 
-export type TransferStatus =
-  | 'PENDING'
-  | 'APPROVED'
-  | 'REJECTED'
-  | 'IN_TRANSIT'
-  | 'RECEIVED'
-  | 'CANCELLED'
-
-export interface TransferRecord {
-  id: string
-  inmateId: string
-  inmateName: string
-  sourcePrisonName: string
-  destinationPrisonName: string
-  destinationPrisonId: string
-  reason?: string
-  requestedAt: string
-  status: TransferStatus
-}
+export type { TransferStatus } from '../types/transfer'
+export type TransferRecord = Transfer
 
 interface TransferTableProps {
   transfers: TransferRecord[]

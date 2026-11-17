@@ -1,15 +1,20 @@
 
 import api from './axios'
 
-const BASE_PATH = '/v1'
+const BASE_PATH = ''
 
 function buildQuery(filters = {}) {
   const params = new URLSearchParams()
 
   Object.entries(filters).forEach(([key, value]) => {
-    if (value !== undefined && value !== null && value !== '') {
-      params.set(key, String(value))
-    }
+    if (value === undefined || value === null || value === '') return
+
+    const values = Array.isArray(value) ? value : [value]
+    values.forEach(item => {
+      if (item !== undefined && item !== null && item !== '') {
+        params.append(key, String(item))
+      }
+    })
   })
 
   const query = params.toString()
@@ -54,17 +59,17 @@ export const transferService = {
   },
 
   getInmates: async (filters = {}) => {
-    const response = await api.get(`/v1/inmates${buildQuery(filters)}`)
+    const response = await api.get(`${BASE_PATH}/inmates${buildQuery(filters)}`)
     return response.data
   },
 
   getPrisons: async (filters = {}) => {
-    const response = await api.get(`/v1/prisons${buildQuery(filters)}`)
+    const response = await api.get(`${BASE_PATH}/prisons${buildQuery(filters)}`)
     return response.data
   },
 
   getCells: async (filters = {}) => {
-    const response = await api.get(`/v1/cells${buildQuery(filters)}`)
+    const response = await api.get(`${BASE_PATH}/cells${buildQuery(filters)}`)
     return response.data
   },
 }

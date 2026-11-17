@@ -20,42 +20,40 @@ import type { SelectChangeEvent } from '@mui/material/Select'
 
 import { transferService } from '../api/transferService'
 import type { TransferRecord } from './TransferTable'
-
-interface TransferCell {
-  id: string
-  cellNumber?: string
-  name?: string
-  availableSpaces: number
-}
+import type {
+  ApproveTransferRequest,
+  Page,
+  TransferCell,
+  TransferNoteRequest,
+} from '../types/transfer'
 
 interface TransferApprovalProps {
   transfer: TransferRecord | null
   onApprove: (
     transferId: string,
-    approvalData: { cellId: string; note?: string },
+    approvalData: ApproveTransferRequest,
   ) => Promise<void> | void
   onReject: (
     transferId: string,
-    data?: { note?: string },
+    data?: TransferNoteRequest,
+  ) => Promise<void> | void
+  onCancel: (
+    transferId: string,
+    data?: TransferNoteRequest,
   ) => Promise<void> | void
   onClose: () => void
 }
 
-function extractCells(response: unknown): TransferCell[] {
-  if (Array.isArray(response)) {
-    return response as TransferCell[]
-  }
-
-  if (
-    response &&
-    typeof response === 'object' &&
-    'content' in response &&
-    Array.isArray(response.content)
-  ) {
-    return response.content as TransferCell[]
-  }
-
-  return []
+async function loadAllCells(
+  fetchPage: (page: number) => Promise<Page<TransferCell>>,
+): Promise<TransferCell[]> {
+  const firstPage = await fetchPage(0)
+  const remainingPages = await Promise.all(
+    Array.from({ length: Math.max(0, firstPage.totalPages - 1) }, (_, index) =>
+      fetchPage(index + 1),
+    ),
+  )
+  return [firstPage, ...remainingPages].flatMap(page => page.content)
 }
 
 function formatDate(value?: string) {
@@ -72,6 +70,7 @@ function TransferApproval({
   transfer,
   onApprove,
   onReject,
+  onCancel,
   onClose,
 }: TransferApprovalProps) {
   const [cells, setCells] = useState<TransferCell[]>([])
@@ -81,7 +80,7 @@ function TransferApproval({
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [confirmationAction, setConfirmationAction] =
-    useState<'approve' | 'reject' | null>(null)
+    useState<'approve' | 'reject' | 'cancel' | null>(null)
 
   useEffect(() => {
     let active = true
@@ -97,15 +96,17 @@ function TransferApproval({
       setSelectedCellId('')
 
       try {
-        const response = await transferService.getCells({
-          prisonId: transfer.destinationPrisonId,
-          page: 0,
-          size: 100,
-        })
+        const availableCells = await loadAllCells(page =>
+          transferService.getCells({
+            prisonId: transfer.destinationPrisonId,
+            page,
+            size: 100,
+          }),
+        )
 
         if (active) {
           setCells(
-            extractCells(response).filter(cell => cell.availableSpaces > 0),
+            availableCells.filter(cell => cell.availableSpaces > 0),
           )
         }
       } catch {
@@ -120,13 +121,7 @@ function TransferApproval({
     }
 
     if (transfer) {
-      setNote('')
-      setConfirmationAction(null)
       loadCells()
-    } else {
-      setCells([])
-      setSelectedCellId('')
-      setError('')
     }
 
     return () => {
@@ -155,8 +150,12 @@ function TransferApproval({
           cellId: selectedCellId,
           note: note.trim() || undefined,
         })
-      } else {
+      } else if (confirmationAction === 'reject') {
         await onReject(transfer.id, {
+          note: note.trim() || undefined,
+        })
+      } else {
+        await onCancel(transfer.id, {
           note: note.trim() || undefined,
         })
       }
@@ -237,6 +236,16 @@ function TransferApproval({
                     <strong>Requested:</strong>{' '}
                     {formatDate(transfer.requestedAt)}
                   </Typography>
+                  {transfer.requestedBy && (
+                    <Typography>
+                      <strong>Requested by:</strong> {transfer.requestedBy}
+                    </Typography>
+                  )}
+                  {transfer.decisionNote && (
+                    <Typography>
+                      <strong>Decision note:</strong> {transfer.decisionNote}
+                    </Typography>
+                  )}
                 </Stack>
               </Paper>
 
@@ -313,6 +322,18 @@ function TransferApproval({
               </Button>
 
               <Button
+                color="inherit"
+                variant="outlined"
+                onClick={() => {
+                  setError('')
+                  setConfirmationAction('cancel')
+                }}
+                disabled={submitting}
+              >
+                Cancel Request
+              </Button>
+
+              <Button
                 variant="contained"
                 onClick={() => {
                   setError('')
@@ -337,14 +358,18 @@ function TransferApproval({
         <DialogTitle id="transfer-confirmation-title">
           {confirmationAction === 'approve'
             ? 'Confirm Transfer Approval'
-            : 'Confirm Transfer Rejection'}
+            : confirmationAction === 'reject'
+              ? 'Confirm Transfer Rejection'
+              : 'Confirm Transfer Cancellation'}
         </DialogTitle>
 
         <DialogContent>
           <Typography>
             {confirmationAction === 'approve'
               ? `Approve the transfer for ${transfer?.inmateName} and assign the selected destination cell?`
-              : `Reject the transfer request for ${transfer?.inmateName}?`}
+              : confirmationAction === 'reject'
+                ? `Reject the transfer request for ${transfer?.inmateName}?`
+                : `Cancel the transfer request for ${transfer?.inmateName}?`}
           </Typography>
         </DialogContent>
 
@@ -360,7 +385,7 @@ function TransferApproval({
           <Button
             onClick={handleConfirm}
             variant="contained"
-            color={confirmationAction === 'reject' ? 'error' : 'primary'}
+            color={confirmationAction === 'approve' ? 'primary' : 'error'}
             disabled={submitting}
           >
             {submitting ? 'Processing...' : 'Confirm'}

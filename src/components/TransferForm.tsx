@@ -15,40 +15,27 @@ import {
 } from '@mui/material'
 
 import { transferService } from '../api/transferService'
-
-interface TransferRequest {
-  inmateId: string
-  destinationPrisonId: string
-  reason: string
-}
-
-interface Inmate {
-  id: string
-  firstName: string
-  lastName: string
-  prisonId: string
-  prisonName: string
-}
-
-interface Prison {
-  id: string
-  name: string
-  active?: boolean
-}
+import type {
+  CreateTransferRequest,
+  Page,
+  TransferInmate,
+  TransferPrison,
+} from '../types/transfer'
 
 interface TransferFormProps {
-  onSubmit: (request: TransferRequest) => Promise<void> | void
+  onSubmit: (request: CreateTransferRequest) => Promise<void> | void
 }
 
-function extractItems<T>(data: unknown): T[] {
-  if (Array.isArray(data)) return data as T[]
-
-  if (data && typeof data === 'object' && 'content' in data) {
-    const content = (data as { content: unknown }).content
-    return Array.isArray(content) ? (content as T[]) : []
-  }
-
-  return []
+async function loadAllPages<T>(
+  fetchPage: (page: number) => Promise<Page<T>>,
+): Promise<T[]> {
+  const firstPage = await fetchPage(0)
+  const remainingPages = await Promise.all(
+    Array.from({ length: Math.max(0, firstPage.totalPages - 1) }, (_, index) =>
+      fetchPage(index + 1),
+    ),
+  )
+  return [firstPage, ...remainingPages].flatMap(page => page.content)
 }
 
 function getErrorMessage(error: unknown): string {
@@ -57,8 +44,8 @@ function getErrorMessage(error: unknown): string {
 }
 
 function TransferForm({ onSubmit }: TransferFormProps) {
-  const [inmates, setInmates] = useState<Inmate[]>([])
-  const [prisons, setPrisons] = useState<Prison[]>([])
+  const [inmates, setInmates] = useState<TransferInmate[]>([])
+  const [prisons, setPrisons] = useState<TransferPrison[]>([])
   const [inmateId, setInmateId] = useState('')
   const [destinationPrisonId, setDestinationPrisonId] = useState('')
   const [reason, setReason] = useState('')
@@ -78,19 +65,19 @@ function TransferForm({ onSubmit }: TransferFormProps) {
       setLoadError('')
 
       try {
-        const [inmateData, prisonData] = await Promise.all([
-          transferService.getInmates({ page: 0, size: 100 }),
-          transferService.getPrisons({
+        const [inmateOptions, prisonOptions] = await Promise.all([
+          loadAllPages(page => transferService.getInmates({ page, size: 100 })),
+          loadAllPages(page => transferService.getPrisons({
             active: true,
-            page: 0,
+            page,
             size: 100,
-          }),
+          })),
         ])
 
         if (!active) return
 
-        setInmates(extractItems<Inmate>(inmateData))
-        setPrisons(extractItems<Prison>(prisonData))
+        setInmates(inmateOptions)
+        setPrisons(prisonOptions)
       } catch (error) {
         if (active) setLoadError(getErrorMessage(error))
       } finally {

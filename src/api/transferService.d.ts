@@ -1,34 +1,26 @@
-
-type TransferFilters = Record<
-  string,
-  string | number | boolean | undefined | null
->
+import type {
+  ApproveTransferRequest,
+  CellFilters,
+  CreateTransferRequest,
+  InmateFilters,
+  Page,
+  PrisonFilters,
+  Transfer,
+  TransferCell,
+  TransferFilters,
+  TransferInmate,
+  TransferNoteRequest,
+  TransferPage,
+  TransferPrison,
+} from '../types/transfer'
 
 export const transferService: {
-  getTransfers: (filters?: TransferFilters) => Promise<unknown>
-
-  createTransfer: (data: {
-    inmateId: string
-    destinationPrisonId: string
-    reason: string
-  }) => Promise<unknown>
-
-  approveTransfer: (
-    id: string,
-    data: { cellId: string; note?: string },
-  ) => Promise<unknown>
-
-  rejectTransfer: (
-    id: string,
-    data?: { note?: string },
-  ) => Promise<unknown>
-
-  cancelTransfer: (
-    id: string,
-    data?: { note?: string },
-  ) => Promise<unknown>
-
-  getInmates: (filters?: TransferFilters) => Promise<unknown>
-  getPrisons: (filters?: TransferFilters) => Promise<unknown>
-  getCells: (filters?: TransferFilters) => Promise<unknown>
+  getTransfers: (filters?: TransferFilters) => Promise<TransferPage | Transfer[]>
+  createTransfer: (data: CreateTransferRequest) => Promise<Transfer>
+  approveTransfer: (id: string, data: ApproveTransferRequest) => Promise<Transfer>
+  rejectTransfer: (id: string, data?: TransferNoteRequest) => Promise<Transfer>
+  cancelTransfer: (id: string, data?: TransferNoteRequest) => Promise<Transfer>
+  getInmates: (filters?: InmateFilters) => Promise<Page<TransferInmate>>
+  getPrisons: (filters?: PrisonFilters) => Promise<Page<TransferPrison>>
+  getCells: (filters?: CellFilters) => Promise<Page<TransferCell>>
 }

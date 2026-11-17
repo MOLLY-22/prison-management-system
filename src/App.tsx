@@ -2,6 +2,7 @@ import type { PropsWithChildren } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import Login from "./pages/LoginForm";
 import Dashboard from "./Dashboard/Dashboard";
+import TransferManagement from "./pages/TransferManagement";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 
 function RequireAuth({ children }: PropsWithChildren) {
@@ -45,9 +46,20 @@ function AppRoutes() {
                 path="/dashboard"
                 element={<RequireAuth><Dashboard /></RequireAuth>}
             />
+
+            <Route
+                path="/transfer-management"
+                element={<RequireAuth><TransferManagement /></RequireAuth>}
+            />
+
             <Route
                 path="/"
-                element={<Navigate to={isAuthenticated ? "/dashboard" : "/login"} replace />}
+                element={
+                    <Navigate
+                        to={isAuthenticated ? "/dashboard" : "/login"}
+                        replace
+                    />
+                }
             />
             <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
