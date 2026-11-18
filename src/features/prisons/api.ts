@@ -1,5 +1,5 @@
 import axios from 'axios'
-import http from '../../api/axios'
+import http from '../../api/axiosClient'
 
 export type Cell = { id: string; cellNumber: number; capacity: number; currentOccupancy: number; availableSpaces: number }
 export type Block = { id: string; name: string; cells: Cell[] }

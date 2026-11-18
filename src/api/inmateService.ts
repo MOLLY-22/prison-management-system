@@ -95,6 +95,15 @@ export const inmateService = {
         const response = await api.post("/inmates", payload);
         return normalizeInmate(itemFrom(response.data));
     },
+    async createInmateWithPhoto(payload: InmateRequest, photo: File): Promise<Inmate> {
+        const body = new FormData();
+        body.append("inmate", new Blob([JSON.stringify(payload)], { type: "application/json" }));
+        body.append("photo", photo);
+        const response = await api.post("/inmates", body, {
+            headers: { "Content-Type": "multipart/form-data" },
+        });
+        return normalizeInmate(itemFrom(response.data));
+    },
     async updateInmate(id: string, payload: UpdateInmateRequest): Promise<Inmate> {
         const response = await api.patch(`/inmates/${encodeURIComponent(id)}`, payload);
         return normalizeInmate(itemFrom(response.data));
