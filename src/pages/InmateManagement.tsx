@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import {
@@ -32,111 +31,34 @@ import {
 import "./admissionDialog.css";
 import "./inmateManagement.css";
 
-type CustodyStatus = "Max Security" | "Active Sentence" | "Pre-Trial";
+type CustodyStatus = "REMAND" | "SENTENCED";
 type Inmate = {
   id: string;
   fullName: string;
-  offense: string;
-  warrant: string;
-  block: string;
+  bio: string;
   cell: string;
   status: CustodyStatus;
   admissionDate: string;
-  arrestingStation: string;
   dateOfBirth: string;
   gender: string;
-  sentenceStartDate: string;
-  sentenceEndDate: string;
+  expectedCourtDate?: string;
 };
 type Props = { canAdmit: boolean };
 type AdmissionForm = {
-  id: string;
   fullName: string;
-  offense: string;
-  warrant: string;
-  block: string;
   cell: string;
   status: CustodyStatus;
   admissionDate: string;
-  arrestingStation: string;
   dateOfBirth: string;
   gender: string;
-  sentenceStartDate: string;
-  sentenceEndDate: string;
+  bio: string;
+  medicalHistory: string;
+  expectedCourtDate: string;
+  nextOfKinName: string;
+  nextOfKinRelationship: string;
+  nextOfKinPhone: string;
 };
 
-const inmates: Inmate[] = [
-  {
-    id: "INM-88392",
-    fullName: "Chimwemwe, Massa J.",
-    offense: "Armed Robbery",
-    warrant: "W-44901-X",
-    block: "Block A",
-    cell: "Cell 104-B",
-    status: "Max Security",
-    admissionDate: "Jan 12, 2021",
-    arrestingStation: "Central Precinct #4",
-  },
-  {
-    id: "INM-91024",
-    fullName: "KElvin, Marie Namu",
-    offense: "Securities Fraud",
-    warrant: "W-99214-F",
-    block: "Block B",
-    cell: "Cell 210-A",
-    status: "Active Sentence",
-    admissionDate: "May 19, 2022",
-    arrestingStation: "Metro Transit Hub",
-  },
-  {
-    id: "INM-94012",
-    fullName: "Khomnbo, Sam",
-    offense: "Controlled Substances",
-    warrant: "W-11029-B",
-    block: "Block C",
-    cell: "Cell 012-C",
-    status: "Pre-Trial",
-    admissionDate: "Aug 03, 2023",
-    arrestingStation: "North District Precinct",
-  },
-  {
-    id: "INM-95521",
-    fullName: "Alinane, Pansi E.",
-    offense: "Grand Larceny",
-    warrant: "W-44012-L",
-    block: "Block B",
-    cell: "Cell 304-A",
-    status: "Active Sentence",
-    admissionDate: "Nov 14, 2021",
-    arrestingStation: "Central Precinct #4",
-  },
-];
-const scheduledTransfers = [
-  {
-    id: "TRN-1048",
-    name: "fazala, mashona J.",
-    inmateId: "INM-88392",
-    court: "Central Criminal Court",
-    time: "Oct 25, 2023 · 08:30",
-    escort: "Unit Bravo",
-  },
-  {
-    id: "TRN-1051",
-    name: "Dunga, Marie Nkhwani",
-    inmateId: "INM-91024",
-    court: "Financial Crimes Division",
-    time: "Oct 25, 2023 · 10:00",
-    escort: "Unit Delta",
-  },
-  {
-    id: "TRN-1054",
-    name: "kayaman, Zako E.",
-    inmateId: "INM-95521",
-    court: "District Court 3",
-    time: "Oct 26, 2023 · 09:15",
-    escort: "Unit Bravo",
-  },
-];
 const initials = (name: string) =>
   name
     .replace(",", "")
@@ -145,19 +67,18 @@ const initials = (name: string) =>
     .slice(0, 2)
     .join("");
 const emptyAdmission: AdmissionForm = {
-  id: "",
   fullName: "",
-  offense: "",
-  warrant: "",
-  block: "Block A",
   cell: "",
-  status: "Pre-Trial",
+  status: "REMAND",
   admissionDate: new Date().toISOString().slice(0, 10),
-  arrestingStation: "",
   dateOfBirth: "",
   gender: "Other",
-  sentenceStartDate: new Date().toISOString().slice(0, 10),
-  sentenceEndDate: "",
+  bio: "",
+  medicalHistory: "",
+  expectedCourtDate: "",
+  nextOfKinName: "",
+  nextOfKinRelationship: "",
+  nextOfKinPhone: "",
 };
 const displayDate = (date: string) =>
   new Intl.DateTimeFormat("en-US", {
@@ -170,24 +91,18 @@ function toDirectoryRecord(inmate: ApiInmate): Inmate {
   return {
     id: inmate.id,
     fullName: `${inmate.firstName} ${inmate.lastName}`.trim(),
-    offense: inmate.offence,
-    warrant: "—",
-    block: "Assigned cell",
+    bio: inmate.bio,
     cell: inmate.cellId,
-    status: "Active Sentence",
+    status: inmate.inmateType,
     admissionDate: inmate.admissionDate ? displayDate(inmate.admissionDate) : "—",
-    arrestingStation: "—",
     dateOfBirth: inmate.dateOfBirth,
     gender: inmate.gender,
-    sentenceStartDate: inmate.sentenceStartDate,
-    sentenceEndDate: inmate.sentenceEndDate,
+    expectedCourtDate: inmate.expectedCourtDate,
   };
 }
-
 export function InmateManagement({ canAdmit }: Props) {
   const [search, setSearch] = useState("");
-  const [offense, setOffense] = useState("All");
-  const [block, setBlock] = useState("All");
+  const [bio, setBio] = useState("All");
   const [status, setStatus] = useState("All");
   const [records, setRecords] = useState<Inmate[]>([]);
   const [loading, setLoading] = useState(true);
@@ -199,7 +114,6 @@ export function InmateManagement({ canAdmit }: Props) {
   const [loadingCells, setLoadingCells] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [admissionError, setAdmissionError] = useState<string | null>(null);
-  const [page, setPage] = useState<"census" | "transfers">("census");
 
   useEffect(() => {
     inmateService.getInmates()
@@ -219,25 +133,26 @@ export function InmateManagement({ canAdmit }: Props) {
   useEffect(() => {
     if (!admissionOpen) return;
 
-    setLoadingCells(true);
     inmateService.getCells({ size: 100 })
       .then(setCells)
-      .catch(() => setAdmissionError("Could not load available cells. Please try again."))
+      .catch((error: unknown) => {
+        setAdmissionError(
+          error instanceof Error ? error.message : "Could not load available cells.",
+        );
+      })
       .finally(() => setLoadingCells(false));
   }, [admissionOpen]);
   const filtered = useMemo(
     () =>
       records.filter((record) => {
-        const haystack =
-          `${record.fullName} ${record.offense} ${record.block}`.toLowerCase();
+        const haystack = `${record.fullName} ${record.bio} ${record.cell}`.toLowerCase();
         return (
           (!search || haystack.includes(search.toLowerCase())) &&
-          (offense === "All" || record.offense === offense) &&
-          (block === "All" || record.block === block) &&
+          (bio === "All" || record.bio === bio) &&
           (status === "All" || record.status === status)
         );
       }),
-    [records, search, offense, block, status],
+    [records, search, bio, status],
   );
   const closeAdmission = () => {
     setAdmissionOpen(false);
@@ -250,10 +165,15 @@ export function InmateManagement({ canAdmit }: Props) {
       ["date of birth", admission.dateOfBirth],
       ["gender", admission.gender],
       ["admission date", admission.admissionDate],
-      ["offense", admission.offense.trim()],
-      ["sentence start date", admission.sentenceStartDate],
-      ["sentence end date", admission.sentenceEndDate],
+      ["bio", admission.bio.trim()],
+      ["medical history", admission.medicalHistory.trim()],
+      ["next-of-kin name", admission.nextOfKinName.trim()],
+      ["next-of-kin relationship", admission.nextOfKinRelationship.trim()],
+      ["next-of-kin phone", admission.nextOfKinPhone.trim()],
       ["cell", admission.cell],
+      ...(admission.status === "REMAND"
+        ? [["expected court date", admission.expectedCourtDate]]
+        : []),
     ].filter(([, value]) => !value).map(([field]) => field);
     if (missingFields.length) {
       setAdmissionError(`Complete the following required fields: ${missingFields.join(", ")}.`);
@@ -261,8 +181,8 @@ export function InmateManagement({ canAdmit }: Props) {
     }
 
     const selectedCell = cells.find((cell) => cell.id === admission.cell);
-    if (!selectedCell?.prisonId) {
-      setAdmissionError("The selected cell has no prison assignment. Reload the cell list and try again.");
+    if (!selectedCell || selectedCell.availableSpaces <= 0) {
+      setAdmissionError("The selected cell is unavailable or full. Reload the cell list and choose another cell.");
       return;
     }
 
@@ -273,47 +193,40 @@ export function InmateManagement({ canAdmit }: Props) {
       dateOfBirth: admission.dateOfBirth,
       gender: admission.gender,
       admissionDate: admission.admissionDate,
-      offence: admission.offense,
-      sentenceStartDate: admission.sentenceStartDate,
-      sentenceEndDate: admission.sentenceEndDate,
-      prisonId: selectedCell.prisonId,
+      inmateType: admission.status,
+      bio: admission.bio.trim(),
+      medicalHistory: admission.medicalHistory.trim(),
+      nextOfKinName: admission.nextOfKinName.trim(),
+      nextOfKinRelationship: admission.nextOfKinRelationship.trim(),
+      nextOfKinPhone: admission.nextOfKinPhone.trim(),
       cellId: admission.cell,
+      ...(admission.status === "REMAND"
+        ? { expectedCourtDate: admission.expectedCourtDate }
+        : {}),
     };
     setSavingAdmission(true);
     setAdmissionError(null);
     setNotice(null);
     try {
       const created = await inmateService.createInmate(request);
-      const savedInmate: ApiInmate = {
-        ...request,
-        ...created,
-        id: created.id || `new-${Date.now()}`,
-      };
-
       setRecords((current) => [
-        toDirectoryRecord(savedInmate),
-        ...current.filter((record) => record.id !== savedInmate.id),
+        toDirectoryRecord(created),
+        ...current.filter((record) => record.id !== created.id),
       ]);
       closeAdmission();
-      setNotice(`${savedInmate.firstName} ${savedInmate.lastName} has been added to the census.`);
+      setNotice(`${created.firstName} ${created.lastName} has been added to the census.`);
       try {
         const refreshed = await inmateService.getInmates();
-        setRecords((current) => {
-          const refreshedRecords = refreshed.map(toDirectoryRecord);
-          const savedRecord = toDirectoryRecord(savedInmate);
-          return refreshedRecords.some((record) => record.id === savedRecord.id)
-            ? refreshedRecords
-            : [savedRecord, ...refreshedRecords];
-        });
+        setRecords(refreshed.map(toDirectoryRecord));
       } catch {
-        setNotice("Inmate was saved, but the census could not be refreshed.");
+        setNotice("Inmate was saved, but the census could not be refreshed. Reload the page before retrying this admission.");
       }
     } catch (error) {
       if (axios.isAxiosError(error)) {
         if (error.response?.status === 401) {
           setAdmissionError("Your session has expired. Sign in again before saving an admission.");
         } else if (!error.response) {
-          setAdmissionError("The inmate service is unreachable. Make sure the API is running on localhost:8080.");
+          setAdmissionError("The admission could not be confirmed; the API may have saved it before the connection failed. Check the census before retrying.");
         } else {
           const responseMessage = error.response.data &&
             typeof error.response.data === "object" &&
@@ -329,14 +242,12 @@ export function InmateManagement({ canAdmit }: Props) {
       setSavingAdmission(false);
     }
   };
-  if (page === "transfers")
-    return <TransferSchedule onBack={() => setPage("census")} />;
   return (
     <Box className="census-page">
       {notice && (
         <Alert
           className="census-notice"
-          severity="success"
+          severity={censusLoadError ? "error" : "success"}
           onClose={() => setNotice(null)}
         >
           {notice}
@@ -354,14 +265,16 @@ export function InmateManagement({ canAdmit }: Props) {
               admissions.
             </Typography>
           </Box>
-          <Stack direction="row" gap={1} className="portal-actions gap-5">
+          <Stack direction="row" className="portal-actions gap-5">
             <Button
               type="button"
               className="workflow-button"
               onClick={() => {
                 setAdmissionError(null);
+                setLoadingCells(true);
                 setAdmissionOpen(true);
               }}
+              disabled={!canAdmit}
             >
               New admission
             </Button>
@@ -378,48 +291,37 @@ export function InmateManagement({ canAdmit }: Props) {
         />
         <Metric
           label="Scheduled transfers"
-          value="8"
-          note="Outbound court transit"
+          value="—"
+          note="Court scheduling is not exposed by the API"
           tone="blue"
-          onClick={() => setPage("transfers")}
         />
       </Box>
       <Paper className="filter-bar" elevation={0}>
         <TextField
-          placeholder="Search by name, offense, or block"
+        placeholder="Search by name, bio, or cell"
           value={search}
           onChange={(event) => setSearch(event.target.value)}
         />
         <Select
-          value={offense}
-          onChange={(event) => setOffense(event.target.value)}
+          value={bio}
+          onChange={(event) => setBio(event.target.value)}
         >
-          {["All", ...new Set(records.map((record) => record.offense))].map(
+          {["All", ...new Set(records.map((record) => record.bio))].map(
             (option) => (
               <MenuItem key={option} value={option}>
-                {option === "All" ? "All offenses" : option}
+                {option === "All" ? "All bios" : option}
               </MenuItem>
             ),
           )}
         </Select>
         <Select
-          value={block}
-          onChange={(event) => setBlock(event.target.value)}
-        >
-          {["All", "Block A", "Block B", "Block C"].map((option) => (
-            <MenuItem key={option} value={option}>
-              {option === "All" ? "All blocks" : option}
-            </MenuItem>
-          ))}
-        </Select>
-        <Select
           value={status}
           onChange={(event) => setStatus(event.target.value)}
         >
-          {["All", "Max Security", "Active Sentence", "Pre-Trial"].map(
+          {["All", "SENTENCED", "REMAND"].map(
             (option) => (
               <MenuItem key={option} value={option}>
-                {option === "All" ? "All statuses" : option}
+                {option === "All" ? "All custody types" : option}
               </MenuItem>
             ),
           )}
@@ -428,8 +330,7 @@ export function InmateManagement({ canAdmit }: Props) {
           className="reset-button"
           onClick={() => {
             setSearch("");
-            setOffense("All");
-            setBlock("All");
+            setBio("All");
             setStatus("All");
           }}
         >
@@ -453,8 +354,8 @@ export function InmateManagement({ canAdmit }: Props) {
               <TableRow>
                 <TableCell>Inmate ID / Photo</TableCell>
                 <TableCell>Full Name</TableCell>
-                <TableCell>Offense &amp; Warrant</TableCell>
-                <TableCell>Location / Cell</TableCell>
+                <TableCell>Inmate Bio</TableCell>
+                <TableCell>Assigned Cell</TableCell>
                 <TableCell>Custody Status</TableCell>
                 <TableCell>Admission Date</TableCell>
               </TableRow>
@@ -472,17 +373,13 @@ export function InmateManagement({ canAdmit }: Props) {
                   </TableCell>
                   <TableCell className="full-name">{record.fullName}</TableCell>
                   <TableCell>
-                    {record.offense}
-                    <small>{record.warrant}</small>
+                    {record.bio}
                   </TableCell>
-                  <TableCell>
-                    {record.block}
-                    <small>{record.cell}</small>
-                  </TableCell>
+                  <TableCell>{record.cell}</TableCell>
                   <TableCell>
                     <Chip
                       className={`custody ${record.status.replace(" ", "-").toLowerCase()}`}
-                      label={`• ${record.status}`}
+                      label={`• ${record.status === "SENTENCED" ? "Sentenced" : "Remand"}`}
                     />
                   </TableCell>
                   <TableCell>{record.admissionDate}</TableCell>
@@ -492,15 +389,7 @@ export function InmateManagement({ canAdmit }: Props) {
           </Table>
         </TableContainer>
         <Box className="pagination">
-          Showing           <strong>1 - {filtered.length} of {records.length}</strong> total records{" "}
-          <Box sx={{ flexGrow: 1 }} />
-          <Button disabled>Previous</Button>
-          <Button className="active-page">1</Button>
-          <Button>2</Button>
-          <Button>3</Button>
-          <span>...</span>
-          <Button>242</Button>
-          <Button>Next</Button>
+          Showing <strong>{filtered.length} of {records.length}</strong> loaded API records
         </Box>
       </Paper>
       <Dialog
@@ -559,41 +448,11 @@ export function InmateManagement({ canAdmit }: Props) {
               >
                 {["Male", "Female", "Other"].map((item) => <MenuItem key={item} value={item}>{item}</MenuItem>)}
               </TextField>
-              <TextField
-                required
-                label="Offense"
-                value={admission.offense}
-                onChange={(event) =>
-                  setAdmission({ ...admission, offense: event.target.value })
-                }
-              />
-              <TextField
-                label="Warrant number"
-                value={admission.warrant}
-                onChange={(event) =>
-                  setAdmission({ ...admission, warrant: event.target.value })
-                }
-              />
             </Box>
           </Box>
           <Box component="fieldset" className="admission-section">
             <legend>Placement &amp; custody</legend>
             <Box className="admission-fields admission-placement-fields">
-              <TextField
-                select
-                required
-                label="Cell block"
-                value={admission.block}
-                onChange={(event) =>
-                  setAdmission({ ...admission, block: event.target.value })
-                }
-              >
-                {["Block A", "Block B", "Block C"].map((item) => (
-                  <MenuItem key={item} value={item}>
-                    {item}
-                  </MenuItem>
-                ))}
-              </TextField>
               <TextField
                 select
                 required
@@ -624,7 +483,7 @@ export function InmateManagement({ canAdmit }: Props) {
               <TextField
                 select
                 required
-                label="Custody status"
+                label="Inmate type"
                 value={admission.status}
                 onChange={(event) =>
                   setAdmission({
@@ -633,14 +492,65 @@ export function InmateManagement({ canAdmit }: Props) {
                   })
                 }
               >
-                {["Max Security", "Active Sentence", "Pre-Trial"].map(
-                  (item) => (
-                    <MenuItem key={item} value={item}>
-                      {item}
-                    </MenuItem>
-                  ),
-                )}
+                <MenuItem value="REMAND">Remand</MenuItem>
+                <MenuItem value="SENTENCED">Sentenced</MenuItem>
               </TextField>
+            </Box>
+            {admission.status === "SENTENCED" && (
+              <Alert severity="info" sx={{ mt: 2 }}>
+                This request enrolls the inmate only. The backend requires a
+                separate sentence record; sentence dates and offences are not
+                saved by this admission form.
+              </Alert>
+            )}
+          </Box>
+          <Box component="fieldset" className="admission-section">
+            <legend>Required personal and medical details</legend>
+            <Box className="admission-fields">
+              <TextField
+                required
+                label="Bio"
+                multiline
+                minRows={2}
+                value={admission.bio}
+                onChange={(event) => setAdmission({ ...admission, bio: event.target.value })}
+              />
+              <TextField
+                required
+                label="Medical history"
+                multiline
+                minRows={2}
+                value={admission.medicalHistory}
+                onChange={(event) => setAdmission({ ...admission, medicalHistory: event.target.value })}
+              />
+              <TextField
+                required
+                label="Next-of-kin name"
+                value={admission.nextOfKinName}
+                onChange={(event) => setAdmission({ ...admission, nextOfKinName: event.target.value })}
+              />
+              <TextField
+                required
+                label="Next-of-kin relationship"
+                value={admission.nextOfKinRelationship}
+                onChange={(event) => setAdmission({ ...admission, nextOfKinRelationship: event.target.value })}
+              />
+              <TextField
+                required
+                label="Next-of-kin phone"
+                value={admission.nextOfKinPhone}
+                onChange={(event) => setAdmission({ ...admission, nextOfKinPhone: event.target.value })}
+              />
+              {admission.status === "REMAND" && (
+                <TextField
+                  required
+                  label="Expected court date"
+                  type="date"
+                  value={admission.expectedCourtDate}
+                  onChange={(event) => setAdmission({ ...admission, expectedCourtDate: event.target.value })}
+                  slotProps={{ inputLabel: { shrink: true } }}
+                />
+              )}
             </Box>
           </Box>
           <Box component="fieldset" className="admission-section">
@@ -658,32 +568,6 @@ export function InmateManagement({ canAdmit }: Props) {
                   })
                 }
                 slotProps={{ inputLabel: { shrink: true } }}
-              />
-              <TextField
-                required
-                label="Sentence start date"
-                type="date"
-                value={admission.sentenceStartDate}
-                onChange={(event) => setAdmission({ ...admission, sentenceStartDate: event.target.value })}
-                slotProps={{ inputLabel: { shrink: true } }}
-              />
-              <TextField
-                required
-                label="Sentence end date"
-                type="date"
-                value={admission.sentenceEndDate}
-                onChange={(event) => setAdmission({ ...admission, sentenceEndDate: event.target.value })}
-                slotProps={{ inputLabel: { shrink: true } }}
-              />
-              <TextField
-                label="Arresting station"
-                value={admission.arrestingStation}
-                onChange={(event) =>
-                  setAdmission({
-                    ...admission,
-                    arrestingStation: event.target.value,
-                  })
-                }
               />
             </Box>
           </Box>
@@ -738,73 +622,5 @@ function Metric({
         <Typography className="metric-action">View schedule →</Typography>
       )}
     </Paper>
-  );
-}
-
-function TransferSchedule({ onBack }: { onBack: () => void }) {
-  return (
-    <Box className="census-page transfer-page">
-      <Button className="back-button" onClick={onBack}>
-        ← Back to inmate census
-      </Button>
-      <Box className="transfer-heading">
-        <Typography className="crumb">Operations</Typography>
-        <Typography component="h1">Scheduled court transfers</Typography>
-        <Typography>
-          Inmates scheduled for escorted transport to court.
-        </Typography>
-      </Box>
-      <Paper className="directory transfer-directory" elevation={0}>
-        <Box className="directory-title">
-          <Box>
-            <Typography component="h2">Schedules</Typography>
-            <Typography>
-              {scheduledTransfers.length} upcoming court movements
-            </Typography>
-          </Box>
-        </Box>
-        <TableContainer>
-          <Table className="census-table">
-            <TableHead>
-              <TableRow>
-                <TableCell>Transfer ID</TableCell>
-                <TableCell>Inmate</TableCell>
-                <TableCell>Destination facility</TableCell>
-                <TableCell>Departure</TableCell>
-                <TableCell>Escort detail</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {scheduledTransfers.map((transfer) => (
-                <TableRow key={transfer.id}>
-                  <TableCell>
-                    <code>{transfer.id}</code>
-                  </TableCell>
-                  <TableCell>
-                    <Box className="id-photo">
-                      <span className="mugshot">{initials(transfer.name)}</span>
-                      <Box>
-                        <Typography className="full-name">
-                          {transfer.name}
-                        </Typography>
-                        <small>{transfer.inmateId}</small>
-                      </Box>
-                    </Box>
-                  </TableCell>
-                  <TableCell>{transfer.court}</TableCell>
-                  <TableCell>{transfer.time}</TableCell>
-                  <TableCell>
-                    <Chip
-                      className="custody active-sentence"
-                      label={transfer.escort}
-                    />
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
-      </Paper>
-    </Box>
   );
 }

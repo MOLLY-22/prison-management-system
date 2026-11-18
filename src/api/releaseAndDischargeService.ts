@@ -1,4 +1,4 @@
-import api from "./axios";
+import api from "./axiosClient";
 
 export type InmateRecord = Record<string, unknown> & { id: string | number };
 export type DischargeEvent = Record<string, unknown>;

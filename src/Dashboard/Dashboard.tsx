@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../context/AuthContext";
-import api from "../api/axios";
+import api from "../api/axiosClient";
 import { collectionFrom } from "../api/dataContract";
 import { InmateManagement } from "../pages/InmateManagement";
 import Visitors from "../pages/Visitors";
 import ReleaseManagement from "../pages/ReleaseManagement";
 import UserAccess from "../pages/UserAccess";
 import TransferManagement from "../pages/TransferManagement";
+
 
 type View =
   | "overview"
@@ -28,7 +29,7 @@ const navigation: { id: View; label: string; short: string }[] = [
 
 const endpointFor: Partial<Record<View, string>> = {
   inmates: "/inmates",
-  visitors: "/visitors",
+  visitors: "/visits",
   transfers: "/transfers",
   release: "/releases",
   access: "/users",
@@ -49,7 +50,6 @@ function DataView({ view }: { view: View }) {
 
   useEffect(() => {
     let active = true;
-    setLoading(true);
     api
       .get(resource)
       .then(({ data }) => active && setRecords(collectionFrom<RecordItem>(data)))
@@ -76,13 +76,12 @@ function DataView({ view }: { view: View }) {
     return [...keys].filter((key) => key !== "id").slice(0, 5);
   }, [records]);
 
+
+
   return (
     <section className="overflow-hidden rounded-2xl border border-[#d9e2ec] bg-white shadow-[0_12px_40px_rgba(27,53,79,0.06)]">
       <div className="flex flex-wrap items-end justify-between gap-4 border-b border-[#e5ebf0] p-6">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#3f769e]">
-            Live API records
-          </p>
           <h2 className="mt-2 text-2xl font-semibold tracking-[-0.03em] text-[#17324d]">
             {navigation.find((item) => item.id === view)?.label}
           </h2>
@@ -277,7 +276,7 @@ function ModuleView({ view }: { view: View }) {
 }
 
 export default function Dashboard() {
-  const { user, logout } = useAuth();
+  const { user, logout, authError } = useAuth();
   const [view, setView] = useState<View>("overview");
   const active = navigation.find((item) => item.id === view) ?? navigation[0];
   return (
@@ -322,9 +321,6 @@ export default function Dashboard() {
             <p className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-[#2876a8]">
               Operations / {active.label}
             </p>
-            <h1 className="mt-1 font-['Georgia',_'Times_New_Roman',serif] text-[clamp(28px,4vw,36px)] font-medium leading-[1.1] tracking-[-0.04em] text-[#132d47]">
-              {view === "overview" ? "Facility overview" : active.label}
-            </h1>
           </div>
           <div className="flex items-center gap-3">
             <div className="hidden text-right sm:block">
@@ -344,6 +340,11 @@ export default function Dashboard() {
           </div>
         </header>
         <div className="p-5 sm:p-8">
+          {authError && (
+            <p className="mb-5 rounded-lg border border-[#f4c8c8] bg-[#fff3f3] px-4 py-3 text-sm text-[#b42318]" role="alert">
+              {authError}
+            </p>
+          )}
           <div className="mb-7 flex items-center gap-2 overflow-x-auto lg:hidden">
             {navigation.map((item) => (
               <button

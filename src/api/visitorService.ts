@@ -1,5 +1,5 @@
-import api from "./axios";
-import { asRecord, collectionFrom, fetchAllPages, firstValue, itemFrom } from "./dataContract";
+import api from "./axiosClient";
+import { asRecord, collectionFrom, fetchAllPages, firstValue, itemFrom, requiredIdentifier } from "./dataContract";
 
 export type VisitorStatus = "Scheduled";
 
@@ -57,10 +57,11 @@ export function normalizeVisitor(payload: unknown): Visitor {
     const record = asRecord(payload);
     const visitor = asRecord(record.visitor);
     const inmate = asRecord(record.inmate);
+    const id = requiredIdentifier(record, ["id", "visitId", "visit_id"], "visit");
     const start = String(firstValue(record, ["startTime", "start_time", "startDateTime", "start_date_time"], ""));
     const end = String(firstValue(record, ["endTime", "end_time", "endDateTime", "end_date_time"], ""));
     return {
-        id: String(firstValue(record, ["id", "visitId", "visit_id"], "")),
+        id,
         visitorId: String(firstValue(visitor, ["id", "visitorId"], firstValue(record, ["id"], ""))),
         name: String(firstValue(visitor, ["fullName", "name"], firstValue(record, ["visitorFullName", "visitorName"], ""))),
         inmate: String(firstValue(inmate, ["fullName", "name"], [firstValue(inmate, ["firstName"], ""), firstValue(inmate, ["lastName"], "")].filter(Boolean).join(" "))),
@@ -95,8 +96,16 @@ export const visitorService = {
     },
 
     async getInmateVisitHistory(inmateId: string, params?: Omit<VisitListParams, "visitId" | "inmateId" | "inmateName" | "loggedBy">): Promise<Visitor[]> {
-        const response = await api.get(`/inmates/${encodeURIComponent(inmateId)}/visits`, { params });
-        return collectionFrom(response.data).map(normalizeVisitor);
+        const path = `/inmates/${encodeURIComponent(inmateId)}/visits`;
+        if (params?.page !== undefined) {
+            const response = await api.get(path, { params });
+            return collectionFrom(response.data).map(normalizeVisitor);
+        }
+        const query = { size: 100, ...params };
+        const records = await fetchAllPages<unknown>((page) =>
+            api.get(path, { params: { ...query, page } }).then(({ data }) => data),
+        );
+        return records.map(normalizeVisitor);
     },
 
     async searchInmates(query: string): Promise<InmateLookup[]> {
@@ -110,7 +119,7 @@ export const visitorService = {
         return normalizeInmates(records);
     },
     async registerVisitor(payload: VisitRequest): Promise<Visitor> {
-        const response = await api.post("/visits", payload);
+        const response = await api.post("/visits/family-friends", payload);
         return normalizeVisitor(itemFrom(response.data));
     },
 };

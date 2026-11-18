@@ -1,5 +1,5 @@
-import api from "./axios";
-import { asBoolean, asRecord, collectionFrom, fetchAllPages, firstValue, itemFrom } from "./dataContract";
+import api from "./axiosClient";
+import { asBoolean, asRecord, collectionFrom, fetchAllPages, firstValue, itemFrom, requiredIdentifier } from "./dataContract";
 
 export type PrisonCell = {
     id: string;
@@ -107,29 +107,30 @@ export const prisonService = {
 
 function normalizePrison(payload: unknown): Prison {
     const record = asRecord(payload);
-    const id = String(firstValue(record, ["id", "prisonId", "prison_id"], ""));
+    const id = requiredIdentifier(record, ["id", "prisonId", "prison_id"], "prison");
     return {
         id,
         name: String(firstValue(record, ["name"], "")),
         location: String(firstValue(record, ["location"], "")),
         active: asBoolean(firstValue(record, ["active"], true), true),
-        blocks: collectionFrom(record.blocks).map((block) => normalizeBlock(block, id)),
+        blocks: collectionFrom(record.blocks ?? []).map((block) => normalizeBlock(block, id)),
     };
 }
 
 function normalizeBlock(payload: unknown, prisonId: string): PrisonBlock {
     const record = asRecord(payload);
-    const blockId = String(firstValue(record, ["id", "blockId", "block_id"], ""));
+    const blockId = requiredIdentifier(record, ["id", "blockId", "block_id"], "block");
     const blockName = String(firstValue(record, ["name", "blockName", "block_name"], ""));
     return {
         id: blockId,
         name: blockName,
-        cells: collectionFrom(record.cells).map((cell) => {
+        cells: collectionFrom(record.cells ?? []).map((cell) => {
             const cellRecord = asRecord(cell);
+            const cellId = requiredIdentifier(cellRecord, ["id", "cellId", "cell_id"], "cell");
             const capacity = Number(firstValue(cellRecord, ["capacity"], 0));
             const occupancy = Number(firstValue(cellRecord, ["currentOccupancy", "current_occupancy"], 0));
             return {
-                id: String(firstValue(cellRecord, ["id", "cellId", "cell_id"], "")),
+                id: cellId,
                 prisonId: String(firstValue(cellRecord, ["prisonId", "prison_id"], prisonId)),
                 blockId: String(firstValue(cellRecord, ["blockId", "block_id"], blockId)),
                 blockName: String(firstValue(cellRecord, ["blockName", "block_name"], blockName)),

@@ -1,5 +1,5 @@
-import api from "./axios";
-import { asRecord, collectionFrom, fetchAllPages, firstValue, itemFrom } from "./dataContract";
+import api from "./axiosClient";
+import { asRecord, collectionFrom, fetchAllPages, firstValue, itemFrom, requiredIdentifier } from "./dataContract";
 
 export type TransferStatus =
     | "PENDING"
@@ -61,7 +61,7 @@ export const transferService = {
     async approveTransfer(id: string, destinationCellId: string): Promise<TransferRecord> {
         const response = await api.post(
             `/transfers/${encodeURIComponent(id)}/approve`,
-            { destinationCellId },
+            { cellId: destinationCellId },
         );
         return normalizeTransfer(itemFrom(response.data));
     },
@@ -79,11 +79,12 @@ export const transferService = {
 
 function normalizeTransfer(payload: unknown): TransferRecord {
     const record = asRecord(payload);
+    const id = requiredIdentifier(record, ["id", "transferId", "transfer_id"], "transfer");
     const inmate = asRecord(record.inmate);
     const sourcePrison = asRecord(firstValue(record, ["sourcePrison", "originPrison", "fromPrison"], {}));
     const destinationPrison = asRecord(firstValue(record, ["destinationPrison", "toPrison"], {}));
     return {
-        id: String(firstValue(record, ["id", "transferId", "transfer_id"], "")),
+        id,
         inmateId: String(firstValue(inmate, ["id", "inmateId"], firstValue(record, ["inmateId", "inmate_id"], ""))),
         inmateName: String(firstValue(inmate, ["fullName", "name"], [firstValue(inmate, ["firstName"], ""), firstValue(inmate, ["lastName"], "")].filter(Boolean).join(" "))),
         inmateNumber: String(firstValue(inmate, ["inmateNumber", "number", "fileNumber"], firstValue(record, ["inmateNumber", "inmate_number"], ""))),

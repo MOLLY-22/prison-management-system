@@ -14,6 +14,24 @@ export function firstValue<T>(record: UnknownRecord, keys: string[], fallback: T
     return fallback;
 }
 
+export function requiredIdentifier(
+    record: UnknownRecord,
+    keys: string[],
+    resource: string,
+): string {
+    for (const key of keys) {
+        const value = record[key];
+        if (
+            typeof value === "string" ||
+            (typeof value === "number" && Number.isFinite(value))
+        ) {
+            const identifier = String(value).trim();
+            if (identifier) return identifier;
+        }
+    }
+    throw new TypeError(`Unexpected ${resource} response. The required id is missing.`);
+}
+
 export function collectionFrom<T = unknown>(payload: unknown): T[] {
     if (Array.isArray(payload)) return payload as T[];
     const record = asRecord(payload);
@@ -35,12 +53,14 @@ export function collectionFrom<T = unknown>(payload: unknown): T[] {
         if (Array.isArray(record[key])) return record[key] as T[];
     }
     for (const key of ["data", "result"]) {
-        if (record[key] && typeof record[key] === "object") {
-            const nested = collectionFrom<T>(record[key]);
-            if (nested.length) return nested;
+        const nested = record[key];
+        if (Array.isArray(nested) || (nested && typeof nested === "object")) {
+            return collectionFrom<T>(nested);
         }
     }
-    return [];
+    throw new TypeError(
+        "Unexpected API collection response. Expected an array or a supported collection envelope.",
+    );
 }
 
 export async function fetchAllPages<T>(
@@ -48,15 +68,39 @@ export async function fetchAllPages<T>(
 ): Promise<T[]> {
     const firstPage = await fetchPage(0);
     const records = collectionFrom<T>(firstPage);
-    const totalPages = Number(asRecord(firstPage).totalPages);
+    if (Array.isArray(firstPage)) return records;
 
-    if (!Number.isInteger(totalPages) || totalPages < 2) return records;
+    const totalPages = totalPagesFrom(firstPage);
+    if (totalPages === null) {
+        throw new TypeError(
+            "Unexpected paginated API response. Expected a non-negative totalPages value.",
+        );
+    }
+    if (totalPages < 2) return records;
 
     for (let page = 1; page < totalPages; page += 1) {
         records.push(...collectionFrom<T>(await fetchPage(page)));
     }
 
     return records;
+}
+
+function totalPagesFrom(payload: unknown): number | null {
+    const record = asRecord(payload);
+    const value = record.totalPages;
+    if (value !== undefined) {
+        if (typeof value !== "number") return null;
+        const totalPages = Number(value);
+        return Number.isInteger(totalPages) && totalPages >= 0 ? totalPages : null;
+    }
+    for (const key of ["data", "result"]) {
+        const nested = record[key];
+        if (nested && typeof nested === "object") {
+            const totalPages = totalPagesFrom(nested);
+            if (totalPages !== null) return totalPages;
+        }
+    }
+    return null;
 }
 
 export function itemFrom<T>(payload: unknown): T {

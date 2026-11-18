@@ -4,7 +4,7 @@ import AddUserForm from "../components/addUserForm";
 import "./userAccess.css";
 
 function initials(name: string) {
-    return name.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase();
+    return name.trim().split(/\s+/).filter(Boolean).map((part) => part[0]).join("").slice(0, 2).toUpperCase();
 }
 
 function messageFrom(error: unknown, fallback: string) {
@@ -26,24 +26,35 @@ export default function UserAccess() {
     const [editingUser, setEditingUser] = useState<User | null>(null);
 
     useEffect(() => {
-        let mounted = true;
-        userService.getUsers()
-            .then((data: User[]) => {
-                if (mounted) setUsers(Array.isArray(data) ? data : []);
+        let cancelled = false;
+
+        void userService.getUsers()
+            .then((users) => {
+                if (!cancelled) {
+                    setUsers(users);
+                    setError("");
+                }
             })
             .catch((reason: unknown) => {
-                if (mounted) setError(messageFrom(reason, "Could not load personnel records."));
+                if (!cancelled) {
+                    setError(messageFrom(reason, "Could not load personnel records."));
+                }
             })
             .finally(() => {
-                if (mounted) setLoading(false);
+                if (!cancelled) {
+                    setLoading(false);
+                }
             });
-        return () => { mounted = false; };
+
+        return () => {
+            cancelled = true;
+        };
     }, []);
 
     const filteredUsers = useMemo(() => {
         const query = search.trim().toLowerCase();
         return users.filter((user) => {
-            const matchesQuery = !query || `${user.name} ${user.badgeId} ${user.role} ${user.facility}`.toLowerCase().includes(query);
+            const matchesQuery = !query || `${user.name} ${user.badgeId ?? user.username ?? ""} ${user.role} ${user.facility ?? user.prisonName ?? ""}`.toLowerCase().includes(query);
             return matchesQuery && (statusFilter === "all" || user.status === statusFilter);
         });
     }, [search, statusFilter, users]);
@@ -87,14 +98,13 @@ export default function UserAccess() {
             )}
 
             <section className="access-summary" aria-label="Access control summary">
-                <div className="summary-card"><span>Active personnel</span><strong>{activeCount}</strong><small>From loaded API records</small></div>
-                <div className="summary-card"><span>Inactive accounts</span><strong>{inactiveCount}</strong><small>From loaded API records</small></div>
+                <div className="summary-card"><span>Active personnel</span><strong>{activeCount}</strong></div>
+                <div className="summary-card"><span>Inactive accounts</span><strong>{inactiveCount}</strong></div>
             </section>
 
             <section className="access-panel" id="personnel">
                 <div className="access-panel-heading">
                     <div>
-                        <p className="section-kicker">Identity governance</p>
                         <h2>Personnel Detail </h2>
                         <p>Manage security clearances and active role allocations</p>
                     </div>
@@ -123,16 +133,16 @@ export default function UserAccess() {
 
                 <div className="access-table-wrap">
                     <table className="access-table">
-                        <thead><tr><th>Personnel name</th><th>Badge ID</th><th>Assigned role</th><th>Facility sector</th><th>Status</th><th>Actions</th></tr></thead>
+                        <thead><tr><th>Personnel name</th><th>User ID</th><th>Assigned role</th><th>Facility sector</th><th>Status</th><th>Actions</th></tr></thead>
                         <tbody>
                             {loading && <tr><td className="access-empty" colSpan={6}>Loading personnel records…</td></tr>}
                             {!loading && filteredUsers.length === 0 && <tr><td className="access-empty" colSpan={6}>No personnel match the current filters.</td></tr>}
                             {!loading && filteredUsers.map((user) => (
                                 <tr key={user.id}>
-                                    <td><span className="person-chip"><span className="person-initials">{initials(user.name)}</span><strong>{user.name}</strong></span></td>
-                                    <td><code>{user.badgeId}</code></td>
-                                    <td>{user.role}</td>
-                                    <td className="muted">{user.prisonName || user.facility || "—"}</td>
+                                    <td><span className="person-chip"><span className="person-initials">{initials(user.name)}</span><strong>{user.name || "—"}</strong></span></td>
+                                    <td>{user.badgeId || user.username || "—"}</td>
+                                    <td>{user.role || "—"}</td>
+                                    <td className="muted">{user.facility || user.prisonName || user.prisonId || "—"}</td>
                                     <td><span className={`status-pill ${user.status === "Active" ? "is-active" : "is-inactive"}`}><i aria-hidden="true" />{user.status}</span></td>
                                     <td><div className="row-actions">
                                         <button type="button" onClick={() => openEdit(user)} aria-label={`Edit ${user.name}`}>Edit</button>
@@ -143,12 +153,9 @@ export default function UserAccess() {
                         </tbody>
                     </table>
                 </div>
-                <div className="table-footer"><span>Showing {filteredUsers.length} of {users.length} personnel entries</span><span className="table-note">Role changes are logged automatically</span></div>
+                <div className="table-footer"><span>Showing {filteredUsers.length} of {users.length} personnel entries</span></div>
             </section>
-
-            <p className="table-note">
-                Available roles are defined by the backend. The API does not expose a configurable permission matrix or security-audit feed for this screen.
-            </p>
-        </div>
+        </div>      
     );
 }
+

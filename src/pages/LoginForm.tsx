@@ -5,6 +5,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import "./loginForm.css";
 
+
 type LoginLocationState = {
     from?: {
         pathname: string;
@@ -99,6 +100,8 @@ export default function LoginForm() {
     const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
         setErrorMessage("");
+        console.log("Submitting login form with credentials:", credentials);
+
 
         try {
             await login(credentials);
@@ -153,7 +156,7 @@ export default function LoginForm() {
 
                     <form className="flex flex-col gap-5" onSubmit={handleSubmit}>
                         <label className="flex flex-col gap-2" htmlFor="username">
-                            <span className="text-sm font-medium text-[#191c1e]">Agency ID or username</span>
+                            <span className="text-sm font-medium text-[#191c1e]">Username</span>
                             <span className="relative flex items-center">
                                 <Icon name="badge" className="pointer-events-none absolute left-3.5 size-[18px] text-[#74777e]" />
                                 <input
@@ -162,7 +165,7 @@ export default function LoginForm() {
                                     id="username"
                                     name="username"
                                     onChange={handleChange}
-                                    placeholder="e.g. AGENT-84920"
+                                    placeholder="e.g. admin"
                                     required
                                     type="text"
                                     value={credentials.username}
@@ -182,6 +185,7 @@ export default function LoginForm() {
                                     onChange={handleChange}
                                     placeholder="Enter your passphrase"
                                     required
+                                    maxLength={16}
                                     type={passwordShown ? "text" : "password"}
                                     value={credentials.password}
                                 />
@@ -209,7 +213,6 @@ export default function LoginForm() {
                                 />
                                 Remember device
                             </label>
-                            {/* <button className="text-sm font-medium text-[#1e629a] transition hover:text-[#004e82] hover:underline" type="button">Hardware key?</button> */}
                         </div>
 
                         {displayedError && (
@@ -223,19 +226,15 @@ export default function LoginForm() {
                             disabled={loading}
                             type="submit"
                         >
-                            {loading ? "Verifying credentials…" : "Sign in to secure gateway"}
+                            {loading ? "Verifying credentials…" : "Sign in"}
                             {!loading && <Icon name="arrow" className="size-5" />}
                         </button>
                     </form>
 
                     <div className="mt-10 border-t border-[#c4c6ce]/70 pt-5">
                         <button className="text-left text-xs leading-5 text-[#74777e] transition hover:text-[#191c1e] hover:underline" type="button">
-                            Forgot credentials / request clearance level
+                            Forgot credentials 
                         </button>
-                        <div className="mt-5 flex items-start gap-2.5 rounded-lg bg-[#e6e8ea]/75 p-3.5 text-xs leading-5 text-[#43474d]">
-                            <Icon name="info" className="mt-0.5 size-4 shrink-0 text-[#1e629a]" />
-                            <p>Unauthorized access is a federal violation. Session parameters and telemetry are logged.</p>
-                        </div>
                     </div>
                 </div>
             </section>

@@ -160,7 +160,11 @@ export default function AddUserForm({
             }
             onClose();
         } catch (error: unknown) {
-            setFormError(getErrorMessage(error));
+            setFormError(
+                axios.isAxiosError(error) && !error.response
+                    ? "The save could not be confirmed; the API may have accepted it before the connection failed. Check the personnel list before retrying."
+                    : getErrorMessage(error),
+            );
         } finally {
             setSaving(false);
         }

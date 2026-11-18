@@ -1,5 +1,5 @@
-import api from "./axios";
-import { asRecord, collectionFrom, fetchAllPages, firstValue, itemFrom } from "./dataContract";
+import api from "./axiosClient";
+import { asRecord, collectionFrom, fetchAllPages, firstValue, itemFrom, requiredIdentifier } from "./dataContract";
 
 export type Inmate = {
     id: string;
@@ -8,14 +8,12 @@ export type Inmate = {
     dateOfBirth: string;
     gender: string;
     admissionDate: string;
-    offence: string;
-    sentenceStartDate: string;
-    sentenceEndDate: string;
+    inmateType: "REMAND" | "SENTENCED";
+    bio: string;
+    expectedCourtDate?: string;
     cellId: string;
     prisonId: string;
     prisonName: string;
-    sentenceDurationValue?: number;
-    sentenceDurationUnit?: string;
     createdAt?: string;
     updatedAt?: string;
 };
@@ -26,11 +24,17 @@ export type InmateRequest = {
     dateOfBirth: string;
     gender: string;
     admissionDate: string;
-    offence: string;
-    sentenceStartDate: string;
-    sentenceEndDate: string;
-    prisonId: string;
+    inmateType: "REMAND" | "SENTENCED";
+    bio: string;
+    medicalHistory: string;
+    nextOfKinName: string;
+    nextOfKinRelationship: string;
+    nextOfKinPhone: string;
     cellId: string;
+    expectedCourtDate?: string;
+    nextOfKinEmail?: string;
+    contactPhone?: string;
+    contactEmail?: string;
 };
 
 export type UpdateInmateRequest = Partial<
@@ -137,21 +141,24 @@ export const inmateService = {
 
 export function normalizeInmate(payload: unknown): Inmate {
     const record = asRecord(payload);
+    const id = requiredIdentifier(record, ["id", "inmateId", "inmate_id"], "inmate");
+    const inmateType = String(firstValue(record, ["inmateType", "inmate_type"], "")).toUpperCase();
+    if (inmateType !== "REMAND" && inmateType !== "SENTENCED") {
+        throw new TypeError("Unexpected inmate response. The inmate type is missing or unsupported.");
+    }
     return {
-        id: String(firstValue(record, ["id", "inmateId"], "")),
+        id,
         firstName: String(firstValue(record, ["firstName", "first_name"], "")),
         lastName: String(firstValue(record, ["lastName", "last_name"], "")),
         dateOfBirth: String(firstValue(record, ["dateOfBirth", "date_of_birth"], "")),
         gender: String(firstValue(record, ["gender"], "")),
         admissionDate: String(firstValue(record, ["admissionDate", "admission_date"], "")),
-        offence: String(firstValue(record, ["offence", "offense"], "")),
-        sentenceStartDate: String(firstValue(record, ["sentenceStartDate", "sentence_start_date"], "")),
-        sentenceEndDate: String(firstValue(record, ["sentenceEndDate", "sentence_end_date"], "")),
+        inmateType,
+        bio: String(firstValue(record, ["bio"], "")),
+        expectedCourtDate: firstValue(record, ["expectedCourtDate", "expected_court_date"], undefined) as string | undefined,
         cellId: String(firstValue(record, ["cellId", "cell_id"], "")),
         prisonId: String(firstValue(record, ["prisonId", "prison_id"], "")),
         prisonName: String(firstValue(record, ["prisonName", "prison_name"], "")),
-        sentenceDurationValue: Number(firstValue(record, ["sentenceDurationValue", "sentence_duration_value"], 0)),
-        sentenceDurationUnit: String(firstValue(record, ["sentenceDurationUnit", "sentence_duration_unit"], "")),
         createdAt: firstValue(record, ["createdAt", "created_at"], undefined) as string | undefined,
         updatedAt: firstValue(record, ["updatedAt", "updated_at"], undefined) as string | undefined,
     };
