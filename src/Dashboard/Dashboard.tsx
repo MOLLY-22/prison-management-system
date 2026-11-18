@@ -7,6 +7,7 @@ import Visitors from "../pages/Visitors";
 import ReleaseManagement from "../pages/ReleaseManagement";
 import UserAccess from "../pages/UserAccess";
 import TransferManagement from "../pages/TransferManagement";
+import { PrisonRegistry } from "../features/prisons/PrisonRegistry";
 
 type View =
   | "overview"
@@ -14,7 +15,8 @@ type View =
   | "visitors"
   | "transfers"
   | "release"
-  | "access";
+  | "access"
+  | "prisons";
 type RecordItem = Record<string, string | number | boolean | null>;
 
 const navigation: { id: View; label: string; short: string }[] = [
@@ -24,6 +26,7 @@ const navigation: { id: View; label: string; short: string }[] = [
   { id: "transfers", label: "Transfers", short: "TR" },
   { id: "release", label: "Release & discharge", short: "RD" },
   { id: "access", label: "User access", short: "UA" },
+  { id: "prisons", label: "Prison registry", short: "PR" },
 ];
 
 const endpointFor: Partial<Record<View, string>> = {
@@ -284,6 +287,8 @@ function ModuleView({ view }: { view: View }) {
       return <UserAccess />;
     case "transfers":
       return <TransferManagement />;
+    case "prisons":
+      return <PrisonRegistry canManage />;
     case "overview":
       return null;
   }
@@ -291,6 +296,8 @@ function ModuleView({ view }: { view: View }) {
 
 export default function Dashboard() {
   const { user, logout } = useAuth();
+  const isOfficerInCharge = (user?.role ?? "").replace(/[\s_-]/g, "").toLowerCase() === "officerincharge";
+  const visibleNavigation = navigation.filter((item) => item.id !== "prisons" || isOfficerInCharge);
   const [view, setView] = useState<View>("overview");
   const active = navigation.find((item) => item.id === view) ?? navigation[0];
   return (
@@ -310,7 +317,7 @@ export default function Dashboard() {
           </div>
         </div>
         <nav className="flex-1 space-y-2 px-[17px] py-6" aria-label="Primary navigation">
-          {navigation.map((item) => (
+          {visibleNavigation.map((item) => (
             <button
               className={`flex min-h-[46px] w-full items-center gap-3 rounded-[9px] border px-3 text-left text-[13px] transition ${view === item.id ? "border-[#087f9b] bg-[#087f9b] font-bold text-white" : "border-transparent text-[#c0ccdb] hover:bg-[#17334f] hover:text-white"}`}
               key={item.id}
@@ -358,7 +365,7 @@ export default function Dashboard() {
         </header>
         <div className="p-5 sm:p-8">
           <div className="mb-7 flex items-center gap-2 overflow-x-auto lg:hidden">
-            {navigation.map((item) => (
+            {visibleNavigation.map((item) => (
               <button
                 onClick={() => setView(item.id)}
                 className={`whitespace-nowrap rounded-[4px] border px-3 py-2 text-xs font-bold ${view === item.id ? "border-[#087f9b] bg-[#087f9b] text-white" : "border-[#dfe6ed] bg-white text-[#526a7c]"}`}
@@ -368,7 +375,7 @@ export default function Dashboard() {
               </button>
             ))}
           </div>
-          {view === "overview" ? <Overview onNavigate={setView} /> : <ModuleView view={view} />}
+          {view === "overview" ? <Overview onNavigate={setView} /> : view === "prisons" && !isOfficerInCharge ? null : <ModuleView view={view} />}
         </div>
       </main>
     </div>
