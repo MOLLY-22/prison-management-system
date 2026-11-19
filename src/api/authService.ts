@@ -40,6 +40,8 @@ export const authService = {
                     role: String(
                         firstValue(record, ["role", "userRole", "user_role"], "Authorized officer"),
                     ),
+                    prisonId: firstValue(record, ["prisonId", "prison_id"], null) as string | null,
+                    prisonName: firstValue(record, ["prisonName", "prison_name"], null) as string | null,
                 } satisfies AuthUser;
             })
             .find((candidate) => candidate !== undefined);

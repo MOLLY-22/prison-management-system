@@ -4,9 +4,9 @@ import api from "../api/axiosClient";
 import { collectionFrom } from "../api/dataContract";
 import { InmateManagement } from "../pages/InmateManagement";
 import Visitors from "../pages/Visitors";
-import ReleaseManagement from "../pages/ReleaseManagement";
 import UserAccess from "../pages/UserAccess";
 import TransferManagement from "../pages/TransferManagement";
+import DutyRosters from "../pages/DutyRosters";
 import { PrisonRegistry } from "../pages/PrisonRegistry";
 
 
@@ -18,6 +18,7 @@ type View =
   | "sentences"
   | "visitors"
   | "transfers"
+  | "duty-rosters"
   | "release"
   | "access"
   | "prisons";
@@ -31,6 +32,7 @@ const navigation: { id: View; label: string; short: string }[] = [
   { id: "sentences", label: "Sentences", short: "file" },
   { id: "visitors", label: "Visits", short: "visit" },
   { id: "transfers", label: "Transfers", short: "arrows" },
+  { id: "duty-rosters", label: "Duty rosters", short: "file" },
   // { id: "release", label: "Release & discharge", short: "exit" },
   { id: "access", label: "User Management", short: "shield" },
   { id: "prisons", label: "Prison registry", short: "building" },
@@ -231,19 +233,14 @@ function Overview({ onNavigate }: { onNavigate: (view: View) => void }) {
       note: "Appointments and gate events",
     },
     {
-      label: "Transfer Management",
-      id: "transfers",
-      note: "Movement requests and approvals",
-    },
-    // {
-    //   label: "Release Management",
-    //   id: "release",
-    //   note: "Eligibility and discharge",
-    // },
-    {
       label: "Prison Registry",
       id: "prisons",
-      note: "Prison and Block allocation",
+      note: "Prison and block allocation",
+    },
+    {
+      label: "Duty rosters",
+      id: "duty-rosters",
+      note: "Officer shifts and published schedules",
     },
   ];
   return (
@@ -300,6 +297,8 @@ function ModuleView({ view, onNavigate }: { view: View; onNavigate: (view: View)
       return <UserAccess />;
     case "transfers":
       return <TransferManagement />;
+    case "duty-rosters":
+      return <DutyRosters />;
     case "prisons":
       return <PrisonRegistry canManage />;
     case "overview":
