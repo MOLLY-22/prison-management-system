@@ -356,10 +356,11 @@ export function InmateManagement({ canAdmit, userRole, section, onBack }: Props)
         </Alert>
       )}
       {!admissionOpen && <Box className="portal-heading">
-        <Box className="portal-title-row">
+        <Box className="portal-title-row items-center">
           <Box>
           <Typography component="h1">{section === "admission" ? "Admission" : section === "profile-sentences" ? "Sentences" : section === "profile" ? "Profile" : "Inmates"}</Typography>
           </Box>
+          {section === "overview" && canAdmit && <Button variant="contained" onClick={() => setAdmissionOpen(true)}>New Admission</Button>}
         </Box>
       </Box>}
       {section !== "admission" && <>
@@ -400,40 +401,20 @@ export function InmateManagement({ canAdmit, userRole, section, onBack }: Props)
               {section === "profile" ? "Choose an inmate to view their profile." : `${filtered.length} matching record${filtered.length === 1 ? "" : "s"} in the census.`}
             </Typography>
           </Box>
-          {canAdmit && <Button variant="contained" onClick={() => setAdmissionOpen(true)}>Admit inmate</Button>}
         </Box>
         <TableContainer>
           <Table className="census-table">
             <TableHead>
               <TableRow>
-                <TableCell>Inmate ID</TableCell>
                 <TableCell>Name</TableCell>
-                <TableCell>Date of Birth</TableCell>
-                <TableCell>Inmate Type</TableCell>
-                <TableCell>Station</TableCell>
-                <TableCell>Cell ID</TableCell>
-                <TableCell>Admission Date</TableCell>
-                <TableCell>Actions</TableCell>
+                <TableCell align="right">Actions</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
-              {loading ? <TableRow><TableCell colSpan={8}>Loading inmate records...</TableCell></TableRow> : censusLoadError ? <TableRow><TableCell colSpan={8}>Inmate records are unavailable. Use Retry above after checking the API connection and your account access.</TableCell></TableRow> : !filtered.length ? <TableRow><TableCell colSpan={8}>No inmate records match these filters.</TableCell></TableRow> : filtered.map((record) => (
+              {loading ? <TableRow><TableCell colSpan={2}>Loading inmate records...</TableCell></TableRow> : censusLoadError ? <TableRow><TableCell colSpan={2}>Inmate records are unavailable. Use Retry above after checking the API connection and your account access.</TableCell></TableRow> : !filtered.length ? <TableRow><TableCell colSpan={2}>No inmate records match these filters.</TableCell></TableRow> : filtered.map((record) => (
                 <TableRow key={record.id} hover>
-                  <TableCell>
-                    <Box className="id-photo">
-                      <span className="mugshot">
-                        {initials(record.fullName)}
-                      </span>
-                      <code>{record.id}</code>
-                    </Box>
-                  </TableCell>
                   <TableCell className="full-name">{record.fullName}</TableCell>
-                  <TableCell>{displayDate(record.dateOfBirth)}</TableCell>
-                  <TableCell><Chip label={record.inmateType} /></TableCell>
-                  <TableCell>{record.prisonName || "—"}</TableCell>
-                  <TableCell>{record.cellId || "—"}</TableCell>
-                  <TableCell>{record.admissionDate}</TableCell>
-                  <TableCell><Button size="small" variant="outlined" onClick={() => setSelectedInmateId(record.id)}>View</Button></TableCell>
+                  <TableCell align="right"><Button size="small" variant="outlined" onClick={() => setSelectedInmateId(record.id)}>View</Button></TableCell>
                 </TableRow>
               ))}
             </TableBody>
