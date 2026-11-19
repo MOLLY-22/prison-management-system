@@ -1,7 +1,9 @@
 import axios from "axios";
 
 const api = axios.create({
-    baseURL:  import.meta.env.VITE_API_BASE_URL || "http://localhost:3000/api/v1",
+    // Use Vite's same-origin proxy in development so the browser doesn't need
+    // direct access to the backend host. Deployments can provide their API URL.
+    baseURL: import.meta.env.VITE_API_URL || "/api/v1",
     timeout: 10000,
     headers: {
         Accept: "application/json",
@@ -18,5 +20,23 @@ api.interceptors.request.use((config) => {
         config.headers.Authorization = `Bearer ${token}`;
     return config;
 });
+
+api.interceptors.response.use(
+    (response) => response,
+    (error: unknown) => {
+        if (
+            axios.isAxiosError(error) &&
+            error.response?.status === 401 &&
+            !error.config?.url?.includes("/auth/login")
+        ) {
+            localStorage.removeItem("token");
+            localStorage.removeItem("user");
+            sessionStorage.removeItem("token");
+            sessionStorage.removeItem("user");
+            window.dispatchEvent(new Event("pms:session-expired"));
+        }
+        return Promise.reject(error);
+    },
+);
 
 export default api;

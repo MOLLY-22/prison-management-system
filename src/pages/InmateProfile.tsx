@@ -142,6 +142,7 @@ export default function InmateProfile({ inmateId, userRole = "", initialTab = "O
 
   const saveSentenceAction = async () => {
     setError("");
+    setNotice("");
     const offenceText = [form.offenceCategory === "Other" ? form.offenceOther?.trim() : form.offenceCategory, form.crimeDescription?.trim()].filter(Boolean).join(" — ");
     const required = formKind === "sentence"
       ? [form.offenceCategory, form.crimeDescription, form.sentenceType, form.startDate]
@@ -225,11 +226,13 @@ export default function InmateProfile({ inmateId, userRole = "", initialTab = "O
   };
 
   const updateSentenceStatus = async (id: string, status: string) => {
+    setError("");
+    setNotice("");
     try {
       await api.patch(`/sentences/${encodeURIComponent(id)}/status`, { status });
       setRevision((current) => current + 1);
       setNotice("Sentence status updated.");
-    } catch (reason) { setError(errorMessage(reason)); }
+    } catch (reason) { setError(errorMessage(reason)); setRevision((current) => current + 1); }
   };
 
   return <section className="mx-auto max-w-[1440px] space-y-5">
@@ -254,14 +257,18 @@ export default function InmateProfile({ inmateId, userRole = "", initialTab = "O
       {formKind && <ProfileActionForm kind={formKind} form={form} programs={[]} onChange={setForm} onCancel={() => setFormKind(null)} onSave={() => void saveSentenceAction()}/>}
       {!sentences.length ? <div className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-500">No sentence records.</div> : sentences.map((sentence) => {
         const id = String(field(sentence, "id") ?? "");
-        const offence = shown(field(sentence, "offence"));
+        const offenceValue = shown(field(sentence, "offence"));
+        const [offence, embeddedDescription] = offenceValue.split(" — ", 2);
+        const crimeDescription = shown(field(sentence, "crimeDescription") ?? embeddedDescription);
         return <article key={id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div><h3 className="font-semibold text-slate-800">{offence}</h3><p className="mt-1 text-xs text-slate-500">{shown(field(sentence, "sentenceType"))} · {dateLabel(field(sentence, "startDate"))}{field(sentence, "endDate") ? ` – ${dateLabel(field(sentence, "endDate"))}` : ""}</p></div>
-            <label className="flex items-center gap-2 text-xs text-slate-600">Status<select value={String(field(sentence, "status") ?? "ACTIVE")} onChange={(event) => void updateSentenceStatus(id, event.target.value)} className="rounded-md border border-slate-300 px-2 py-2"><option value="ACTIVE">Active</option><option value="COMPLETED">Completed</option><option value="COMMUTED">Commuted</option></select></label>
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="min-w-0 flex-1"><h3 className="font-semibold text-slate-800">{offence}</h3><p className="mt-1 text-xs text-slate-500">{shown(field(sentence, "sentenceType"))} · {dateLabel(field(sentence, "startDate"))}{field(sentence, "endDate") ? ` – ${dateLabel(field(sentence, "endDate"))}` : ""}</p><p className="mt-1 text-sm text-slate-600">Crime description: {crimeDescription}</p></div>
+            <div className="flex shrink-0 flex-col items-end gap-2">
+              <label className="flex items-center gap-2 text-xs text-slate-600">Status<select value={String(field(sentence, "status") ?? "ACTIVE")} onChange={(event) => void updateSentenceStatus(id, event.target.value)} className="rounded-md border border-slate-300 px-2 py-2"><option value="ACTIVE">Active</option><option value="COMPLETED">Completed</option><option value="COMMUTED">Commuted</option></select></label>
+              <div className="flex flex-wrap justify-end gap-2">{["RECORDS OFFICER", "PRISON OFFICER"].includes(role) && <button onClick={() => openForm("remission", id)} className="rounded-md border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700">Add remission</button>}{["RECORDS OFFICER", "PRISON OFFICER", "SUPER ADMIN", "COMMISSIONER"].includes(role) && <button onClick={() => openForm("extension", id)} className="rounded-md border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700">Request extension</button>}</div>
+            </div>
           </div>
-          <div className="mt-3 flex flex-wrap gap-2">{["RECORDS OFFICER", "PRISON OFFICER"].includes(role) && <button onClick={() => openForm("remission", id)} className="rounded-md border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700">Add remission</button>}{["RECORDS OFFICER", "PRISON OFFICER", "SUPER ADMIN", "COMMISSIONER"].includes(role) && <button onClick={() => openForm("extension", id)} className="rounded-md border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700">Request extension</button>}</div>
-          <div className="mt-3 grid gap-3 md:grid-cols-2"><Remissions sentenceId={id} revision={revision}/><Extensions sentenceId={id} revision={revision} canDecide={false}/></div>
+          <div className="mt-3 grid gap-3 md:grid-cols-2"><Remissions sentenceId={id} revision={revision}/><Extensions sentenceId={id} revision={revision} canDecide={["RECORDS OFFICER", "PRISON OFFICER", "SUPER ADMIN", "COMMISSIONER", "OFFICER IN CHARGE"].includes(role)} onResult={(message, failed) => { setNotice(failed ? "" : message); setError(failed ? message : ""); }}/></div>
         </article>;
       })}
     </section> : tab === "Transfers" ? <HistoryList title="Transfer history" rows={transferRows} fields={[["Date", "requestedAt"], ["From", "sourcePrisonName"], ["To", "destinationPrisonName"], ["Status", "status"], ["Reason", "reason"]]} />
@@ -285,14 +292,14 @@ function Remissions({ sentenceId, revision }: { sentenceId: string; revision: nu
   const [rows, setRows] = useState<Row[]>([]);
   const [error, setError] = useState("");
   useEffect(() => { let active = true; api.get(`/sentences/${encodeURIComponent(sentenceId)}/remissions`).then(({ data }) => active && setRows(collectionFrom(data).map(asRecord))).catch((reason) => active && setError(errorMessage(reason))); return () => { active = false; }; }, [sentenceId, revision]);
-  return <details className="rounded-lg border border-slate-200 p-3"><summary className="cursor-pointer text-sm font-semibold text-slate-700">Remissions ({rows.length})</summary>{error ? <p className="mt-2 text-xs text-rose-700">{error}</p> : rows.length ? <div className="mt-2 space-y-2">{rows.map((row) => <div key={String(field(row, "id"))} className="border-t border-slate-100 pt-2 text-xs text-slate-600"><strong>{shown(field(row, "remissionPercentage"))}%</strong> · {dateLabel(field(row, "effectiveDate"))}<p className="mt-1">{shown(field(row, "reason"))}</p>{field(row, "projectedReleaseDate") && <p>Projected release: {dateLabel(field(row, "projectedReleaseDate"))}</p>}</div>)}</div> : <p className="mt-2 text-xs text-slate-500">No remissions recorded.</p>}</details>;
+  return <section className="rounded-lg border border-slate-200 p-3"><h4 className="text-sm font-semibold text-slate-700">Remissions ({rows.length})</h4>{error ? <p role="alert" className="mt-2 text-xs text-rose-700">{error}</p> : rows.length ? <div className="mt-2 space-y-2">{rows.map((row) => <div key={String(field(row, "id"))} className="border-t border-slate-100 pt-2 text-xs text-slate-600"><strong>{shown(field(row, "remissionPercentage"))}%</strong> · {dateLabel(field(row, "effectiveDate"))}<p className="mt-1">{shown(field(row, "reason"))}</p>{field(row, "projectedReleaseDate") && <p>Projected release: {dateLabel(field(row, "projectedReleaseDate"))}</p>}</div>)}</div> : <p className="mt-2 text-xs text-slate-500">No remissions recorded.</p>}</section>;
 }
 
 function HistoryList({ title, rows, fields }: { title: string; rows: Row[]; fields: [string, string][] }) {
   return <section className="overflow-hidden rounded-xl border border-slate-200 bg-white"><div className="border-b border-slate-200 px-5 py-4"><h2 className="font-semibold text-slate-800">{title}</h2></div>{!rows.length ? <p className="p-5 text-sm text-slate-500">No records.</p> : <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="bg-slate-50 text-xs text-slate-500"><tr>{fields.map(([label]) => <th key={label} className="px-4 py-3">{label}</th>)}</tr></thead><tbody className="divide-y divide-slate-100">{rows.map((row, index) => <tr key={String(field(row, "id") ?? index)}>{fields.map(([label, key]) => <td key={key} className="px-4 py-3 text-slate-700">{key.toLowerCase().includes("date") || key.toLowerCase().includes("at") ? dateLabel(field(row, key)) : shown(field(row, key))}</td>)}</tr>)}</tbody></table></div>}</section>;
 }
 
-function Extensions({ sentenceId, revision, canDecide }: { sentenceId: string; revision: number; canDecide: boolean }) {
+function Extensions({ sentenceId, revision, canDecide, onResult }: { sentenceId: string; revision: number; canDecide: boolean; onResult: (message: string, failed: boolean) => void }) {
   const [rows, setRows] = useState<Row[]>([]);
   const [error, setError] = useState("");
   const [savingId, setSavingId] = useState("");
@@ -300,18 +307,20 @@ function Extensions({ sentenceId, revision, canDecide }: { sentenceId: string; r
   const decide = async (id: string, decision: "APPROVED" | "REJECTED") => {
     setSavingId(id);
     setError("");
+    onResult("", false);
     try {
       await api.post(`/sentence-extensions/${encodeURIComponent(id)}/decision`, { decision });
       const { data } = await api.get(`/sentences/${encodeURIComponent(sentenceId)}/extensions`);
       setRows(collectionFrom(data).map(asRecord));
-    } catch (reason) { setError(errorMessage(reason)); }
+      onResult(`Extension request ${decision.toLowerCase()}.`, false);
+    } catch (reason) { const message = errorMessage(reason); setError(message); onResult(message, true); }
     finally { setSavingId(""); }
   };
-  return <details className="rounded-lg border border-slate-200 p-3"><summary className="cursor-pointer text-sm font-semibold text-slate-700">Extensions ({rows.length})</summary>{error ? <p className="mt-2 text-xs text-rose-700">{error}</p> : rows.length ? <div className="mt-2 space-y-2">{rows.map((row) => {
+  return <section className="rounded-lg border border-slate-200 p-3"><h4 className="text-sm font-semibold text-slate-700">Extension requests ({rows.length})</h4>{error ? <p role="alert" className="mt-2 text-xs text-rose-700">{error}</p> : rows.length ? <div className="mt-2 space-y-2">{rows.map((row) => {
     const id = String(field(row, "id") ?? "");
     const decision = String(field(row, "decision") ?? "PENDING");
     return <div key={id} className="border-t border-slate-100 pt-2 text-xs text-slate-600"><p>{dateLabel(field(row, "originalEndDate"))} → {dateLabel(field(row, "proposedEndDate"))} · {decision}</p><p className="mt-1">{shown(field(row, "reason"))}</p>{canDecide && decision === "PENDING" && <div className="mt-2 flex gap-2"><button disabled={savingId === id} onClick={() => void decide(id, "APPROVED")} className="rounded border border-slate-300 px-2 py-1">Approve</button><button disabled={savingId === id} onClick={() => void decide(id, "REJECTED")} className="rounded border border-slate-300 px-2 py-1">Reject</button></div>}</div>;
-  })}</div> : <p className="mt-2 text-xs text-slate-500">No extension requests.</p>}</details>;
+  })}</div> : <p className="mt-2 text-xs text-slate-500">No extension requests.</p>}</section>;
 }
 
 function ProfileActionForm({ kind, form, programs, onChange, onCancel, onSave }: { kind: FormKind; form: Record<string, string>; programs: Row[]; onChange: (form: Record<string, string>) => void; onCancel: () => void; onSave: () => void }) {

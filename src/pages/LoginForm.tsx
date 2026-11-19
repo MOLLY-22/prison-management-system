@@ -100,9 +100,6 @@ export default function LoginForm() {
     const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
         setErrorMessage("");
-        console.log("Submitting login form with credentials:", credentials);
-
-
         try {
             await login(credentials);
             const destination = location.state?.from?.pathname || "/dashboard";
@@ -185,7 +182,6 @@ export default function LoginForm() {
                                     onChange={handleChange}
                                     placeholder="Enter your passphrase"
                                     required
-                                    maxLength={16}
                                     type={passwordShown ? "text" : "password"}
                                     value={credentials.password}
                                 />

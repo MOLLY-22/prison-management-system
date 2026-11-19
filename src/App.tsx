@@ -1,10 +1,13 @@
 import Dashboard from "./Dashboard/Dashboard";
 import { AuthProvider } from "./context/AuthContext";
+import { BrowserRouter } from "react-router-dom";
 
 export default function App() {
     return (
-        <AuthProvider>
-            <Dashboard />
-        </AuthProvider>
+        <BrowserRouter>
+            <AuthProvider>
+                <Dashboard />
+            </AuthProvider>
+        </BrowserRouter>
     );
 }

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../context/AuthContext";
+import LoginForm from "../pages/LoginForm";
 import api from "../api/axiosClient";
 import { collectionFrom } from "../api/dataContract";
 import { InmateManagement } from "../pages/InmateManagement";
@@ -302,12 +303,13 @@ function ModuleView({ view, onNavigate }: { view: View; onNavigate: (view: View)
 }
 
 export default function Dashboard() {
-  const { user, logout , authError} = useAuth();
+  const { user, logout , authError, isAuthenticated} = useAuth();
   const visibleNavigation = navigation;
   const [view, setView] = useState<View>("overview");
   const [inmatesOpen, setInmatesOpen] = useState(true);
   const inmateViews: View[] = ["inmates", "profile", "admission", "sentences", "transfers", "visitors"];
   const active = navigation.find((item) => item.id === view) ?? navigation[0];
+  if (!isAuthenticated) return <LoginForm />;
   return (
     <div className="min-h-screen bg-[#f5f7fa] font-['DM_Sans',_'Segoe_UI',sans-serif] text-[#182638]">
       <aside className="fixed inset-y-0 left-0 z-20 hidden w-[264px] flex-col border-r border-white/[0.06] bg-[#101a2d] text-white lg:flex">
