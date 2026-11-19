@@ -100,8 +100,6 @@ export default function LoginForm() {
     const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
         setErrorMessage("");
-        console.log("Submitting login form with credentials:", credentials);
-
 
         try {
             await login(credentials);
@@ -161,7 +159,7 @@ export default function LoginForm() {
                                 <Icon name="badge" className="pointer-events-none absolute left-3.5 size-[18px] text-[#74777e]" />
                                 <input
                                     autoComplete="username"
-                                    className="w-full rounded-lg border border-transparent bg-white px-3.5 py-3.5 pl-11 text-sm text-[#191c1e] outline-none ring-1 ring-[#e0e3e5] transition placeholder:text-[#74777e] hover:ring-[#9ccaff] focus:ring-2 focus:ring-[#1e629a]"
+                                    className="w-full rounded-lg border border-transparent bg-white px-3.5 py-3 pl-11 text-sm text-[#191c1e] outline-none ring-1 ring-[#e0e3e5] transition placeholder:text-[#74777e] hover:ring-[#9ccaff] focus:ring-2 focus:ring-[#1e629a]"
                                     id="username"
                                     name="username"
                                     onChange={handleChange}
@@ -179,13 +177,12 @@ export default function LoginForm() {
                                 <Icon name="lock" className="pointer-events-none absolute left-3.5 size-[18px] text-[#74777e]" />
                                 <input
                                     autoComplete="current-password"
-                                    className="w-full rounded-lg border border-transparent bg-white px-3.5 py-3.5 pl-11 pr-12 text-sm text-[#191c1e] outline-none ring-1 ring-[#e0e3e5] transition placeholder:text-[#74777e] hover:ring-[#9ccaff] focus:ring-2 focus:ring-[#1e629a]"
+                                    className="w-full rounded-lg border border-transparent bg-white px-3.5 py-3 pl-11 pr-12 text-sm text-[#191c1e] outline-none ring-1 ring-[#e0e3e5] transition placeholder:text-[#74777e] hover:ring-[#9ccaff] focus:ring-2 focus:ring-[#1e629a]"
                                     id="password"
                                     name="password"
                                     onChange={handleChange}
                                     placeholder="Enter your passphrase"
                                     required
-                                    maxLength={16}
                                     type={passwordShown ? "text" : "password"}
                                     value={credentials.password}
                                 />

@@ -1,13 +1,22 @@
 
+type EligibilityStatus = 'all' | 'progress' | 'ready' | 'hold';
+
+type ReleaseEligibilityQueueDashboardProps = {
+  search: string;
+  setSearch: (value: string) => void;
+  eligibilityStatus: EligibilityStatus;
+  setEligibilityStatus: (value: EligibilityStatus) => void;
+};
+
 export default function ReleaseEligibilityQueueDashboard({
   search,
   setSearch,
   eligibilityStatus,
   setEligibilityStatus,
-}) {
+}: ReleaseEligibilityQueueDashboardProps) {
   return (
-    <section className="queue-section w-full min-w-0">
-      <div className="queue-header flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+    <section>
+      <div className="queue-header flex flex-col gap-1 lg:flex-row lg:items-center lg:justify-between">
         <div className="min-w-0">
           <div className="mb-2 flex items-center gap-2">
             <span className="h-1 w-7 rounded-full bg-[#246BA8]" />
@@ -19,11 +28,6 @@ export default function ReleaseEligibilityQueueDashboard({
           <h2 className="text-xl font-bold tracking-tight text-[#0B1F36] sm:text-2xl">
             Release Eligibility Queue
           </h2>
-
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-[#596574]">
-            Review inmates approaching discharge eligibility based on sentence
-            length and remission calculations.
-          </p>
         </div>
 
         <div className="queue-controls flex w-full flex-col gap-2 sm:flex-row lg:w-auto">
@@ -49,8 +53,13 @@ export default function ReleaseEligibilityQueueDashboard({
           <select
             id="eligibility-status"
             value={eligibilityStatus}
-            onChange={(event) => setEligibilityStatus(event.target.value)}
-            className="rounded-md border border-[#DCE3EA] bg-white px-3 py-2.5 text-sm text-[#17324D] outline-none focus:border-[#246BA8] focus:ring-2 focus:ring-[#246BA8]/15"
+            onChange={(event) => {
+              const status = event.target.value;
+              if (['all', 'progress', 'ready', 'hold'].includes(status)) {
+                setEligibilityStatus(status as EligibilityStatus);
+              }
+            }}
+            className=" border border-[#DCE3EA] bg-white px-3 py-2 text-sm text-[#17324D] outline-none focus:border-[#246BA8] focus:ring-2 focus:ring-[#246BA8]/15"
           >
             <option value="all">All statuses</option>
             <option value="progress">In progress</option>

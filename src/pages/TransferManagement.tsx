@@ -2,8 +2,9 @@ import { useCallback, useEffect, useState } from "react";
 import axios from "axios";
 import { Alert, Box, Button, Stack, Typography } from "@mui/material";
 import TransferForm from "../components/TransferForm";
-import TransferTable from "../components/TransferTable";
+import TransferHistory from "../components/TransferHistory";
 import TransferApproval from "../components/TransferApproval";
+import { inmateService } from "../api/inmateService";
 import {
   transferService,
   type CreateTransferRequest,
@@ -73,6 +74,7 @@ function TransferManagement() {
   async function performAction(
     action: () => Promise<TransferRecord>,
     success: string,
+    refreshPlacement = false,
   ) {
     setSaving(true);
     setError("");
@@ -89,6 +91,19 @@ function TransferManagement() {
         await loadTransfers();
       } catch {
         // The successful action is retained; loadTransfers displays the refresh error.
+      }
+      if (refreshPlacement) {
+        try {
+          const inmate = await inmateService.getInmate(updatedTransfer.inmateId);
+          const prison = inmate.prisonName || inmate.prisonId || "destination prison";
+          setSuccessMessage(
+            `${success} ${inmate.firstName} ${inmate.lastName}'s placement is now ${prison}, cell ${inmate.cellId || "not assigned"}.`,
+          );
+        } catch (reason: unknown) {
+          setError(
+            `The transfer was approved, but the inmate's placement could not be refreshed: ${messageFrom(reason)}`,
+          );
+        }
       }
     } finally {
       setSaving(false);
@@ -133,7 +148,10 @@ function TransferManagement() {
         {loading ? (
           <Typography role="status">Loading transfer records…</Typography>
         ) : (
-          <TransferTable transfers={transfers} onSelectTransfer={setSelectedTransfer} />
+          <TransferHistory
+            transfers={transfers}
+            onSelectTransfer={setSelectedTransfer}
+          />
         )}
 
         <TransferApproval
@@ -143,6 +161,7 @@ function TransferManagement() {
           onApprove={(id, cellId) => performAction(
             () => transferService.approveTransfer(id, cellId),
             "Transfer approved and destination cell assigned.",
+            true,
           )}
           onReject={(id) => performAction(
             () => transferService.rejectTransfer(id),

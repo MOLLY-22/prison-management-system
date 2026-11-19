@@ -1,8 +1,8 @@
 .release-workspace {
-  display: grid;
   gap: 16px;
-  max-width: 1440px;
-  margin: 0 auto;
+  min-width: 0;
+  max-width: 100%;
+  margin: 0;
   padding: 4px 0 24px;
   color: #17243a;
 }

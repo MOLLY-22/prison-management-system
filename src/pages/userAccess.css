@@ -232,6 +232,36 @@
   transition: border-color .16s ease, box-shadow .16s ease, background .16s ease;
 }
 
+.modal-password-control {
+  position: relative;
+  display: block;
+}
+
+.modal-field input.modal-password-input {
+  padding-right: 40px;
+}
+
+.modal-password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  transform: translateY(-50%);
+  border: 0;
+  border-radius: 4px;
+  padding: 0;
+  color: #587087;
+  background: transparent;
+}
+
+.modal-password-toggle:hover {
+  color: #123b5b;
+  background: #f1f7fa;
+}
+
 .modal-field input::placeholder {
   color: #9aa8b5;
 }
