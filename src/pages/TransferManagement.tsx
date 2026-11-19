@@ -27,9 +27,9 @@ function TransferManagement() {
   const [successMessage, setSuccessMessage] = useState("");
 
   const loadTransfers = useCallback(async () => {
-    setError("");
     try {
       setTransfers(await transferService.getTransfers());
+      setError("");
     } catch (reason: unknown) {
       setError(messageFrom(reason));
       throw reason;
@@ -39,8 +39,23 @@ function TransferManagement() {
   }, []);
 
   useEffect(() => {
-    void loadTransfers().catch(() => undefined);
-  }, [loadTransfers]);
+    let active = true;
+    transferService.getTransfers()
+      .then((records) => {
+        if (!active) return;
+        setTransfers(records);
+        setError("");
+      })
+      .catch((reason: unknown) => {
+        if (active) setError(messageFrom(reason));
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   async function createTransfer(payload: CreateTransferRequest) {
     setSaving(true);
@@ -81,6 +96,7 @@ function TransferManagement() {
   }
 
   async function refreshTransfers() {
+    setError("");
     try {
       await loadTransfers();
     } catch {
@@ -121,6 +137,7 @@ function TransferManagement() {
         )}
 
         <TransferApproval
+          key={`${selectedTransfer?.id ?? ""}:${selectedTransfer?.destinationPrisonId ?? ""}:${selectedTransfer?.status ?? ""}`}
           transfer={selectedTransfer}
           saving={saving}
           onApprove={(id, cellId) => performAction(

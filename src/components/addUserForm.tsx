@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import axios from "axios";
-import { prisonService, type Prison } from "../api/prisonService";
+import { prisonService, type PrisonSummary } from "../api/prisonService";
 import { userService, type CreateUserRequest, type User, type UserRole } from "../api/userService";
 
 type UserForm = {
@@ -66,7 +66,7 @@ export default function AddUserForm({
     onUserUpdated,
 }: AddUserFormProps) {
     const [newUser, setNewUser] = useState<UserForm>(() => formFromUser(userToEdit));
-    const [prisons, setPrisons] = useState<Prison[]>([]);
+    const [prisons, setPrisons] = useState<PrisonSummary[]>([]);
     const [loadingPrisons, setLoadingPrisons] = useState(true);
     const [prisonLoadError, setPrisonLoadError] = useState("");
     const [formError, setFormError] = useState("");
@@ -79,9 +79,9 @@ export default function AddUserForm({
 
     useEffect(() => {
         let mounted = true;
-        prisonService.getPrisons({ active: true, size: 100 })
-            .then((items) => {
-                if (mounted) setPrisons(items);
+        prisonService.getPrisons(0, "", "active", 100)
+            .then(({ records }) => {
+                if (mounted) setPrisons(records);
             })
             .catch((error: unknown) => {
                 if (mounted) setPrisonLoadError(getErrorMessage(error));
@@ -137,8 +137,7 @@ export default function AddUserForm({
         try {
             let persistedUser: User;
             if (isEditing && userToEdit) {
-                persistedUser = await userService.updateUser({
-                    id: userToEdit.id,
+                persistedUser = await userService.updateUser(userToEdit.id, {
                     name,
                     username,
                     email: email || undefined,

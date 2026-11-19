@@ -7,7 +7,7 @@ import Visitors from "../pages/Visitors";
 import ReleaseManagement from "../pages/ReleaseManagement";
 import UserAccess from "../pages/UserAccess";
 import TransferManagement from "../pages/TransferManagement";
-import { PrisonRegistry } from "../features/prisons/PrisonRegistry";
+import { PrisonRegistry } from "../pages/PrisonRegistry";
 
 
 type View =
@@ -36,6 +36,7 @@ const endpointFor: Partial<Record<View, string>> = {
   transfers: "/transfers",
   release: "/releases",
   access: "/users",
+  prisons : "/prisons"
 };
 
 function valueLabel(value: unknown) {
@@ -218,6 +219,11 @@ function Overview({ onNavigate }: { onNavigate: (view: View) => void }) {
       id: "release",
       note: "Eligibility and discharge",
     },
+    {
+      label: "Prison Registry",
+      id: "prisons",
+      note: "Prison and Block allocation",
+    },
   ];
   return (
     <>
@@ -287,19 +293,14 @@ export default function Dashboard() {
   const [view, setView] = useState<View>("overview");
   const active = navigation.find((item) => item.id === view) ?? navigation[0];
   return (
-    <div className="min-h-screen bg-[#f4f7fb] font-['DM_Sans',_'Segoe_UI',sans-serif] text-[#17243a]">
+    <div className="min-h-screen bg-[white] font-['DM_Sans',_'Segoe_UI',sans-serif] text-[white]">
       <aside className="fixed inset-y-0 left-0 z-20 hidden w-[250px] flex-col bg-[#0c2038] text-white lg:flex">
         <div className="border-b border-white/10 px-[25px] py-7">
-          <div className="flex items-center gap-3">
-            <span className="grid size-[42px] place-items-center rounded-[12px] border border-[#087f9b] bg-[#087f9b] font-['Manrope',sans-serif] text-2xl font-extrabold text-white">
+          <div className="flex items-center gap-3 text-white">
+            <span className="grid size-[60px] place-items-center rounded-[12px] border border-[#087f9b] bg-[#087f9b] font-['Manrope',sans-serif] text-2xl font-extrabold text-white">
               PMS
             </span>
-            <div className="text-white">
-              <p className="text-[17px] font-extrabold tracking-[-0.04em] text-white">PRISON</p>
-              <p className="text-[11px] text-[#94a5bb]">
-                Management system
-              </p>
-            </div>
+          
           </div>
         </div>
         <nav className="flex-1 space-y-2 px-[17px] py-6" aria-label="Primary navigation">

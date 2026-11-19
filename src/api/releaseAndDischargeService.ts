@@ -2,6 +2,12 @@ import api from "./axiosClient";
 
 export type InmateRecord = Record<string, unknown> & { id: string | number };
 export type DischargeEvent = Record<string, unknown>;
+export type ClearanceChecklistItem = {
+    id: string;
+    title: string;
+    description: string;
+    completed: boolean;
+};
 
 export const releaseDischargeService = {
     async getAllInmates(): Promise<InmateRecord[]> {
@@ -28,12 +34,23 @@ export const releaseDischargeService = {
         const response = await api.post<DischargeEvent>("/discharge-events", eventData);
         return response.data;
     },
-    async getChecklist(inmateId: string): Promise<unknown[]> {
-        const response = await api.get<unknown[]>(`/inmates/${encodeURIComponent(inmateId)}/clearance`);
-        return response.data;
+    async getChecklist(
+        inmateId: string,
+        fallback: ClearanceChecklistItem[] = [],
+    ): Promise<ClearanceChecklistItem[]> {
+        const response = await api.get<ClearanceChecklistItem[] | null>(
+            `/inmates/${encodeURIComponent(inmateId)}/clearance`,
+        );
+        return response.data ?? fallback;
     },
-    async saveChecklist(inmateId: string, items: unknown[]): Promise<unknown[]> {
-        const response = await api.put<unknown[]>(`/inmates/${encodeURIComponent(inmateId)}/clearance`, { items });
+    async saveChecklist(
+        inmateId: string,
+        items: ClearanceChecklistItem[],
+    ): Promise<ClearanceChecklistItem[]> {
+        const response = await api.put<ClearanceChecklistItem[]>(
+            `/inmates/${encodeURIComponent(inmateId)}/clearance`,
+            { items },
+        );
         return response.data;
     },
 };
