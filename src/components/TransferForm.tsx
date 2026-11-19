@@ -15,7 +15,7 @@ import {
   Typography,
 } from "@mui/material";
 import { inmateService, type Inmate } from "../api/inmateService";
-import { prisonService, type Prison } from "../api/prisonService";
+import { prisonService, type PrisonSummary } from "../api/prisonService";
 import type { CreateTransferRequest } from "../api/transferService";
 
 type TransferFormProps = {
@@ -31,7 +31,7 @@ function messageFrom(error: unknown) {
 
 function TransferForm({ onSubmit }: TransferFormProps) {
   const [inmates, setInmates] = useState<Inmate[]>([]);
-  const [prisons, setPrisons] = useState<Prison[]>([]);
+  const [prisons, setPrisons] = useState<PrisonSummary[]>([]);
   const [inmateId, setInmateId] = useState("");
   const [destinationPrisonId, setDestinationPrisonId] = useState("");
   const [reason, setReason] = useState("");
@@ -43,11 +43,11 @@ function TransferForm({ onSubmit }: TransferFormProps) {
 
   useEffect(() => {
     let active = true;
-    Promise.all([inmateService.getInmates(), prisonService.getPrisons({ active: true })])
-      .then(([inmateRecords, prisonRecords]) => {
+    Promise.all([inmateService.getInmates(), prisonService.getPrisons(0, "", "active", 100)])
+      .then(([inmateRecords, prisonPage]) => {
         if (!active) return;
         setInmates(inmateRecords);
-        setPrisons(prisonRecords);
+        setPrisons(prisonPage.records);
       })
       .catch((error: unknown) => {
         if (active) setLoadError(messageFrom(error));

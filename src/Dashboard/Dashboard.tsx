@@ -1,14 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../context/AuthContext";
-import LoginForm from "../pages/LoginForm";
 import api from "../api/axiosClient";
 import { collectionFrom } from "../api/dataContract";
 import { InmateManagement } from "../pages/InmateManagement";
 import Visitors from "../pages/Visitors";
-import ReleaseManagement from "../pages/ReleaseManagement";
 import UserAccess from "../pages/UserAccess";
 import TransferManagement from "../pages/TransferManagement";
-import { PrisonRegistry } from "../features/prisons/PrisonRegistry";
+import { PrisonRegistry } from "../pages/PrisonRegistry";
 
 
 type View =
@@ -32,7 +30,7 @@ const navigation: { id: View; label: string; short: string }[] = [
   { id: "sentences", label: "Sentences", short: "file" },
   { id: "visitors", label: "Visits", short: "visit" },
   { id: "transfers", label: "Transfers", short: "arrows" },
-  { id: "release", label: "Release & discharge", short: "exit" },
+  // { id: "release", label: "Release & discharge", short: "exit" },
   { id: "access", label: "User Management", short: "shield" },
   { id: "prisons", label: "Prison registry", short: "building" },
 ];
@@ -56,8 +54,9 @@ const endpointFor: Partial<Record<View, string>> = {
   inmates: "/inmates",
   visitors: "/visits",
   transfers: "/transfers",
-  release: "/releases",
+  // release: "/releases",
   access: "/users",
+  prisons : "/prisons"
 };
 
 function valueLabel(value: unknown) {
@@ -235,10 +234,15 @@ function Overview({ onNavigate }: { onNavigate: (view: View) => void }) {
       id: "transfers",
       note: "Movement requests and approvals",
     },
+    // {
+    //   label: "Release Management",
+    //   id: "release",
+    //   note: "Eligibility and discharge",
+    // },
     {
-      label: "Release Management",
-      id: "release",
-      note: "Eligibility and discharge",
+      label: "Prison Registry",
+      id: "prisons",
+      note: "Prison and Block allocation",
     },
   ];
   return (
@@ -289,8 +293,8 @@ function ModuleView({ view, onNavigate }: { view: View; onNavigate: (view: View)
       return <InmateManagement canAdmit userRole="RECORDS OFFICER" section={view === "inmates" ? "overview" : view === "profile" ? "profile" : view === "admission" ? "admission" : "profile-sentences"} onBack={() => onNavigate(view === "admission" ? "inmates" : view)} />;
     case "visitors":
       return <Visitors />;
-    case "release":
-      return <ReleaseManagement />;
+    // case "release":
+    //   return <ReleaseManagement />;
     case "access":
       return <UserAccess />;
     case "transfers":
@@ -303,13 +307,12 @@ function ModuleView({ view, onNavigate }: { view: View; onNavigate: (view: View)
 }
 
 export default function Dashboard() {
-  const { user, logout , authError, isAuthenticated} = useAuth();
+  const { user, logout , authError} = useAuth();
   const visibleNavigation = navigation;
   const [view, setView] = useState<View>("overview");
   const [inmatesOpen, setInmatesOpen] = useState(true);
   const inmateViews: View[] = ["inmates", "profile", "admission", "sentences", "transfers", "visitors"];
   const active = navigation.find((item) => item.id === view) ?? navigation[0];
-  if (!isAuthenticated) return <LoginForm />;
   return (
     <div className="min-h-screen bg-[#f5f7fa] font-['DM_Sans',_'Segoe_UI',sans-serif] text-[#182638]">
       <aside className="fixed inset-y-0 left-0 z-20 hidden w-[264px] flex-col border-r border-white/[0.06] bg-[#101a2d] text-white lg:flex">
@@ -385,12 +388,14 @@ export default function Dashboard() {
                 {user?.role ?? "Authorized officer"}
               </p>
             </div>
-            {user && <button
-              onClick={() => void logout()}
-              className="rounded-[4px] border border-[#d5dee7] bg-white px-3 py-2 text-[11px] font-extrabold text-[#587087] transition hover:border-[#7fa9c3] hover:text-[#1d5f86]"
-            >
-              Sign out
-            </button>}
+            { (
+              <button
+                onClick={() => void logout()}
+                className="rounded-[4px] border border-[#d5dee7] bg-white px-3 py-2 text-[11px] font-extrabold text-[#587087] transition hover:border-[#7fa9c3] hover:text-[#1d5f86]"
+              >
+                Sign out
+              </button>
+            )}
           </div>
         </header>
         <div className="p-5 sm:p-8">

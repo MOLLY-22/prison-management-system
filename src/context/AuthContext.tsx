@@ -55,7 +55,18 @@ function readStoredUser(): AuthUser | null {
     const stored = localStorage.getItem("user") || sessionStorage.getItem("user");
     if (!stored) return null;
     try {
-        return JSON.parse(stored) as AuthUser;
+        const value: unknown = JSON.parse(stored);
+        if (!value || typeof value !== "object") return null;
+        const user = value as Partial<AuthUser>;
+        if (
+            typeof user.id !== "string" ||
+            typeof user.name !== "string" ||
+            typeof user.email !== "string" ||
+            typeof user.role !== "string"
+        ) {
+            return null;
+        }
+        return user as AuthUser;
     } catch {
         return null;
     }
@@ -96,7 +107,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
         setAuthError("");
 
         try {
-            const data = await authService.login(credentials) as AuthResponse;
+            const data = await authService.login(credentials);
             clearStoredSession();
             const storage = credentials.rememberMe ? localStorage : sessionStorage;
             storage.setItem("token", data.token);
@@ -111,12 +122,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
             setToken(data.token);
             setAuthError("");
 
-            return { ...data};
-        } catch (error) {
-            clearStoredSession();
-            setUser(null);
-            setToken(null);
-            throw error;
+            return { ...data };
         } finally {
             setLoading(false);
         }

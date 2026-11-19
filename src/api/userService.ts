@@ -65,14 +65,7 @@ export const userService = {
     },
 
     // POST /api/v1/users
-    createUser: async (userData: {
-        fullName: string;
-        username: string;
-        email: string;
-        password: string;
-        role: string;
-        prisonId?: string;
-    }): Promise<User> => {
+    createUser: async (userData: CreateUserRequest): Promise<User> => {
         const response = await api.post("/users", userData);
         return normalizeUser(itemFrom(response.data));
     },

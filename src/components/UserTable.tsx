@@ -1,15 +1,22 @@
-// @ts-nocheck
 import { useEffect, useMemo, useState } from "react";
-import { userService } from "../api/userService";
+import axios from "axios";
+import { userService, type User } from "../api/userService";
 import AddUserForm from "./addUserForm";
 
+function getErrorMessage(error: unknown, fallback: string) {
+    if (axios.isAxiosError<{ message?: string }>(error)) {
+        return error.response?.data?.message || error.message;
+    }
+    return error instanceof Error ? error.message : fallback;
+}
+
 export default function SectionOne() {
-    const [users, setUsers] = useState([]);
+    const [users, setUsers] = useState<User[]>([]);
     const [loading, setLoading] = useState(false);
     const [errorMessage, setErrorMessage] = useState("");
     const [search, setSearch] = useState("");
     const [showForm, setShowForm] = useState(false);
-    const [editingUser, setEditingUser] = useState(null);
+    const [editingUser, setEditingUser] = useState<User | null>(null);
 
     useEffect(() => {
         let mounted = true;
@@ -19,9 +26,9 @@ export default function SectionOne() {
             try {
                 const data = await userService.getUsers();
                 if (mounted) setUsers(data);
-            } catch (error) {
+            } catch (error: unknown) {
                 if (mounted) {
-                    setErrorMessage(error.response?.data?.message || "Could not load personnel records.");
+                    setErrorMessage(getErrorMessage(error, "Could not load personnel records."));
                 }
             } finally {
                 if (mounted) setLoading(false);
@@ -42,25 +49,23 @@ export default function SectionOne() {
         );
     }, [search, users]);
 
-    const editUser = (user) => {
+    const editUser = (user: User) => {
         setEditingUser(user);
         setShowForm(true);
     };
 
-    const toggleUserStatus = async (user) => {
-        const updatedUser = {
-            ...user,
-            status: user.status === "Active" ? "Inactive" : "Active",
-        };
-
+    const toggleUserStatus = async (user: User) => {
         try {
-            const savedUser = await userService.updateUser(updatedUser);
+            const savedUser = await userService.setUserStatus(
+                user.id,
+                user.status !== "Active",
+            );
             setUsers((currentUsers) =>
                 currentUsers.map((currentUser) => currentUser.id === user.id ? savedUser : currentUser)
             );
             setErrorMessage("");
-        } catch (error) {
-            setErrorMessage(error.response?.data?.message || "Could not update personnel status.");
+        } catch (error: unknown) {
+            setErrorMessage(getErrorMessage(error, "Could not update personnel status."));
         }
     };
 
@@ -120,11 +125,11 @@ export default function SectionOne() {
                     </thead>
                     <tbody>
                         {loading ? (
-                            <tr><td className="empty-state" colSpan="6">Loading personnel records…</td></tr>
+                            <tr><td className="empty-state" colSpan={6}>Loading personnel records…</td></tr>
                         ) : errorMessage && users.length === 0 ? (
-                            <tr><td className="empty-state" colSpan="6">{errorMessage}</td></tr>
+                            <tr><td className="empty-state" colSpan={6}>{errorMessage}</td></tr>
                         ) : filteredUsers.length === 0 ? (
-                            <tr><td className="empty-state" colSpan="6">No personnel match “{search}”.</td></tr>
+                            <tr><td className="empty-state" colSpan={6}>No personnel match “{search}”.</td></tr>
                         ) : filteredUsers.map((user) => (
                             <tr key={user.id ?? user.badgeId}>
                                 <td>
