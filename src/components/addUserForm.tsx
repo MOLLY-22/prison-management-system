@@ -99,7 +99,7 @@ function formFromUser(user: User | null): UserForm {
     if (!user) return emptyUserForm;
     return {
         name: user.name,
-        username: user.username || user.badgeId,
+        username: user.username || user.badgeId || "",
         email: user.email || "",
         password: "",
         role: user.role,

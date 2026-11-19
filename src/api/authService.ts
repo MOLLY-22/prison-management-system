@@ -74,4 +74,15 @@ export const authService = {
     changePassword: async (currentPassword: string, newPassword: string) => {
         await api.post("/auth/password/change", { currentPassword, newPassword });
     },
+
+    refresh: async (token: string) => {
+        const response = await api.post(
+            "/auth/refresh",
+            undefined,
+            {
+                headers: { Authorization: `Bearer ${token}` },
+            }
+        );
+        return response.data;
+    },
 };
