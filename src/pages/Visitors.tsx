@@ -124,7 +124,11 @@ export default function Visitors() {
         setNotice("Visitor registered successfully, but the log could not be refreshed.");
       }
     } catch (error) {
-      setNotice(getErrorMessage(error, "Could not register visitor."));
+      setNotice(
+        axios.isAxiosError(error) && !error.response
+          ? "The visit could not be confirmed; the API may have saved it before the connection failed. Refresh the visit log before retrying."
+          : getErrorMessage(error, "Could not register visitor."),
+      );
     } finally {
       setSaving(false);
     }

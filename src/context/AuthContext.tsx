@@ -1,5 +1,7 @@
+/* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useState } from "react";
 import type { PropsWithChildren } from "react";
+
 import { authService } from "../api/authService";
 
 export type AuthUser = {
@@ -7,6 +9,8 @@ export type AuthUser = {
     name: string;
     email: string;
     role: string;
+    prisonId?: string | null;
+    prisonName?: string | null;
 };
 
 export type LoginCredentials = {
@@ -32,6 +36,7 @@ export type AuthContextValue = {
     logout: () => Promise<void>;
 };
 
+ 
 export const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function useAuth() {
@@ -65,44 +70,63 @@ function clearStoredSession() {
     sessionStorage.removeItem("user");
 }
 
+function storeUser(storage: Storage, user: AuthUser) {
+    localStorage.removeItem("user");
+    sessionStorage.removeItem("user");
+    storage.setItem("user", JSON.stringify(user));
+}
+
 export function AuthProvider({ children }: PropsWithChildren) {
     const [token, setToken] = useState(readStoredToken);
+    const [user, setUser] = useState(readStoredUser);
     const [loading, setLoading] = useState(false);
     const [authError, setAuthError] = useState("");
 
+    
     const login = async (credentials: LoginCredentials): Promise<AuthResponse> => {
+        console.log("Logging in with credentials:", credentials);
         setLoading(true);
         setAuthError("");
 
         try {
-            const data = await authService.login(credentials);
-            if (!data?.token) {
-                throw new Error("The auth service returned an invalid login response.");
-            }
-
+            const data = await authService.login(credentials) as AuthResponse;
             clearStoredSession();
             const storage = credentials.rememberMe ? localStorage : sessionStorage;
             storage.setItem("token", data.token);
-            if (data.user) storage.setItem("user", JSON.stringify(data.user));
-            setToken(data.token);
 
-            return data;
+            if (data.user) {
+                storeUser(storage, data.user);
+                setUser(data.user);
+            } else {
+                setUser(null);
+            }
+
+            setToken(data.token);
+            setAuthError("");
+
+            return { ...data};
+        } catch (error) {
+            clearStoredSession();
+            setUser(null);
+            setToken(null);
+            throw error;
         } finally {
             setLoading(false);
         }
     };
 
     const logout = async () => {
-        const hadActiveToken = Boolean(token);
+        const activeToken = token;
 
         clearStoredSession();
         setToken(null);
+        setUser(null);
         setAuthError("");
 
-        if (!hadActiveToken) return;
+        if (!activeToken) return;
 
         try {
-            await authService.logout();
+            await authService.logout(activeToken);
         } catch {
             setAuthError("You are signed out, but the server session could not be revoked.");
         }
@@ -111,7 +135,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     return (
         <AuthContext.Provider
             value={{
-                user: readStoredUser(),
+                user,
                 token,
                 isAuthenticated: Boolean(token),
                 loading,

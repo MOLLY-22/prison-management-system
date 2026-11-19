@@ -1,14 +1,25 @@
 # Prison Management System
 
-The Vite frontend proxies local API requests to `http://localhost:8080/api/v1`.
-PostgreSQL is managed by the API stack and is not accessed directly by the
-browser.
+## Backend API configuration
+
+All frontend API requests use `VITE_API_URL`, which defaults to `/api/v1`.
+During local development, Vite proxies `/api` to the backend at
+`http://localhost:8080`; start the API before starting the frontend with
+`pnpm dev`.
+
+For deployment, set `VITE_API_URL` to the real backend's API base URL when
+building the frontend, or configure the production web server to route `/api`
+to that backend. Vite environment variables are embedded at build time, so
+rebuild after changing the value. Keep credentials and tokens out of frontend
+environment variables; anything prefixed with `VITE_` is exposed to the browser.
+
+The browser communicates only with the API. PostgreSQL is managed by the
+backend and is never accessed directly from frontend code.
 
 ## Run locally
 
 ```powershell
-npm install
-npm run dev
+pnpm dev
 ```
 
 Leave `VITE_API_URL` empty in local development so requests use the Vite proxy:
@@ -21,4 +32,5 @@ For a deployed frontend, set `VITE_API_URL` to the public API base URL,
 including the `/api/v1` path.
 
 The frontend sends the login token as a Bearer token and uses the API for
-inmates, visitors, transfers, releases, and user access records.
+inmates, visits, transfers, and user access records. Release and discharge
+operations are not currently published by the backend OpenAPI contract.

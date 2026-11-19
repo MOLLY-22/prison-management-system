@@ -1,227 +1,144 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from "react";
+import axios from "axios";
+import { Alert, Box, Button, Stack, Typography } from "@mui/material";
+import TransferForm from "../components/TransferForm";
+import TransferTable from "../components/TransferTable";
+import TransferApproval from "../components/TransferApproval";
 import {
-  Alert,
-  Box,
-  CircularProgress,
-  Stack,
-  Typography,
-} from '@mui/material'
+  transferService,
+  type CreateTransferRequest,
+  type TransferRecord,
+} from "../api/transferService";
+import "./transferManagement.css";
 
-import TransferForm from '../components/TransferForm'
-import TransferTable, { type TransferRecord } from '../components/TransferTable'
-import TransferApproval from '../components/TransferApproval'
-import TransferHistory from '../components/TransferHistory'
-import { transferService } from '../api/transferService'
-import type {
-  ApproveTransferRequest,
-  CreateTransferRequest,
-  TransferNoteRequest,
-} from '../types/transfer'
-import './transferManagement.css'
-
-function recordFromResponse(response: unknown): TransferRecord {
-  let value = response
-
-  if (value && typeof value === 'object' && !Array.isArray(value)) {
-    const record = value as Record<string, unknown>
-    value = record.data ?? record.result ?? value
+function messageFrom(error: unknown) {
+  if (axios.isAxiosError<{ message?: string }>(error)) {
+    return error.response?.data?.message || error.message;
   }
-
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new Error('The server returned an invalid transfer record.')
-  }
-
-  return value as TransferRecord
-}
-
-function recordsFromResponse(response: unknown): TransferRecord[] {
-  let value = response
-
-  if (value && typeof value === 'object' && !Array.isArray(value)) {
-    const record = value as Record<string, unknown>
-    value = record.data ?? record.result ?? value
-  }
-
-  if (Array.isArray(value)) return value as TransferRecord[]
-  if (value && typeof value === 'object') {
-    const content = (value as Record<string, unknown>).content
-    if (Array.isArray(content)) return content as TransferRecord[]
-  }
-
-  throw new Error('The server returned an invalid transfer list.')
-}
-
-function totalPagesFromResponse(response: unknown): number {
-  let value = response
-  if (value && typeof value === 'object' && !Array.isArray(value)) {
-    const record = value as Record<string, unknown>
-    value = record.data ?? record.result ?? value
-  }
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return 1
-
-  const totalPages = Number((value as Record<string, unknown>).totalPages)
-  return Number.isInteger(totalPages) && totalPages > 1 ? totalPages : 1
-}
-
-function getErrorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message
-  return 'An unexpected error occurred.'
+  return error instanceof Error ? error.message : "The transfer request failed.";
 }
 
 function TransferManagement() {
-  const [transfers, setTransfers] = useState<TransferRecord[]>([])
-  const [selectedTransfer, setSelectedTransfer] = useState<TransferRecord | null>(null)
-  const [successMessage, setSuccessMessage] = useState('')
-  const [loadError, setLoadError] = useState('')
-  const [loading, setLoading] = useState(true)
+  const [transfers, setTransfers] = useState<TransferRecord[]>([]);
+  const [selectedTransfer, setSelectedTransfer] = useState<TransferRecord | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
 
-  async function fetchTransfers() {
-    const firstPage = await transferService.getTransfers({ page: 0, size: 100 })
-    const totalPages = totalPagesFromResponse(firstPage)
-
-    if (totalPages === 1) return recordsFromResponse(firstPage)
-
-    const remainingPages = await Promise.all(
-      Array.from({ length: totalPages - 1 }, (_, index) =>
-        transferService.getTransfers({ page: index + 1, size: 100 }),
-      ),
-    )
-
-    return [
-      ...recordsFromResponse(firstPage),
-      ...remainingPages.flatMap(recordsFromResponse),
-    ]
-  }
-
-  async function loadTransfers() {
-    setLoading(true)
-    setLoadError('')
-
+  const loadTransfers = useCallback(async () => {
+    setError("");
     try {
-      setTransfers(await fetchTransfers())
-    } catch (error) {
-      setLoadError(getErrorMessage(error))
+      setTransfers(await transferService.getTransfers());
+    } catch (reason: unknown) {
+      setError(messageFrom(reason));
+      throw reason;
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  }, []);
 
   useEffect(() => {
-    let active = true
+    void loadTransfers().catch(() => undefined);
+  }, [loadTransfers]);
 
-    fetchTransfers()
-      .then(records => {
-        if (active) setTransfers(records)
-      })
-      .catch(error => {
-        if (active) setLoadError(getErrorMessage(error))
-      })
-      .finally(() => {
-        if (active) setLoading(false)
-      })
-
-    return () => {
-      active = false
+  async function createTransfer(payload: CreateTransferRequest) {
+    setSaving(true);
+    setError("");
+    setSuccessMessage("");
+    try {
+      const created = await transferService.createTransfer(payload);
+      setTransfers((current) => [created, ...current.filter((item) => item.id !== created.id)]);
+      setSuccessMessage("Transfer request created successfully.");
+    } finally {
+      setSaving(false);
     }
-  }, [])
-
-  async function handleCreateTransfer(request: CreateTransferRequest) {
-    const response = await transferService.createTransfer(request)
-    const createdTransfer = recordFromResponse(response)
-    setTransfers(current => [
-      createdTransfer,
-      ...current.filter(item => item.id !== createdTransfer.id),
-    ])
-    setSuccessMessage(
-      `Transfer request for ${createdTransfer.inmateName} was created successfully.`,
-    )
   }
 
-  function replaceTransfer(updatedTransfer: TransferRecord) {
-    setTransfers(current =>
-      current.map(item => item.id === updatedTransfer.id ? updatedTransfer : item),
-    )
-    setSelectedTransfer(updatedTransfer)
-    setSuccessMessage(
-      `Transfer for ${updatedTransfer.inmateName} is now ${updatedTransfer.status.toLowerCase().replace('_', ' ')}.`,
-    )
-  }
-
-  async function handleApprove(
-    transferId: string,
-    approvalData: ApproveTransferRequest,
+  async function performAction(
+    action: () => Promise<TransferRecord>,
+    success: string,
   ) {
-    const response = await transferService.approveTransfer(transferId, approvalData)
-    replaceTransfer(recordFromResponse(response))
+    setSaving(true);
+    setError("");
+    setSuccessMessage("");
+    try {
+      const updatedTransfer = await action();
+      setTransfers((current) => [
+        updatedTransfer,
+        ...current.filter((item) => item.id !== updatedTransfer.id),
+      ]);
+      setSelectedTransfer(null);
+      setSuccessMessage(success);
+      try {
+        await loadTransfers();
+      } catch {
+        // The successful action is retained; loadTransfers displays the refresh error.
+      }
+    } finally {
+      setSaving(false);
+    }
   }
 
-  async function handleReject(transferId: string, data?: TransferNoteRequest) {
-    const response = await transferService.rejectTransfer(transferId, data)
-    replaceTransfer(recordFromResponse(response))
-  }
-
-  async function handleCancel(transferId: string, data?: TransferNoteRequest) {
-    const response = await transferService.cancelTransfer(transferId, data)
-    replaceTransfer(recordFromResponse(response))
+  async function refreshTransfers() {
+    try {
+      await loadTransfers();
+    } catch {
+      // loadTransfers displays the API error in the page alert.
+    }
   }
 
   return (
-    <Box className="transfer-workspace" sx={{ p: { xs: 2, md: 4 }, maxWidth: 1600, mx: 'auto' }}>
+    <Box className="transfer-workspace" sx={{ p: { xs: 2, md: 4 }, maxWidth: 1600, mx: "auto" }}>
       <Stack spacing={3}>
         <Box>
-          <Typography variant="h4" sx={{ fontWeight: 700 }}>
-            Transfer Management
-          </Typography>
           <Typography color="text.secondary" sx={{ mt: 1 }}>
-            Create transfer requests, review approvals, track movement, and
-            inspect transfer history.
+            Create and review transfer requests, and follow each request’s progress.
           </Typography>
         </Box>
 
+        {error && (
+          <Alert
+            severity="error"
+            action={<Button color="inherit" size="small" onClick={() => void refreshTransfers()}>Retry</Button>}
+          >
+            {error}
+          </Alert>
+        )}
         {successMessage && (
-          <Alert severity="success" onClose={() => setSuccessMessage('')}>
+          <Alert severity="success" onClose={() => setSuccessMessage("")}>
             {successMessage}
           </Alert>
         )}
 
-        {loadError && (
-          <Alert severity="error" action={
-            <button type="button" onClick={() => void loadTransfers()}>
-              Retry
-            </button>
-          }>
-            Could not load transfer records: {loadError}
-          </Alert>
-        )}
-
-        <TransferForm onSubmit={handleCreateTransfer} />
+        <TransferForm onSubmit={createTransfer} />
 
         {loading ? (
-          <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-            <CircularProgress aria-label="Loading transfer records" />
-          </Box>
+          <Typography role="status">Loading transfer records…</Typography>
         ) : (
-          <>
-            <TransferTable
-              transfers={transfers}
-              onSelectTransfer={setSelectedTransfer}
-            />
-
-            <TransferHistory transfers={transfers} />
-          </>
+          <TransferTable transfers={transfers} onSelectTransfer={setSelectedTransfer} />
         )}
 
         <TransferApproval
-          key={selectedTransfer?.id ?? 'closed'}
           transfer={selectedTransfer}
-          onApprove={handleApprove}
-          onReject={handleReject}
-          onCancel={handleCancel}
+          saving={saving}
+          onApprove={(id, cellId) => performAction(
+            () => transferService.approveTransfer(id, cellId),
+            "Transfer approved and destination cell assigned.",
+          )}
+          onReject={(id) => performAction(
+            () => transferService.rejectTransfer(id),
+            "Transfer rejected.",
+          )}
+          onCancel={(id) => performAction(
+            () => transferService.cancelTransfer(id),
+            "Transfer cancelled.",
+          )}
           onClose={() => setSelectedTransfer(null)}
         />
       </Stack>
     </Box>
-  )
+  );
 }
 
-export default TransferManagement
+export default TransferManagement;

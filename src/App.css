@@ -1,7 +1,4 @@
-
-
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap');
-
 :root {
   --corp-navy: #0b1f36;
   --corp-navy-light: #102a43;
@@ -3485,7 +3482,7 @@ a:focus-visible {
 
 /* =========================================
    APP SECTION SPACING
-   ========================================= */
+========================================= */
 
 .dashboard-section {
   width: 100%;
@@ -3522,15 +3519,6 @@ a:focus-visible {
   .dashboard-section {
     margin-bottom: 18px;
   }
-}
-
-.login-description {
-  color: #53647a;
-  font-size: 13px;
-}
-
-.remember-option input {
-  accent-color: #087f9b;
 }
 
 .login-feedback {

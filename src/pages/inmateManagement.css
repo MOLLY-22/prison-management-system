@@ -115,6 +115,12 @@
   font-size: 13px;
 }
 
+.census-notice.MuiAlert-standardError {
+  border-color: #edc8c8;
+  background: #fff3f2;
+  color: #8d2f31;
+}
+
 .census-metrics {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -649,5 +655,31 @@
 @media (max-width: 700px) {
   .census-page {
     width: min(100% - 28px, 1440px);
+  }
+}
+
+/* The census now has three API-backed summary cards and a two-control filter. */
+.module-host .census-metrics {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.module-host .filter-bar {
+  grid-template-columns: minmax(240px, 1fr) minmax(170px, .65fr) auto;
+}
+
+.module-host .admission-dialog .MuiDialog-paperFullScreen {
+  border-radius: 0 !important;
+}
+
+@media (max-width: 980px) {
+  .module-host .census-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 700px) {
+  .module-host .census-metrics,
+  .module-host .filter-bar {
+    grid-template-columns: 1fr;
   }
 }

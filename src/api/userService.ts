@@ -1,79 +1,133 @@
-import api from "./axios";
-import { asRecord, collectionFrom, firstValue, itemFrom } from "./dataContract";
+import api from "./axiosClient";
+import { asBoolean, asRecord, collectionFrom, firstValue, itemFrom, requiredIdentifier } from "./dataContract";
 
-export type User = {
+
+export type UserRole =
+    | "Super Admin"
+    | "Records Officer"
+    | "Disciplinary Officer"
+    | "Case Officer"
+    | "Visitor Officer"
+    | "Rehabilitation Officer"
+    | "Instructor"
+    | "Medical Officer"
+    | "Duty Officer";
+
+export interface User {
     id: string;
     name: string;
-    badgeId: string;
-    role: string;
-    facility: string;
-    status: string;
+    role: UserRole | string;
+    status: "Active" | "Inactive";
     email?: string;
-    permissions?: string[];
     username?: string;
+    badgeId?: string;
+    facility?: string;
+    prisonId?: string | null;
+    prisonName?: string | null;
+    createdAt?: string;
+    updatedAt?: string;
 };
 
-type UserDetails = {
+export type UserListParams = {
+    status?: "active" | "inactive";
+    role?: string;
+    search?: string;
+    page?: number;
+    size?: number;
+    sort?: string[];
+};
+
+export type CreateUserRequest = {
     fullName: string;
     username: string;
     email?: string | null;
+    password: string;
     role: string;
+    prisonId?: string | null;
+};
+
+export type UpdateUserRequest = Partial<Omit<CreateUserRequest, "password">> & {
     permissions?: string[];
 };
 
-function userDetails(user: Partial<User> & { id?: string }): UserDetails {
-    return {
-        fullName: String(user.name || ""),
-        username: String(user.username || user.badgeId || ""),
-        email: user.email || null,
-        role: String(user.role || ""),
-        permissions: user.permissions || [],
-    };
-}
+
 
 export const userService = {
-    async getUsers(): Promise<User[]> {
+    // GET /api/v1/users
+    getUsers: async (): Promise<User[]> => {
         const response = await api.get("/users");
         return collectionFrom(response.data).map(normalizeUser);
     },
 
-    async createUser(userData: Omit<User, "id"> & { password?: string }): Promise<User> {
-        const response = await api.post("/users", {
-            fullName: userData.name,
-            username: userData.username || userData.badgeId,
-            email: userData.email || undefined,
-            password: userData.password,
-            role: userData.role,
-        });
+    getUser: async (id: string): Promise<User> => {
+        const response = await api.get(`/users/${id}`);
         return normalizeUser(itemFrom(response.data));
     },
 
-    async updateUserRole(id: string, newRole: string): Promise<User> {
-        return this.updateUser({ id, role: newRole });
+    // POST /api/v1/users
+    createUser: async (userData: {
+        fullName: string;
+        username: string;
+        email: string;
+        password: string;
+        role: string;
+        prisonId?: string;
+    }): Promise<User> => {
+        const response = await api.post("/users", userData);
+        return normalizeUser(itemFrom(response.data));
     },
 
-    async updateUser(userData: Partial<User> & Pick<User, "id">): Promise<User> {
-        const response = await api.patch(`/users/${encodeURIComponent(userData.id)}`, userDetails(userData));
+    // PATCH /api/v1/users/{userId}
+    async updateUserRole(id: string, newRole: string): Promise<User> {
+        return this.updateUser(id, { role: newRole });
+    },
+
+    updateUser: async (id: string, updates: Partial<User>): Promise<User> => {
+        const response = await api.patch(`/users/${id}`, updates);
         return normalizeUser(itemFrom(response.data));
     },
 
     async setUserStatus(id: string, active: boolean): Promise<User> {
-        const response = await api.patch(`/users/${encodeURIComponent(id)}/${active ? "reactivate" : "deactivate"}`);
+        const response = await api.patch(`/users/${id}/${active ? "reactivate" : "deactivate"}`);
+        if (response.status === 204 || !response.data) {
+            return this.getUser(id);
+        }
         return normalizeUser(itemFrom(response.data));
-    },
+    }
 };
 
 function normalizeUser(payload: unknown): User {
     const record = asRecord(payload);
+    const id = requiredIdentifier(record, ["id", "userId", "user_id"], "user");
+    const username = String(firstValue(record, ["username", "userName", "user_name"], ""));
+    const badgeId = String(firstValue(record, ["badgeId", "badge_id"], username));
+    const facility = firstValue(record, ["facility"], "");
+    const prison = asRecord(firstValue(record, ["prison"], facility));
+    const rawStatus = String(firstValue(record, ["status", "accountStatus", "account_status"], ""))
+        .trim()
+        .toLowerCase();
+    const isActive = rawStatus
+        ? ["active", "enabled"].includes(rawStatus)
+        : asBoolean(firstValue(record, ["active", "isActive", "is_active"], true), true);
+    const prisonName = String(firstValue(
+        record,
+        ["prisonName", "prison_name"],
+        typeof facility === "string" ? facility : firstValue(prison, ["name"], ""),
+    ));
+
     return {
-        id: String(firstValue(record, ["id", "userId", "user_id"], "")),
-        name: String(firstValue(record, ["fullName", "full_name", "name"], "")),
-        badgeId: String(firstValue(record, ["username", "badgeId", "badge_id"], "")),
-        role: String(firstValue(record, ["role", "roleName", "role_name"], "")),
-        facility: String(firstValue(record, ["facility", "facilityName", "facility_name", "sector"], "")),
-        status: String(firstValue(record, ["status", "accountStatus", "account_status"], "ACTIVE")).toUpperCase() === "ACTIVE" ? "Active" : "Inactive",
-        email: firstValue(record, ["email", "emailAddress", "email_address"], undefined) as string | undefined,
-        permissions: Array.isArray(record.permissions) ? record.permissions as string[] : [],
-        username: String(firstValue(record, ["username", "badgeId", "badge_id"], "")),
+        id,
+        name: String(firstValue(record, ["name", "fullName", "full_name"], username)),
+        role: String(firstValue(record, ["role", "userRole", "user_role"], "")),
+        status: isActive ? "Active" : "Inactive",
+        email: String(firstValue(record, ["email"], "")),
+        username,
+        badgeId,
+        facility: prisonName,
+        prisonId: firstValue(record, ["prisonId", "prison_id"], null) as string | null,
+        prisonName,
+        createdAt: firstValue(record, ["createdAt", "created_at"], undefined) as string | undefined,
+        updatedAt: firstValue(record, ["updatedAt", "updated_at"], undefined) as string | undefined,
     };
 }
+
