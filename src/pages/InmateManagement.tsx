@@ -340,7 +340,7 @@ export function InmateManagement({ canAdmit, userRole, section, onBack }: Props)
       setSavingAdmission(false);
     }
   };
-  if (selectedInmateId && ["overview", "profile", "profile-sentences"].includes(section)) return <InmateProfile inmateId={selectedInmateId} userRole={userRole} initialTab={section === "profile-sentences" ? "Sentences" : "Overview"} onBack={() => setSelectedInmateId(null)} />;
+  if (selectedInmateId && section === "overview") return <InmateProfile inmateId={selectedInmateId} userRole={userRole} initialTab="Transfers" onBack={() => setSelectedInmateId(null)} />;
   if (section === "profile-sentences") return <SentenceInmatePicker records={records} loading={loading} error={censusLoadError ? notice : ""} onRetry={() => void loadInmates()} onSelect={setSelectedInmateId} />;
   return (
     <Box className="census-page">
@@ -358,7 +358,7 @@ export function InmateManagement({ canAdmit, userRole, section, onBack }: Props)
       {!admissionOpen && <Box className="portal-heading">
         <Box className="portal-title-row">
           <Box>
-          <Typography component="h1">{section === "admission" ? "Admission" : section === "profile-sentences" ? "Sentences" : section === "profile" ? "Profile" : "Overview"}</Typography>
+          <Typography component="h1">{section === "admission" ? "Admission" : section === "profile-sentences" ? "Sentences" : section === "profile" ? "Profile" : "Inmates"}</Typography>
           </Box>
         </Box>
       </Box>}
@@ -405,11 +405,12 @@ export function InmateManagement({ canAdmit, userRole, section, onBack }: Props)
       <Paper className="directory" elevation={0}>
         <Box className="directory-title">
           <Box>
-          <Typography component="h2">{section === "profile" ? "Inmate profiles" : "Inmate Census Directory"}</Typography>
+          <Typography component="h2">{section === "profile" ? "Inmate profiles" : "Inmate directory"}</Typography>
             <Typography>
               {section === "profile" ? "Choose an inmate to view their profile." : `${filtered.length} matching record${filtered.length === 1 ? "" : "s"} in the census.`}
             </Typography>
           </Box>
+          {canAdmit && <Button variant="contained" onClick={() => setAdmissionOpen(true)}>Admit inmate</Button>}
         </Box>
         <TableContainer>
           <Table className="census-table">
@@ -422,12 +423,12 @@ export function InmateManagement({ canAdmit, userRole, section, onBack }: Props)
                 <TableCell>Station</TableCell>
                 <TableCell>Cell ID</TableCell>
                 <TableCell>Admission Date</TableCell>
-                <TableCell>Profile</TableCell>
+                <TableCell>Actions</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {loading ? <TableRow><TableCell colSpan={8}>Loading inmate records...</TableCell></TableRow> : censusLoadError ? <TableRow><TableCell colSpan={8}>Inmate records are unavailable. Use Retry above after checking the API connection and your account access.</TableCell></TableRow> : !filtered.length ? <TableRow><TableCell colSpan={8}>No inmate records match these filters.</TableCell></TableRow> : filtered.map((record) => (
-                <TableRow key={record.id} hover onClick={() => setSelectedInmateId(record.id)} sx={{ cursor: "pointer" }}>
+                <TableRow key={record.id} hover>
                   <TableCell>
                     <Box className="id-photo">
                       <span className="mugshot">
@@ -442,7 +443,7 @@ export function InmateManagement({ canAdmit, userRole, section, onBack }: Props)
                   <TableCell>{record.prisonName || "—"}</TableCell>
                   <TableCell>{record.cellId || "—"}</TableCell>
                   <TableCell>{record.admissionDate}</TableCell>
-                  <TableCell><Button size="small" onClick={(event) => { event.stopPropagation(); setSelectedInmateId(record.id); }}>View</Button></TableCell>
+                  <TableCell><Button size="small" variant="outlined" onClick={() => setSelectedInmateId(record.id)}>View</Button></TableCell>
                 </TableRow>
               ))}
             </TableBody>

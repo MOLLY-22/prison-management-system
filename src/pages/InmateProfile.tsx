@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import api from "../api/axiosClient";
-import { collectionFrom, asRecord, itemFrom } from "../api/dataContract";
+import { collectionFrom, asRecord, fetchAllPages, itemFrom } from "../api/dataContract";
 
 type Row = Record<string, unknown>;
 type Tab =
@@ -91,7 +91,7 @@ export default function InmateProfile({
   const canRecordAttendance = ["PROGRAM FACILITATOR", "INSTRUCTOR"].includes(
     role,
   );
-  const visibleTabs: Tab[] = ["Overview", "Sentences"];
+  const visibleTabs: Tab[] = ["Transfers", "Visits", "Sentences"];
   const [tab, setTab] = useState<Tab>(initialTab);
   const [record, setRecord] = useState<Row>({});
   const [sentences, setSentences] = useState<Row[]>([]);
@@ -123,11 +123,24 @@ export default function InmateProfile({
     setLoading(true);
     const load = async () => {
       try {
+        const inmateResponse = await api.get(
+          `/inmates/${encodeURIComponent(inmateId)}`,
+        );
+        if (active) setRecord(asRecord(itemFrom(inmateResponse.data)));
+
+        if (tab === "Transfers") {
+          try {
+            const image = await api.get(
+              `/inmates/${encodeURIComponent(inmateId)}/photo`,
+              { responseType: "blob" },
+            );
+            if (active) setPhoto(URL.createObjectURL(image.data));
+          } catch {
+            /* Inmates may not have a photo. */
+          }
+        }
+
         if (tab === "Overview") {
-          const { data } = await api.get(
-            `/inmates/${encodeURIComponent(inmateId)}`,
-          );
-          if (active) setRecord(asRecord(itemFrom(data)));
           try {
             const image = await api.get(
               `/inmates/${encodeURIComponent(inmateId)}/photo`,
@@ -143,13 +156,12 @@ export default function InmateProfile({
           );
           if (active) setSentences(collectionFrom(data).map(asRecord));
         } else if (tab === "Transfers") {
-          const { data } = await api.get("/transfers", {
-            params: { page: 0, size: 500 },
-          });
+          const rows = await fetchAllPages<unknown>((page) =>
+            api.get("/transfers", { params: { page, size: 100 } }).then(({ data }) => data),
+          );
           if (active)
             setTransferRows(
-              collectionFrom(itemFrom(data))
-                .map(asRecord)
+              rows.map(asRecord)
                 .filter((row) => String(field(row, "inmateId")) === inmateId),
             );
         } else if (tab === "Visits") {

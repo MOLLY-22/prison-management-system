@@ -24,10 +24,7 @@ type RecordItem = Record<string, string | number | boolean | null>;
 
 const navigation: { id: View; label: string; short: string }[] = [
   { id: "overview", label: "Dashboard", short: "grid" },
-  { id: "inmates", label: "Overview", short: "people" },
-  { id: "profile", label: "Profile", short: "people" },
-  { id: "admission", label: "Admission", short: "file" },
-  { id: "sentences", label: "Sentences", short: "file" },
+  { id: "inmates", label: "Inmates", short: "people" },
   { id: "visitors", label: "Visits", short: "visit" },
   { id: "transfers", label: "Transfers", short: "arrows" },
   // { id: "release", label: "Release & discharge", short: "exit" },
@@ -287,10 +284,10 @@ function Overview({ onNavigate }: { onNavigate: (view: View) => void }) {
   );
 }
 
-function ModuleView({ view, onNavigate }: { view: View; onNavigate: (view: View) => void }) {
+function ModuleView({ view, onNavigate, userRole }: { view: View; onNavigate: (view: View) => void; userRole: string }) {
   switch (view) {
     case "inmates": case "profile": case "admission": case "sentences":
-      return <InmateManagement canAdmit userRole="RECORDS OFFICER" section={view === "inmates" ? "overview" : view === "profile" ? "profile" : view === "admission" ? "admission" : "profile-sentences"} onBack={() => onNavigate(view === "admission" ? "inmates" : view)} />;
+      return <InmateManagement canAdmit userRole={userRole} section={view === "admission" ? "admission" : "overview"} onBack={() => onNavigate("inmates")} />;
     case "visitors":
       return <Visitors />;
     // case "release":
@@ -310,8 +307,6 @@ export default function Dashboard() {
   const { user, logout , authError} = useAuth();
   const visibleNavigation = navigation;
   const [view, setView] = useState<View>("overview");
-  const [inmatesOpen, setInmatesOpen] = useState(true);
-  const inmateViews: View[] = ["inmates", "profile", "admission", "sentences", "transfers", "visitors"];
   const active = navigation.find((item) => item.id === view) ?? navigation[0];
   return (
     <div className="min-h-screen bg-[#f5f7fa] font-['DM_Sans',_'Segoe_UI',sans-serif] text-[#182638]">
@@ -333,26 +328,7 @@ export default function Dashboard() {
               <span className="truncate">{item.label}</span>
             </button>
           ))}
-          <button
-            aria-expanded={inmatesOpen}
-            onClick={() => setInmatesOpen((open) => !open)}
-            className={`flex min-h-10 w-full items-center gap-3 rounded-lg px-3 text-left text-[13px] font-medium transition-colors ${inmateViews.includes(view) ? "text-white" : "text-slate-300 hover:bg-white/[0.06] hover:text-white"}`}
-          >
-            <NavigationIcon name="people" />
-            <span className="flex-1">Inmate Management</span>
-            <svg className={`size-3.5 transition-transform ${inmatesOpen ? "rotate-90" : ""}`} viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m6 3 5 5-5 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-          </button>
-          {inmatesOpen && <div className="mt-1 space-y-1">
-            {navigation.filter((item) => ["inmates", "profile", "admission", "sentences", "transfers", "visitors"].includes(item.id)).map((item) => (
-              <button
-                aria-current={view === item.id ? "page" : undefined}
-                key={item.id}
-                onClick={() => setView(item.id)}
-                className={`relative ml-3 flex min-h-9 w-[calc(100%-0.75rem)] items-center rounded-lg border-l pl-4 text-left text-[12px] transition-colors ${view === item.id ? "border-[#36c6bf] bg-[#16435a] font-semibold text-white" : "border-white/10 text-slate-300 hover:bg-white/[0.06] hover:text-white"}`}
-              >{item.label}</button>
-            ))}
-          </div>}
-          {visibleNavigation.filter((item) => !["overview", ...inmateViews].includes(item.id)).map((item) => (
+          {visibleNavigation.filter((item) => item.id !== "overview").map((item) => (
             <button
               aria-current={view === item.id ? "page" : undefined}
               className={`relative flex min-h-10 w-full items-center gap-3 rounded-lg px-3 text-left text-[13px] transition-colors ${view === item.id ? "bg-[#16435a] font-semibold text-white before:absolute before:left-0 before:h-7 before:w-[3px] before:rounded-r before:bg-[#36c6bf]" : "text-slate-300 hover:bg-white/[0.06] hover:text-white"}`}
@@ -415,7 +391,7 @@ export default function Dashboard() {
               </button>
             ))}
           </div>
-          {view === "overview" ? <Overview onNavigate={setView} /> : <ModuleView view={view} onNavigate={setView} />}
+          {view === "overview" ? <Overview onNavigate={setView} /> : <ModuleView view={view} onNavigate={setView} userRole={user?.role ?? "RECORDS OFFICER"} />}
         </div>
       </main>
     </div>
