@@ -364,16 +364,6 @@ export function InmateManagement({ canAdmit, userRole, section, onBack }: Props)
       </Box>}
       {section !== "admission" && <>
       {section === "profile-sentences" && <Alert severity="info">Select an inmate from the table to open their Sentences.</Alert>}
-      {section === "overview" && !censusLoadError && <Box className="census-metrics">
-        <Metric
-          label="Total inmate records"
-          value={censusLoadError ? "—" : records.length.toLocaleString()}
-          note={censusLoadError ? "Unavailable" : "Current census"}
-          tone="blue"
-        />
-        <Metric label="On remand" value={loading ? "—" : records.filter((record) => record.inmateType === "REMAND").length.toLocaleString()} note="From inmate type" tone="blue" />
-        <Metric label="Sentenced" value={loading ? "—" : records.filter((record) => record.inmateType === "SENTENCED").length.toLocaleString()} note="From inmate type" tone="blue" />
-      </Box>}
       <Paper className="filter-bar" elevation={0}>
         <TextField
           placeholder="Search by name, ID, station, or cell"
@@ -640,40 +630,4 @@ function SentenceInmatePicker({ records, loading, error, onRetry, onSelect }: { 
       </Box>
     </Paper>
   </Box>;
-}
-
-function Metric({
-  label,
-  value,
-  note,
-  tone,
-  onClick,
-}: {
-  label: string;
-  value: string;
-  note: string;
-  tone: string;
-  onClick?: () => void;
-}) {
-  return (
-    <Paper
-      className={`metric-card ${tone} ${onClick ? "metric-card-link" : ""}`}
-      elevation={0}
-      onClick={onClick}
-      role={onClick ? "button" : undefined}
-      tabIndex={onClick ? 0 : undefined}
-      onKeyDown={(event) => {
-        if (onClick && (event.key === "Enter" || event.key === " ")) onClick();
-      }}
-    >
-      <Box>
-        <Typography>{label}</Typography>
-        <strong>{value}</strong>
-        <small>{note}</small>
-      </Box>
-      {onClick && (
-        <Typography className="metric-action">View schedule →</Typography>
-      )}
-    </Paper>
-  );
 }
