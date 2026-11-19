@@ -1,0 +1,96 @@
+.admission-page {
+  width: 100%;
+  overflow: hidden;
+  border: 1px solid #e5ebf1;
+  border-radius: 8px !important;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.05) !important;
+}
+.admission-dialog-title {
+  padding: 18px 24px !important;
+  border-bottom: 1px solid #e5ebf1;
+}
+.admission-dialog-title h2 {
+  margin: 0;
+  color: #102a43;
+  font-size: 20px;
+  font-weight: 650;
+}
+.admission-dialog-content {
+  display: grid;
+  gap: 12px;
+  padding: 16px 24px !important;
+}
+.admission-section {
+  min-width: 0;
+  margin: 0;
+  padding: 10px 0 0;
+  border: 0;
+  border-top: 1px solid #e5ebf1;
+}
+.admission-section legend {
+  padding: 0 8px 0 0;
+  color: #3c6078;
+  font-size: 13px;
+  font-weight: 650;
+}
+.admission-fields {
+  display: grid;
+  gap: 12px;
+}
+.admission-identity-fields {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.admission-placement-fields {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.admission-intake-fields {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.admission-page .MuiInputLabel-root {
+  font-size: 13px;
+}
+.admission-page .MuiOutlinedInput-root {
+  border-radius: 6px;
+  background: #fff;
+}
+.admission-page .MuiOutlinedInput-input {
+  padding: 11px 13px;
+  font-size: 14px;
+}
+.admission-dialog-actions {
+  gap: 8px;
+  padding: 12px 24px 16px !important;
+  border-top: 1px solid #e5ebf1;
+}
+.admission-dialog-actions .MuiButton-root {
+  min-height: 38px;
+  padding: 0 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 650;
+  text-transform: none;
+}
+.admission-dialog-actions .MuiButton-contained {
+  background: #123c65;
+  box-shadow: none;
+}
+.admission-dialog-actions .MuiButton-contained:hover {
+  background: #0c2d4d;
+}
+@media (max-width: 720px) {
+  .admission-dialog-title {
+    padding: 16px 18px !important;
+  }
+  .admission-dialog-content {
+    padding: 13px 18px !important;
+  }
+  .admission-identity-fields,
+  .admission-placement-fields,
+  .admission-intake-fields {
+    grid-template-columns: 1fr;
+  }
+  .admission-dialog-actions {
+    padding: 12px 18px 14px !important;
+  }
+}

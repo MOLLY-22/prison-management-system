@@ -1,26 +1,41 @@
-# Corp-Sec Visitor Management Demo
+# Prison Management System
 
-A React/Vite visitor-management dashboard with an Express and SQLite mock API.
+## Backend API configuration
+
+All frontend API requests use `VITE_API_URL`, which defaults to `/api/v1`.
+During local development, Vite proxies `/api` to the backend at
+`http://localhost:8080`; start the API before starting the frontend with
+`pnpm dev`.
+
+For deployment, set `VITE_API_URL` to the real backend's API base URL when
+building the frontend, or configure the production web server to route `/api`
+to that backend. Vite environment variables are embedded at build time, so
+rebuild after changing the value. Keep credentials and tokens out of frontend
+environment variables; anything prefixed with `VITE_` is exposed to the browser.
+
+The browser communicates only with the API. PostgreSQL is managed by the
+backend and is never accessed directly from frontend code.
 
 ## Run locally
 
-Install dependencies once from the project root and backend folder:
-
 ```powershell
-npm install
-npm --prefix mock-backend install
+pnpm dev
 ```
 
-Open two terminals at the project root:
+Leave `VITE_API_URL` empty in local development so requests use the Vite proxy:
 
-```powershell
-npm run dev:backend
+```text
+VITE_API_URL=
 ```
 
-```powershell
-npm run dev
-```
+For a deployed frontend, set `VITE_API_URL` to the public API base URL,
+including the `/api/v1` path.
 
-Open the Vite URL shown in the second terminal. The development server proxies `/api` requests to the backend on port `5000`.
+The frontend sends the login token as a Bearer token and uses the API for
+inmates, visits, transfers, and user access records. Release and discharge
+operations are not currently published by the backend OpenAPI contract.
 
-The backend persists demo data in `mock-backend/visitors.db`. It exposes visitor registration, status approval/rejection, gate entry/exit, deletion, inmate search, and `/api/health`.
+The rehabilitation programs module also uses the configured API base URL:
+`GET /programs`, `GET /programs/enrollments`, and
+`GET /programs/attendance`, with corresponding `POST` requests to create
+programs, enroll inmates, and record session attendance.

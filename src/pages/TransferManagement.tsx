@@ -1,60 +1,181 @@
-<Box className="module-workspace transfer-workspace">
-  <Stack spacing={3}>
-    <Box
-      className="module-heading"
-      sx={{
-        display: 'flex',
-        alignItems: { xs: 'flex-start', sm: 'center' },
-        justifyContent: 'space-between',
-        flexWrap: 'wrap',
-        gap: 2,
-      }}
-    >
-      <Box>
-        <Typography
-          variant="overline"
-          sx={{
-            color: '#64748b',
-            fontWeight: 700,
-            letterSpacing: 1.4,
-          }}
-        >
-          OPERATIONS / TRANSFERS
-        </Typography>
+import { useCallback, useEffect, useState } from "react";
+import axios from "axios";
+import { Alert, Box, Button, Stack, Typography } from "@mui/material";
+import TransferForm from "../components/TransferForm";
+import TransferHistory from "../components/TransferHistory";
+import TransferApproval from "../components/TransferApproval";
+import { inmateService } from "../api/inmateService";
+import {
+  transferService,
+  type CreateTransferRequest,
+  type TransferRecord,
+} from "../api/transferService";
+import "./transferManagement.css";
 
-        <Typography
-          component="h1"
-          sx={{
-            mt: 0.5,
-            color: '#172033',
-            fontWeight: 750,
-            fontSize: { xs: '1.65rem', md: '2rem' },
-          }}
-        >
-          Transfer Management
-        </Typography>
+function messageFrom(error: unknown) {
+  if (axios.isAxiosError<{ message?: string }>(error)) {
+    return error.response?.data?.message || error.message;
+  }
+  return error instanceof Error ? error.message : "The transfer request failed.";
+}
 
-        <Typography
-          sx={{
-            mt: 1,
-            color: '#64748b',
-            maxWidth: 720,
-            fontSize: '0.95rem',
-          }}
-        >
-          Manage transfer requests, review approvals, track inmate movements
-          and inspect the transfer audit history.
-        </Typography>
-      </Box>
+function TransferManagement() {
+  const [transfers, setTransfers] = useState<TransferRecord[]>([]);
+  const [selectedTransfer, setSelectedTransfer] = useState<TransferRecord | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
 
-      <Chip
-        label="DEMO MODE"
-        size="small"
-        sx={{
-          fontWeight: 700,
-          color: '#475569',
-          backgroundColor: '#e2e8f0',
-          borderRadius: 1,
-        }}
-      />
+  const loadTransfers = useCallback(async () => {
+    try {
+      setTransfers(await transferService.getTransfers());
+      setError("");
+    } catch (reason: unknown) {
+      setError(messageFrom(reason));
+      throw reason;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    transferService.getTransfers()
+      .then((records) => {
+        if (!active) return;
+        setTransfers(records);
+        setError("");
+      })
+      .catch((reason: unknown) => {
+        if (active) setError(messageFrom(reason));
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  async function createTransfer(payload: CreateTransferRequest) {
+    setSaving(true);
+    setError("");
+    setSuccessMessage("");
+    try {
+      const created = await transferService.createTransfer(payload);
+      setTransfers((current) => [created, ...current.filter((item) => item.id !== created.id)]);
+      setSuccessMessage("Transfer request created successfully.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function performAction(
+    action: () => Promise<TransferRecord>,
+    success: string,
+    refreshPlacement = false,
+  ) {
+    setSaving(true);
+    setError("");
+    setSuccessMessage("");
+    try {
+      const updatedTransfer = await action();
+      setTransfers((current) => [
+        updatedTransfer,
+        ...current.filter((item) => item.id !== updatedTransfer.id),
+      ]);
+      setSelectedTransfer(null);
+      setSuccessMessage(success);
+      try {
+        await loadTransfers();
+      } catch {
+        // The successful action is retained; loadTransfers displays the refresh error.
+      }
+      if (refreshPlacement) {
+        try {
+          const inmate = await inmateService.getInmate(updatedTransfer.inmateId);
+          const prison = inmate.prisonName || inmate.prisonId || "destination prison";
+          setSuccessMessage(
+            `${success} ${inmate.firstName} ${inmate.lastName}'s placement is now ${prison}, cell ${inmate.cellId || "not assigned"}.`,
+          );
+        } catch (reason: unknown) {
+          setError(
+            `The transfer was approved, but the inmate's placement could not be refreshed: ${messageFrom(reason)}`,
+          );
+        }
+      }
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function refreshTransfers() {
+    setError("");
+    try {
+      await loadTransfers();
+    } catch {
+      // loadTransfers displays the API error in the page alert.
+    }
+  }
+
+  return (
+    <Box className="transfer-workspace" sx={{ p: { xs: 2, md: 4 }, maxWidth: 1600, mx: "auto" }}>
+      <Stack spacing={3}>
+        <Box>
+          <Typography variant="h4" sx={{ fontWeight: 700 }}>Transfer Management</Typography>
+          <Typography color="text.secondary" sx={{ mt: 1 }}>
+            Create transfer requests, review decisions, and track their API status.
+          </Typography>
+        </Box>
+
+        {error && (
+          <Alert
+            severity="error"
+            action={<Button color="inherit" size="small" onClick={() => void refreshTransfers()}>Retry</Button>}
+          >
+            {error}
+          </Alert>
+        )}
+        {successMessage && (
+          <Alert severity="success" onClose={() => setSuccessMessage("")}>
+            {successMessage}
+          </Alert>
+        )}
+
+        <TransferForm onSubmit={createTransfer} />
+
+        {loading ? (
+          <Typography role="status">Loading transfer records…</Typography>
+        ) : (
+          <TransferHistory
+            transfers={transfers}
+            onSelectTransfer={setSelectedTransfer}
+          />
+        )}
+
+        <TransferApproval
+          key={`${selectedTransfer?.id ?? ""}:${selectedTransfer?.destinationPrisonId ?? ""}:${selectedTransfer?.status ?? ""}`}
+          transfer={selectedTransfer}
+          saving={saving}
+          onApprove={(id, cellId) => performAction(
+            () => transferService.approveTransfer(id, cellId),
+            "Transfer approved and destination cell assigned.",
+            true,
+          )}
+          onReject={(id) => performAction(
+            () => transferService.rejectTransfer(id),
+            "Transfer rejected.",
+          )}
+          onCancel={(id) => performAction(
+            () => transferService.cancelTransfer(id),
+            "Transfer cancelled.",
+          )}
+          onClose={() => setSelectedTransfer(null)}
+        />
+      </Stack>
     </Box>
+  );
+}
+
+export default TransferManagement;

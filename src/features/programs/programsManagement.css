@@ -1,0 +1,117 @@
+.programs-workspace {
+  max-width: 1440px;
+  margin: 0 auto;
+  color: #17243a;
+}
+
+.programs-workspace .module-heading {
+  margin-bottom: 4px;
+}
+
+.programs-workspace .module-crumb {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.programs-workspace .module-heading-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+  margin-top: 7px;
+}
+
+.programs-workspace .module-heading h1 {
+  margin: 0;
+  font-size: 32px;
+  font-weight: 800;
+  letter-spacing: -0.035em;
+}
+
+.programs-workspace .module-heading-row > div > p {
+  margin: 7px 0 0;
+  color: #64748b;
+}
+
+.programs-workspace .module-metrics {
+  display: grid;
+  gap: 16px;
+  margin-bottom: 4px;
+}
+
+.programs-workspace .module-metric {
+  padding: 20px 22px;
+  border: 1px solid #dce4ed;
+  border-left: 4px solid #176da8;
+  border-radius: 4px;
+}
+
+.programs-workspace .module-metric p {
+  color: #52667d;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.programs-workspace .module-metric strong {
+  display: block;
+  margin: 5px 0;
+  font-size: 31px;
+}
+
+.programs-workspace .module-directory {
+  overflow: hidden;
+  border: 1px solid #dce4ed;
+  border-radius: 4px;
+}
+
+.programs-workspace .module-directory-title {
+  padding: 21px 22px;
+  border-bottom: 1px solid #e5eaf0;
+}
+
+.programs-workspace .module-directory-title h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.programs-workspace .module-directory-title p {
+  margin: 5px 0 0;
+  color: #718096;
+  font-size: 13px;
+}
+
+.programs-workspace .module-directory th {
+  background: #031b35;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.programs-workspace .module-directory td,
+.programs-workspace .module-directory th {
+  border-color: #dce4ed;
+  padding: 14px 16px;
+}
+
+.programs-workspace .module-directory code {
+  color: #176da8;
+  font-size: 12px;
+}
+
+@media (max-width: 720px) {
+  .programs-workspace .module-heading-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .programs-workspace .module-metrics {
+    grid-template-columns: 1fr !important;
+  }
+}
