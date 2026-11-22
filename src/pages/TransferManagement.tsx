@@ -2,8 +2,9 @@ import { useCallback, useEffect, useState } from "react";
 import axios from "axios";
 import { Alert, Box, Button, Stack, Typography } from "@mui/material";
 import TransferForm from "../components/TransferForm";
-import TransferTable from "../components/TransferTable";
+import TransferHistory from "../components/TransferHistory";
 import TransferApproval from "../components/TransferApproval";
+import { inmateService } from "../api/inmateService";
 import {
   transferService,
   type CreateTransferRequest,
@@ -27,9 +28,9 @@ function TransferManagement() {
   const [successMessage, setSuccessMessage] = useState("");
 
   const loadTransfers = useCallback(async () => {
-    setError("");
     try {
       setTransfers(await transferService.getTransfers());
+      setError("");
     } catch (reason: unknown) {
       setError(messageFrom(reason));
       throw reason;
@@ -39,8 +40,23 @@ function TransferManagement() {
   }, []);
 
   useEffect(() => {
-    void loadTransfers().catch(() => undefined);
-  }, [loadTransfers]);
+    let active = true;
+    transferService.getTransfers()
+      .then((records) => {
+        if (!active) return;
+        setTransfers(records);
+        setError("");
+      })
+      .catch((reason: unknown) => {
+        if (active) setError(messageFrom(reason));
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   async function createTransfer(payload: CreateTransferRequest) {
     setSaving(true);
@@ -58,6 +74,7 @@ function TransferManagement() {
   async function performAction(
     action: () => Promise<TransferRecord>,
     success: string,
+    refreshPlacement = false,
   ) {
     setSaving(true);
     setError("");
@@ -75,12 +92,26 @@ function TransferManagement() {
       } catch {
         // The successful action is retained; loadTransfers displays the refresh error.
       }
+      if (refreshPlacement) {
+        try {
+          const inmate = await inmateService.getInmate(updatedTransfer.inmateId);
+          const prison = inmate.prisonName || inmate.prisonId || "destination prison";
+          setSuccessMessage(
+            `${success} ${inmate.firstName} ${inmate.lastName}'s placement is now ${prison}, cell ${inmate.cellId || "not assigned"}.`,
+          );
+        } catch (reason: unknown) {
+          setError(
+            `The transfer was approved, but the inmate's placement could not be refreshed: ${messageFrom(reason)}`,
+          );
+        }
+      }
     } finally {
       setSaving(false);
     }
   }
 
   async function refreshTransfers() {
+    setError("");
     try {
       await loadTransfers();
     } catch {
@@ -116,15 +147,20 @@ function TransferManagement() {
         {loading ? (
           <Typography role="status">Loading transfer records…</Typography>
         ) : (
-          <TransferTable transfers={transfers} onSelectTransfer={setSelectedTransfer} />
+          <TransferHistory
+            transfers={transfers}
+            onSelectTransfer={setSelectedTransfer}
+          />
         )}
 
         <TransferApproval
+          key={`${selectedTransfer?.id ?? ""}:${selectedTransfer?.destinationPrisonId ?? ""}:${selectedTransfer?.status ?? ""}`}
           transfer={selectedTransfer}
           saving={saving}
           onApprove={(id, cellId) => performAction(
             () => transferService.approveTransfer(id, cellId),
             "Transfer approved and destination cell assigned.",
+            true,
           )}
           onReject={(id) => performAction(
             () => transferService.rejectTransfer(id),

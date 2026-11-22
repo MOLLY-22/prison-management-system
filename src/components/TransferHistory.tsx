@@ -1,6 +1,7 @@
 import { useMemo, useState, type ChangeEvent } from 'react'
 import {
   Alert,
+  Button,
   Chip,
   Paper,
   Stack,
@@ -19,6 +20,7 @@ import type { TransferRecord } from './TransferTable'
 
 interface TransferHistoryProps {
   transfers: TransferRecord[]
+  onSelectTransfer: (transfer: TransferRecord) => void
 }
 
 function formatDate(value?: string) {
@@ -50,7 +52,7 @@ function getStatusColor(
   }
 }
 
-function TransferHistory({ transfers }: TransferHistoryProps) {
+function TransferHistory({ transfers, onSelectTransfer }: TransferHistoryProps) {
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(0)
   const [rowsPerPage, setRowsPerPage] = useState(5)
@@ -98,7 +100,7 @@ function TransferHistory({ transfers }: TransferHistoryProps) {
         <Stack spacing={1}>
           <div>
             <Typography variant="h6" sx={{ fontWeight: 700 }}>
-              Transfer Records
+              Transfer History
             </Typography>
             <Typography variant="body2" color="text.secondary">
               Review submitted transfer requests and their current statuses.
@@ -134,6 +136,7 @@ function TransferHistory({ transfers }: TransferHistoryProps) {
                     <TableCell><strong>Transfer Route</strong></TableCell>
                     <TableCell><strong>Reason</strong></TableCell>
                     <TableCell><strong>Status</strong></TableCell>
+                    <TableCell><strong>Review</strong></TableCell>
                   </TableRow>
                 </TableHead>
 
@@ -172,6 +175,14 @@ function TransferHistory({ transfers }: TransferHistoryProps) {
                           color={getStatusColor(transfer.status)}
                           variant="outlined"
                         />
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          size="small"
+                          onClick={() => onSelectTransfer(transfer)}
+                        >
+                          Review
+                        </Button>
                       </TableCell>
                     </TableRow>
                   ))}

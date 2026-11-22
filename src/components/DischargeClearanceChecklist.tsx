@@ -1,50 +1,67 @@
 
 import { useEffect, useState } from 'react';
 import { releaseDischargeService as ReleaseDischargeService } from '../api/releaseAndDischargeService';
+import type { ClearanceChecklistItem } from '../api/releaseAndDischargeService';
 
-const initialChecklist = [
+const defaultChecklist: ClearanceChecklistItem[] = [
   {
     id: 'court',
     title: 'Court Order Verification',
-    description: 'Verified against Docket #CR-2021-9942',
-    completed: true,
+    description: 'Confirm the legal authority for release.',
+    completed: false,
   },
   {
     id: 'finance',
     title: 'Financial Restitution & Fines',
-    description: 'Balance cleared by treasury on 2023-10-10',
-    completed: true,
+    description: 'Confirm applicable fines and restitution are resolved.',
+    completed: false,
   },
   {
     id: 'property',
     title: 'Property & Valuables Return',
-    description: 'Locker #410 inventory audit pending',
+    description: 'Verify the inmate’s property inventory and return.',
     completed: false,
   },
   {
     id: 'medical',
     title: 'Medical & Psychological Sign-off',
-    description: 'Final debriefing scheduled with Dr. Aris',
+    description: 'Confirm any required medical sign-off.',
     completed: false,
   },
   {
     id: 'department',
     title: 'Final Departmental Sign-off',
-    description: 'Awaiting authorized department confirmation',
+    description: 'Obtain required departmental approvals.',
     completed: false,
   },
 ];
 
-export default function DischargeClearanceList() {
-  const [checklist, setChecklist] = useState(initialChecklist);
-  const [savedChecklist, setSavedChecklist] = useState(initialChecklist);
+type DischargeClearanceListProps = {
+  inmateId: string;
+  inmateName: string;
+};
+
+export default function DischargeClearanceList({
+  inmateId,
+  inmateName,
+}: DischargeClearanceListProps) {
+  const [checklist, setChecklist] = useState<ClearanceChecklistItem[]>([]);
+  const [savedChecklist, setSavedChecklist] = useState<ClearanceChecklistItem[]>([]);
   const [saveMessage, setSaveMessage] = useState('');
   const [saveError, setSaveError] = useState('');
+  const [loading, setLoading] = useState(Boolean(inmateId));
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     let mounted = true;
 
-    ReleaseDischargeService.getChecklist('#REC-88392', initialChecklist)
+    if (!inmateId) {
+      return () => {
+        mounted = false;
+      };
+    }
+
+    ReleaseDischargeService.getChecklist(inmateId, defaultChecklist)
       .then((items) => {
         if (mounted) {
           setChecklist(items);
@@ -53,25 +70,28 @@ export default function DischargeClearanceList() {
       })
       .catch((error) => {
         if (mounted) {
-          setSaveError(error instanceof Error ? error.message : 'Unable to load checklist.');
+          setSaveError(error instanceof Error ? error.message : 'Unable to load the clearance checklist.');
         }
+      })
+      .finally(() => {
+        if (mounted) setLoading(false);
       });
 
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [inmateId]);
 
   const completedCount = checklist.filter(
     (item) => item.completed
   ).length;
 
   const totalCount = checklist.length;
-  const progress = Math.round((completedCount / totalCount) * 100);
+  const progress = totalCount ? Math.round((completedCount / totalCount) * 100) : 0;
 
   const hasUnsavedChanges = checklist.some(
-    (item, index) => item.completed !== savedChecklist[index].completed
-  );
+    (item, index) => item.completed !== savedChecklist[index]?.completed
+  ) || checklist.length !== savedChecklist.length;
 
   function toggleItem(id) {
     setChecklist((current) =>
@@ -86,18 +106,34 @@ export default function DischargeClearanceList() {
   }
 
   async function saveProgress() {
+    if (!inmateId || saving) return;
     setSaveError('');
+    setSaveMessage('');
+    setSaving(true);
     try {
       const savedItems = await ReleaseDischargeService.saveChecklist(
-        '#REC-88392',
+        inmateId,
         checklist,
       );
       setSavedChecklist(savedItems);
-      setSaveMessage('Checklist progress saved to this browser’s trial data.');
+      setChecklist(savedItems);
+      setSaveMessage('Clearance checklist saved.');
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : 'Unable to save checklist.');
-      setSaveMessage('');
+    } finally {
+      setSaving(false);
     }
+  }
+
+  if (!inmateId) {
+    return (
+      <section className="rounded-lg border border-[#E1E7EE] bg-white p-5 shadow-sm">
+        <h2 className="text-lg font-bold text-[#17324D]">Release clearance</h2>
+        <p className="mt-2 text-sm text-[#64748B]">
+          Select an inmate from the eligibility queue to load their checklist.
+        </p>
+      </section>
+    );
   }
 
   return (
@@ -116,11 +152,11 @@ export default function DischargeClearanceList() {
             </div>
 
             <h3 className="mt-2 text-lg font-bold text-[#17324D]">
-              Active Checklist: #REC-88392
+              Clearance Checklist
             </h3>
 
             <p className="mt-1 text-sm text-[#64748B]">
-              Inmate: Vance, Marcus T.
+              Inmate: {inmateName} · {inmateId}
             </p>
           </div>
 
@@ -144,6 +180,18 @@ export default function DischargeClearanceList() {
         </p>
 
         {/* Progress */}
+        {loading && (
+          <p role="status" className="mt-4 text-sm text-[#64748B]">
+            Loading clearance checklist…
+          </p>
+        )}
+
+        {saveError && (
+          <p role="alert" className="mt-4 rounded-md border border-[#F5C5C5] bg-[#FCE9E9] p-3 text-sm text-[#B42318]">
+            {saveError}
+          </p>
+        )}
+
         <div className="mt-5 rounded-lg border border-[#E7ECF2] bg-[#F8FAFC] p-4">
           <div className="flex items-center justify-between gap-3">
             <span className="text-sm font-semibold text-[#17324D]">
@@ -224,7 +272,7 @@ export default function DischargeClearanceList() {
         </div>
 
         {/* Completion warning */}
-        {completedCount === totalCount && (
+        {totalCount > 0 && completedCount === totalCount && (
           <div className="mt-4 flex items-start gap-2 rounded-md border border-[#B9E4CE] bg-[#EAF7F0] p-3">
             <span className="material-symbols-outlined text-[20px] text-[#16734F]">
               verified
@@ -239,12 +287,6 @@ export default function DischargeClearanceList() {
 
       {/* Save controls */}
       <div className="border-t border-[#E7ECF2] pt-4">
-        {saveError && (
-          <p role="alert" className="mb-3 text-sm text-[#B42318]">
-            Checklist error: {saveError}
-          </p>
-        )}
-
         {saveMessage && (
           <p role="status" className="mb-3 text-sm text-[#16734F]">
             {saveMessage}
@@ -261,13 +303,13 @@ export default function DischargeClearanceList() {
           <button
             type="button"
             onClick={saveProgress}
-            disabled={!hasUnsavedChanges}
+            disabled={loading || saving || !hasUnsavedChanges}
             className="inline-flex items-center justify-center gap-2 rounded-md bg-[#17324D] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#244968] disabled:cursor-not-allowed disabled:bg-[#CBD5E1] disabled:text-[#64748B]"
           >
             <span className="material-symbols-outlined text-[18px]">
               save
             </span>
-            Save Checklist Progress
+            {saving ? 'Saving…' : 'Save checklist'}
           </button>
         </div>
       </div>

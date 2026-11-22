@@ -1,145 +1,78 @@
 import api from "./axiosClient";
-import { asBoolean, asRecord, collectionFrom, fetchAllPages, firstValue, itemFrom, requiredIdentifier } from "./dataContract";
 
-export type PrisonCell = {
-    id: string;
-    prisonId: string;
-    blockId: string;
-    blockName: string;
-    cellNumber: number;
-    name: string;
-    capacity: number;
-    currentOccupancy: number;
-    availableSpaces: number;
-};
 
-export type PrisonBlock = {
-    id: string;
-    name: string;
-    cells: PrisonCell[];
-};
+export type Cell = {
+  id: string; cellNumber: number; capacity: number; currentOccupancy: number; availableSpaces: number
+}
+export type Block = {
+  id: string; name: string; cells: Cell[]
+}
+export type PrisonSummary = {
+  id: string; name: string; location: string | null; active: boolean
+}
+export type PrisonDetail = PrisonSummary & { blocks: Block[] }
+export type CellInput = { cellNumber: number; capacity: number }
+export type BlockInput = { name: string; cells: CellInput[] }
+export type PrisonInput = { name: string; location?: string; blocks: BlockInput[] }
+export type PrisonPage = { records: PrisonSummary[]; totalPages: number; totalElements: number }
+export type ActiveFilter = 'all' | 'active' | 'inactive'
 
-export type Prison = {
-    id: string;
-    name: string;
-    location: string;
-    active: boolean;
-    blocks: PrisonBlock[];
-};
+export const PAGE_SIZE = 20
 
-export type PrisonCellInput = {
-    cellNumber: number;
-    capacity: number;
-};
+type Page<T> = { content: T[]; page: number; size: number; totalElements: number; totalPages: number }
+type ApiCell = { id: string; cellNumber?: number; capacity?: number; currentOccupancy?: number; availableSpaces?: number }
+type ApiBlock = { id: string; name: string; cells?: ApiCell[] }
+type ApiPrison = { id: string; name: string; location?: string | null; active?: boolean; blocks?: ApiBlock[] }
 
-export type PrisonBlockInput = {
-    name: string;
-    cells: PrisonCellInput[];
-};
 
-export type CreatePrisonRequest = {
-    name: string;
-    location?: string;
-    blocks: PrisonBlockInput[];
-};
+const toSummary = (raw: ApiPrison): PrisonSummary => ({ id: raw.id, name: raw.name, location: raw.location ?? null, active: raw.active ?? true })
 
-export type UpdatePrisonRequest = {
-    name: string;
-    location?: string;
-};
-
-export type PrisonListParams = {
-    search?: string;
-    active?: boolean;
-    page?: number;
-    size?: number;
-    sort?: string[];
-};
+const toDetail = (raw: ApiPrison): PrisonDetail => ({
+  ...toSummary(raw),
+  blocks: (raw.blocks ?? []).map((block) => ({
+    id: block.id,
+    name: block.name,
+    cells: (block.cells ?? []).map((cell) => {
+      const capacity = cell.capacity ?? 0
+      const occupied = cell.currentOccupancy ?? 0
+      return { id: cell.id, cellNumber: cell.cellNumber ?? 0, capacity, currentOccupancy: occupied, availableSpaces: cell.availableSpaces ?? Math.max(capacity - occupied, 0) }
+    }),
+  })),
+})
 
 export const prisonService = {
-    async getPrisons(params?: PrisonListParams): Promise<Prison[]> {
-        const query = { size: 100, ...params };
-        if (params?.page !== undefined) {
-            const response = await api.get("/prisons", { params: query });
-            return collectionFrom(response.data).map(normalizePrison);
-        }
-        const records = await fetchAllPages<unknown>((page) =>
-            api.get("/prisons", { params: { ...query, page } }).then(({ data }) => data),
-        );
-        return records.map(normalizePrison);
-    },
+  getPrisons: async (
+    page: number,
+    search: string,
+    active: ActiveFilter,
+    size = PAGE_SIZE,
+  ): Promise<PrisonPage> => {
+    const { data } = await api.get<Page<ApiPrison> | ApiPrison[]>('/prisons', {
+      params: { page, size, search: search || undefined, active: active === 'all' ? undefined : active === 'active' },
+    })
+    const list = Array.isArray(data) ? data : data.content
+    return { records: list.map(toSummary), totalPages: Array.isArray(data) ? 1 : data.totalPages, totalElements: Array.isArray(data) ? list.length : data.totalElements }
+  },
 
-    async getPrison(id: string): Promise<Prison> {
-        const response = await api.get(`/prisons/${encodeURIComponent(id)}`);
-        return normalizePrison(itemFrom(response.data));
-    },
+  getPrison: async (id: string): Promise<PrisonDetail> => {
+    const { data } = await api.get<ApiPrison>(`/prisons/${id}`)
+    return toDetail(data)
+  },
 
-    async createPrison(payload: CreatePrisonRequest): Promise<Prison> {
-        const response = await api.post("/prisons", payload);
-        return normalizePrison(itemFrom(response.data));
-    },
+  createPrison: async (payload: PrisonInput) => {
+    await api.post('/prisons', payload)
+  },
 
-    async updatePrison(id: string, payload: UpdatePrisonRequest): Promise<Prison> {
-        const response = await api.patch(`/prisons/${encodeURIComponent(id)}`, payload);
-        return normalizePrison(itemFrom(response.data));
-    },
+  updatePrison: async (id: string, payload: { name: string; location?: string }) => {
+    await api.patch(`/prisons/${id}`, payload)
+  },
 
-    async addBlock(prisonId: string, payload: PrisonBlockInput): Promise<PrisonBlock> {
-        const response = await api.post(
-            `/prisons/${encodeURIComponent(prisonId)}/blocks`,
-            payload,
-        );
-        return normalizeBlock(itemFrom(response.data), prisonId);
-    },
+  addBlock: async (prisonId: string, payload: BlockInput) => {
+    await api.post(`/prisons/${prisonId}/blocks`, payload)
+  },
 
-    async updateBlock(
-        prisonId: string,
-        blockId: string,
-        payload: Partial<PrisonBlockInput>,
-    ): Promise<PrisonBlock> {
-        const response = await api.patch(
-            `/prisons/${encodeURIComponent(prisonId)}/blocks/${encodeURIComponent(blockId)}`,
-            payload,
-        );
-        return normalizeBlock(itemFrom(response.data), prisonId);
-    },
-};
-
-function normalizePrison(payload: unknown): Prison {
-    const record = asRecord(payload);
-    const id = requiredIdentifier(record, ["id", "prisonId", "prison_id"], "prison");
-    return {
-        id,
-        name: String(firstValue(record, ["name"], "")),
-        location: String(firstValue(record, ["location"], "")),
-        active: asBoolean(firstValue(record, ["active"], true), true),
-        blocks: collectionFrom(record.blocks ?? []).map((block) => normalizeBlock(block, id)),
-    };
-}
-
-function normalizeBlock(payload: unknown, prisonId: string): PrisonBlock {
-    const record = asRecord(payload);
-    const blockId = requiredIdentifier(record, ["id", "blockId", "block_id"], "block");
-    const blockName = String(firstValue(record, ["name", "blockName", "block_name"], ""));
-    return {
-        id: blockId,
-        name: blockName,
-        cells: collectionFrom(record.cells ?? []).map((cell) => {
-            const cellRecord = asRecord(cell);
-            const cellId = requiredIdentifier(cellRecord, ["id", "cellId", "cell_id"], "cell");
-            const capacity = Number(firstValue(cellRecord, ["capacity"], 0));
-            const occupancy = Number(firstValue(cellRecord, ["currentOccupancy", "current_occupancy"], 0));
-            return {
-                id: cellId,
-                prisonId: String(firstValue(cellRecord, ["prisonId", "prison_id"], prisonId)),
-                blockId: String(firstValue(cellRecord, ["blockId", "block_id"], blockId)),
-                blockName: String(firstValue(cellRecord, ["blockName", "block_name"], blockName)),
-                cellNumber: Number(firstValue(cellRecord, ["cellNumber", "cell_number"], 0)),
-                name: String(firstValue(cellRecord, ["name", "cellName", "cell_name"], "")),
-                capacity,
-                currentOccupancy: occupancy,
-                availableSpaces: Number(firstValue(cellRecord, ["availableSpaces", "available_spaces"], capacity - occupancy)),
-            };
-        }),
-    };
+  // Cells sent here are appended to the block, not a replacement.
+  updateBlock: async (prisonId: string, blockId: string, payload: { name: string; cells?: CellInput[] }) => {
+    await api.patch(`/prisons/${prisonId}/blocks/${blockId}`, payload)
+  }
 }

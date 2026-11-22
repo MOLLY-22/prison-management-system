@@ -1,10 +1,29 @@
 
 import { useEffect, useState } from 'react';
+import type { ChangeEvent, FormEvent } from 'react';
 import { releaseDischargeService as ReleaseDischargeService } from '../api/releaseAndDischargeService';
+import type {
+  DischargeEvent,
+  InmateRecord,
+} from '../api/releaseAndDischargeService';
 
-const initialForm = {
-  inmateId: '',
-  inmateName: '',
+type DischargeEventRecordingProps = {
+  inmates: InmateRecord[];
+  selectedInmateId: string;
+  onSelectInmate: (inmateId: string) => void;
+  showHeader?: boolean;
+};
+
+type DischargeForm = {
+  dischargeDate: string;
+  dischargeTime: string;
+  dischargeType: string;
+  destination: string;
+  transportArrangement: string;
+  notes: string;
+};
+
+const initialForm: DischargeForm = {
   dischargeDate: '',
   dischargeTime: '',
   dischargeType: 'Sentence completion',
@@ -13,12 +32,35 @@ const initialForm = {
   notes: '',
 };
 
-export default function DischargeEventRecording() {
-  const [form, setForm] = useState(initialForm);
+function textValue(record: InmateRecord | DischargeEvent, keys: string[]) {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === 'string' || typeof value === 'number') {
+      const text = String(value).trim();
+      if (text) return text;
+    }
+  }
+  return '';
+}
+
+export default function DischargeEventRecording({
+  inmates,
+  selectedInmateId,
+  onSelectInmate,
+  showHeader = true,
+}: DischargeEventRecordingProps) {
+  const [form, setForm] = useState<DischargeForm>(initialForm);
   const [message, setMessage] = useState('');
   const [messageIsError, setMessageIsError] = useState(false);
-  const [events, setEvents] = useState([]);
+  const [events, setEvents] = useState<DischargeEvent[]>([]);
   const [saving, setSaving] = useState(false);
+  const selectedInmate = inmates.find((inmate) => String(inmate.id) === selectedInmateId);
+  const selectedInmateName = selectedInmate
+    ? textValue(selectedInmate, ['fullName', 'name']) ||
+      [textValue(selectedInmate, ['firstName', 'first_name']), textValue(selectedInmate, ['lastName', 'last_name'])]
+        .filter(Boolean)
+        .join(' ')
+    : '';
 
   useEffect(() => {
     let mounted = true;
@@ -32,7 +74,7 @@ export default function DischargeEventRecording() {
       .catch((error) => {
         if (mounted) {
           setMessage(
-            error instanceof Error ? error.message : 'Unable to load trial discharge events.',
+            error instanceof Error ? error.message : 'Unable to load discharge events.',
           );
           setMessageIsError(true);
         }
@@ -43,7 +85,7 @@ export default function DischargeEventRecording() {
     };
   }, []);
 
-  function handleChange(event) {
+  function handleChange(event: ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) {
     const { name, value } = event.target;
 
     setForm((current) => ({
@@ -55,23 +97,34 @@ export default function DischargeEventRecording() {
     setMessageIsError(false);
   }
 
-  async function handleSubmit(event) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setMessage('');
     setMessageIsError(false);
     setSaving(true);
 
     try {
-      const savedEvent = await ReleaseDischargeService.recordDischarge(form);
+      if (!selectedInmate || !selectedInmateName) {
+        setMessageIsError(true);
+        setMessage('Select an inmate record before recording a discharge.');
+        return;
+      }
+
+      const savedEvent = await ReleaseDischargeService.recordDischarge({
+        ...form,
+        inmateId: selectedInmateId,
+        inmateName: selectedInmateName,
+      });
       setEvents((currentEvents) => [savedEvent, ...currentEvents]);
-      setMessage(`Trial discharge event ${savedEvent.id} saved in this browser.`);
+      const eventId = textValue(savedEvent, ['id', 'eventId', 'event_id']);
+      setMessage(eventId ? `Discharge event ${eventId} recorded.` : 'Discharge event recorded.');
       setForm(initialForm);
     } catch (error) {
       setMessageIsError(true);
       setMessage(
         error instanceof Error
-          ? `Could not save trial discharge event: ${error.message}`
-          : 'Could not save trial discharge event.',
+          ? `Could not record discharge event: ${error.message}`
+          : 'Could not record discharge event.',
       );
     } finally {
       setSaving(false);
@@ -86,45 +139,26 @@ export default function DischargeEventRecording() {
 
   return (
     <section className="w-full min-w-0 overflow-hidden rounded-xl border border-[#E1E7EE] bg-white shadow-sm">
-      {/* Heading */}
-      <div className="border-b border-[#E7ECF2] px-5 py-5 sm:px-6">
-        <div className="flex items-start gap-3">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-[#EAF2FB] text-[#246BA8]">
-            <svg
-              viewBox="0 0 24 24"
-              width="23"
-              height="23"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-            >
-              <rect x="5" y="3" width="14" height="18" rx="2" />
-              <path d="M9 3.5h6" />
-              <path d="M8.5 10h7" />
-              <path d="M8.5 14h4" />
-              <path d="m14 17 1.5 1.5L19 15" />
-            </svg>
-          </div>
-
-          <div className="min-w-0">
-            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#64748B]">
-              Discharge Management
-            </p>
-
-            <h2 className="mt-1 text-xl font-bold tracking-tight text-[#17324D] sm:text-2xl">
-              Discharge Event Recording
-            </h2>
-
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-[#64748B]">
-              Record the planned discharge date, destination, and
-              arrangements for an inmate leaving the facility.
-            </p>
+      {showHeader && (
+        <div className="border-b border-[#E7ECF2] px-5 py-5 sm:px-6">
+          <div className="flex items-start gap-3">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-[#EAF2FB] text-[#246BA8]">
+              <span className="material-symbols-outlined text-[23px]">assignment_add</span>
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#64748B]">
+                Discharge Management
+              </p>
+              <h2 className="mt-1 text-xl font-bold tracking-tight text-[#17324D] sm:text-2xl">
+                Discharge Event Recording
+              </h2>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-[#64748B]">
+                Record the planned discharge date, destination, and arrangements.
+              </p>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Form */}
       <form onSubmit={handleSubmit} className="p-5 sm:p-6">
@@ -139,7 +173,7 @@ export default function DischargeEventRecording() {
         </div>
 
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-          {/* Inmate ID */}
+          {/* Inmate selection */}
           <div>
             <label
               htmlFor="inmateId"
@@ -148,15 +182,24 @@ export default function DischargeEventRecording() {
               Inmate ID <span className="text-red-600">*</span>
             </label>
 
-            <input
+            <select
               id="inmateId"
-              name="inmateId"
-              value={form.inmateId}
-              onChange={handleChange}
-              placeholder="e.g. REC-88392"
+              value={selectedInmateId}
+              onChange={(event) => onSelectInmate(event.target.value)}
               required
-              className="w-full rounded-lg border border-[#DCE3EA] bg-white px-3.5 py-3 text-sm text-[#17324D] outline-none transition placeholder:text-[#94A3B8] focus:border-[#246BA8] focus:ring-2 focus:ring-[#246BA8]/15"
-            />
+              className="w-full rounded-lg border border-[#DCE3EA] bg-white px-3.5 py-3 text-sm text-[#17324D] outline-none transition focus:border-[#246BA8] focus:ring-2 focus:ring-[#246BA8]/15"
+            >
+              <option value="">Select an inmate record</option>
+              {inmates.map((inmate) => (
+                <option key={String(inmate.id)} value={String(inmate.id)}>
+                  {textValue(inmate, ['fullName', 'name']) ||
+                    [textValue(inmate, ['firstName', 'first_name']), textValue(inmate, ['lastName', 'last_name'])]
+                      .filter(Boolean)
+                      .join(' ') ||
+                    'Name unavailable'} · {inmate.id}
+                </option>
+              ))}
+            </select>
           </div>
 
           {/* Inmate name */}
@@ -170,12 +213,10 @@ export default function DischargeEventRecording() {
 
             <input
               id="inmateName"
-              name="inmateName"
-              value={form.inmateName}
-              onChange={handleChange}
-              placeholder="Enter full name"
-              required
-              className="w-full rounded-lg border border-[#DCE3EA] bg-white px-3.5 py-3 text-sm text-[#17324D] outline-none transition placeholder:text-[#94A3B8] focus:border-[#246BA8] focus:ring-2 focus:ring-[#246BA8]/15"
+              value={selectedInmateName}
+              readOnly
+              placeholder="Select an inmate record"
+              className="w-full rounded-lg border border-[#DCE3EA] bg-[#F8FAFC] px-3.5 py-3 text-sm text-[#17324D] outline-none"
             />
           </div>
 
@@ -379,24 +420,24 @@ export default function DischargeEventRecording() {
               <path d="M8 21v-8h8v8" />
             </svg>
 
-            {saving ? 'Saving trial record...' : 'Record discharge details'}
+            {saving ? 'Recording…' : 'Record discharge details'}
           </button>
         </div>
       </form>
 
       <div className="border-t border-[#E7ECF2] px-5 py-5 sm:px-6">
-        <h3 className="text-sm font-bold text-[#17324D]">Saved trial discharge events</h3>
+        <h3 className="text-sm font-bold text-[#17324D]">Discharge event history</h3>
         {events.length === 0 ? (
           <p className="mt-2 text-sm text-[#64748B]">No discharge events have been recorded.</p>
         ) : (
           <ul className="mt-3 divide-y divide-[#E7ECF2]">
             {events.map((savedEvent) => (
-              <li key={savedEvent.id} className="flex flex-col gap-1 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+              <li key={textValue(savedEvent, ['id', 'eventId', 'event_id']) || JSON.stringify(savedEvent)} className="flex flex-col gap-1 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
                 <span className="font-semibold text-[#17324D]">
-                  {savedEvent.inmateName} ({savedEvent.inmateId})
+                  {textValue(savedEvent, ['inmateName', 'inmate_name']) || 'Inmate'} ({textValue(savedEvent, ['inmateId', 'inmate_id']) || 'ID unavailable'})
                 </span>
                 <span className="text-[#64748B]">
-                  {savedEvent.dischargeDate} · {savedEvent.dischargeType} · {savedEvent.id}
+                  {textValue(savedEvent, ['dischargeDate', 'discharge_date']) || 'Date unavailable'} · {textValue(savedEvent, ['dischargeType', 'discharge_type']) || 'Type unavailable'} · {textValue(savedEvent, ['id', 'eventId', 'event_id']) || 'Saved'}
                 </span>
               </li>
             ))}

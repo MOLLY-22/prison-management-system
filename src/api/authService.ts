@@ -1,5 +1,6 @@
 import { asRecord, firstValue, itemFrom } from "./dataContract";
 import api from "./axiosClient";
+import type { AuthUser } from "../context/AuthContext";
 
 export const authService = {
     login: async (credentials: { username: string; password: string }) => {
@@ -7,26 +8,52 @@ export const authService = {
             usernameOrEmail: credentials.username,
             password: credentials.password,
         });
-        const payload = asRecord(itemFrom(response.data));
-        const token = String(firstValue(payload, ["accessToken", "access_token", "token"], ""));
+        const root = asRecord(response.data);
+        const data = asRecord(root.data);
+        const result = asRecord(root.result);
+        const item = asRecord(itemFrom(response.data));
+        const sources = [root, data, result, item];
+        const token = sources
+            .map((source) =>
+                String(firstValue(source, ["accessToken", "access_token", "token"], "")),
+            )
+            .find(Boolean) ?? "";
         if (!token) {
             throw new Error("The auth service returned an invalid login response.");
         }
-        const userRecord = asRecord(firstValue(payload, ["user", "account"], payload));
-        const userId = firstValue(userRecord, ["id", "userId", "user_id"], "");
+
+        const user = [root.user, data.user, result.user, item.user, item]
+            .map((value) => {
+                const record = asRecord(value);
+                const id = firstValue(record, ["id", "userId", "user_id"], "");
+                const email = firstValue(record, ["email", "userEmail", "user_email"], "");
+                const name = firstValue(
+                    record,
+                    ["name", "fullName", "full_name", "username", "userName"],
+                    email,
+                );
+                if (!String(id) || !String(name)) return undefined;
+                return {
+                    id: String(id),
+                    name: String(name),
+                    email: String(email),
+                    role: String(
+                        firstValue(record, ["role", "userRole", "user_role"], "Authorized officer"),
+                    ),
+                } satisfies AuthUser;
+            })
+            .find((candidate) => candidate !== undefined);
+
         return {
             token,
-            tokenType: String(firstValue(payload, ["tokenType", "token_type"], "Bearer")),
-            ...(userId ? {
-                user: {
-                    id: String(userId),
-                    name: String(firstValue(userRecord, ["name", "fullName", "full_name", "username"], "")),
-                    email: String(firstValue(userRecord, ["email"], "")),
-                    role: String(firstValue(userRecord, ["role", "userRole", "user_role"], "")),
-                    prisonId: firstValue(userRecord, ["prisonId", "prison_id"], null) as string | null,
-                    prisonName: firstValue(userRecord, ["prisonName", "prison_name"], null) as string | null,
-                },
-            } : {}),
+            tokenType: String(
+                firstValue(
+                    sources.find((source) => source.tokenType || source.token_type) ?? {},
+                    ["tokenType", "token_type"],
+                    "Bearer",
+                ),
+            ),
+            ...(user ? { user } : {}),
         };
     },
 

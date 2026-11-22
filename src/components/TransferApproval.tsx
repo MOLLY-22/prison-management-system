@@ -41,21 +41,18 @@ function TransferApproval({
 }: TransferApprovalProps) {
   const [cells, setCells] = useState<Cell[]>([]);
   const [destinationCellId, setDestinationCellId] = useState("");
-  const [loadingCells, setLoadingCells] = useState(false);
+  const [loadingCells, setLoadingCells] = useState(Boolean(
+    transfer?.status === "PENDING" && transfer.destinationPrisonId,
+  ));
   const [cellError, setCellError] = useState("");
   const [actionError, setActionError] = useState("");
 
   useEffect(() => {
-    setDestinationCellId("");
-    setActionError("");
-    setCellError("");
     if (!transfer || transfer.status !== "PENDING" || !transfer.destinationPrisonId) {
-      setCells([]);
       return;
     }
 
     let active = true;
-    setLoadingCells(true);
     inmateService.getCells({ prisonId: transfer.destinationPrisonId })
       .then((records) => {
         if (active) setCells(records.filter((cell) => cell.availableSpaces > 0));

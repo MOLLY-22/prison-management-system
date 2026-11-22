@@ -138,11 +138,9 @@ export default function Visitors() {
     <main className="page-content visitor-dashboard" id="visitor-dashboard">
       <header className="page-heading">
         <div>
-          <p className="eyebrow">FACILITY OPERATIONS / RECORDS</p>
+          <p className="eyebrow">FACILITY OPERATIONS / VISITORS</p>
           <h1>Visitor Management</h1>
-          <p className="page-description">
-            Schedule visits using the fields accepted by the visits API.
-          </p>
+          
         </div>
       </header>
 

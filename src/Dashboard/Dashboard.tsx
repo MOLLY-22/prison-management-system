@@ -7,8 +7,7 @@ import Visitors from "../pages/Visitors";
 import ReleaseManagement from "../pages/ReleaseManagement";
 import UserAccess from "../pages/UserAccess";
 import TransferManagement from "../pages/TransferManagement";
-import DutyRosters from "../pages/DutyRosters";
-import { PrisonRegistry } from "../features/prisons/PrisonRegistry";
+import { PrisonRegistry } from "../pages/PrisonRegistry";
 
 
 type View =
@@ -35,6 +34,7 @@ const navigation: { id: View; label: string; short: string }[] = [
   { id: "transfers", label: "Transfers", short: "arrows" },
   { id: "duty-rosters", label: "Duty rosters", short: "file" },
   { id: "release", label: "Release & discharge", short: "exit" },
+  // { id: "release", label: "Release & discharge", short: "exit" },
   { id: "access", label: "User Management", short: "shield" },
   { id: "prisons", label: "Prison registry", short: "building" },
 ];
@@ -58,8 +58,9 @@ const endpointFor: Partial<Record<View, string>> = {
   inmates: "/inmates",
   visitors: "/visits",
   transfers: "/transfers",
-  release: "/releases",
+  // release: "/releases",
   access: "/users",
+  prisons : "/prisons"
 };
 
 function valueLabel(value: unknown) {
@@ -236,6 +237,19 @@ function Overview({ onNavigate }: { onNavigate: (view: View) => void }) {
       label: "Release Management",
       id: "release",
       note: "Eligibility and discharge",
+      label: "Transfer Management",
+      id: "transfers",
+      note: "Movement requests and approvals",
+    },
+    // {
+    //   label: "Release Management",
+    //   id: "release",
+    //   note: "Eligibility and discharge",
+    // },
+    {
+      label: "Prison Registry",
+      id: "prisons",
+      note: "Prison and Block allocation",
     },
     {
       label: "Duty rosters",
@@ -291,8 +305,8 @@ function ModuleView({ view, onNavigate }: { view: View; onNavigate: (view: View)
       return <InmateManagement canAdmit userRole="RECORDS OFFICER" section={view === "inmates" ? "overview" : view === "profile" ? "profile" : view === "admission" ? "admission" : "profile-sentences"} onBack={() => onNavigate(view === "admission" ? "inmates" : view)} />;
     case "visitors":
       return <Visitors />;
-    case "release":
-      return <ReleaseManagement />;
+    // case "release":
+    //   return <ReleaseManagement />;
     case "access":
       return <UserAccess />;
     case "transfers":
@@ -388,12 +402,14 @@ export default function Dashboard() {
                 {user?.role ?? "Authorized officer"}
               </p>
             </div>
-            {user && <button
-              onClick={() => void logout()}
-              className="rounded-[4px] border border-[#d5dee7] bg-white px-3 py-2 text-[11px] font-extrabold text-[#587087] transition hover:border-[#7fa9c3] hover:text-[#1d5f86]"
-            >
-              Sign out
-            </button>}
+            { (
+              <button
+                onClick={() => void logout()}
+                className="rounded-[4px] border border-[#d5dee7] bg-white px-3 py-2 text-[11px] font-extrabold text-[#587087] transition hover:border-[#7fa9c3] hover:text-[#1d5f86]"
+              >
+                Sign out
+              </button>
+            )}
           </div>
         </header>
         <div className="p-5 sm:p-8">
