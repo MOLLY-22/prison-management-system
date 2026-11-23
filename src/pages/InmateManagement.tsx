@@ -323,6 +323,8 @@ export function InmateManagement({ canAdmit, userRole, section, onBack }: Props)
       if (axios.isAxiosError(error)) {
         if (error.response?.status === 401) {
           setAdmissionError("Your session has expired. Sign in again before saving an admission.");
+        } else if (error.response?.status === 403) {
+          setAdmissionError("Inmate admissions are handled by a Records Officer account. Sign in with that role or ask your system administrator to assign it to your account.");
         } else if (!error.response) {
           setAdmissionError("The inmate service is unreachable. Make sure the API is running on localhost:8080.");
         } else {
@@ -394,14 +396,6 @@ export function InmateManagement({ canAdmit, userRole, section, onBack }: Props)
         </Button>
       </Paper>
       <Paper className="directory" elevation={0}>
-        <Box className="directory-title">
-          <Box>
-          <Typography component="h2">{section === "profile" ? "Inmate profiles" : "Inmate directory"}</Typography>
-            <Typography>
-              {section === "profile" ? "Choose an inmate to view their profile." : `${filtered.length} matching record${filtered.length === 1 ? "" : "s"} in the census.`}
-            </Typography>
-          </Box>
-        </Box>
         <TableContainer>
           <Table className="census-table">
             <TableHead>
@@ -420,7 +414,6 @@ export function InmateManagement({ canAdmit, userRole, section, onBack }: Props)
             </TableBody>
           </Table>
         </TableContainer>
-        <Box className="pagination">Showing <strong>{filtered.length} of {records.length}</strong> returned inmate records</Box>
       </Paper>
       </>}
       </>}
