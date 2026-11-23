@@ -245,7 +245,6 @@ export default function ReleaseManagement() {
               <Button
                 variant="contained"
                 onClick={() => setEventDialogOpen(true)}
-                disabled={inmates.length === 0}
               >
                 Record discharge event
               </Button>

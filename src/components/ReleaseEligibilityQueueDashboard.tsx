@@ -1,5 +1,6 @@
 
 type EligibilityStatus = 'all' | 'progress' | 'ready' | 'hold';
+import { useEffect, useState } from 'react';
 import type { InmateRecord } from '../api/releaseAndDischargeService';
 
 type ReleaseEligibilityQueueDashboardProps = {
@@ -17,15 +18,30 @@ export default function ReleaseEligibilityQueueDashboard({
   setEligibilityStatus,
   inmates,
 }: ReleaseEligibilityQueueDashboardProps) {
+  const [suggestionsOpen, setSuggestionsOpen] = useState(false);
+  const [searchDisplay, setSearchDisplay] = useState(search);
+
+  useEffect(() => {
+    setSearchDisplay(search);
+  }, [search]);
+
+  const inmateName = (inmate: InmateRecord) =>
+    (typeof inmate.fullName === 'string' && inmate.fullName.trim()) ||
+    (typeof inmate.name === 'string' && inmate.name.trim()) ||
+    [inmate.firstName, inmate.lastName].filter(Boolean).join(' ') ||
+    'Name unavailable';
+
   const inmateOptions = inmates.map((inmate) => {
-    const name = [
-      typeof inmate.fullName === 'string' ? inmate.fullName : '',
-      typeof inmate.name === 'string' ? inmate.name : '',
-      typeof inmate.firstName === 'string' ? inmate.firstName : '',
-      typeof inmate.lastName === 'string' ? inmate.lastName : '',
-    ].find((value) => value.trim()) || 'Name unavailable';
-    return `${name} · ${String(inmate.id)}`;
+    return {
+      id: String(inmate.id),
+      label: `${inmateName(inmate)} · ${String(inmate.id)}`,
+    };
   });
+
+  const query = search.trim().toLowerCase();
+  const suggestedOptions = inmateOptions.filter((option) =>
+    !query || option.label.toLowerCase().includes(query),
+  );
 
   return (
     <section>
@@ -51,29 +67,49 @@ export default function ReleaseEligibilityQueueDashboard({
 
             <input
               type="search"
-              list="inmate-search-options"
-              value={search}
+              value={searchDisplay}
               onChange={(event) => {
                 const value = event.target.value;
-                const selected = inmates.find((inmate) => {
-                  const name = typeof inmate.fullName === 'string'
-                    ? inmate.fullName
-                    : typeof inmate.name === 'string'
-                      ? inmate.name
-                      : [inmate.firstName, inmate.lastName].filter(Boolean).join(' ');
-                  return `${name || 'Name unavailable'} · ${String(inmate.id)}` === value;
-                });
-                setSearch(selected ? String(selected.id) : value);
+                setSearchDisplay(value);
+                setSearch(value);
+                setSuggestionsOpen(true);
               }}
+              onFocus={() => setSuggestionsOpen(true)}
+              onBlur={() => window.setTimeout(() => setSuggestionsOpen(false), 150)}
               placeholder="Search or select inmate..."
               aria-label="Search or select inmate ID"
-              className="w-full rounded-md border border-[#DCE3EA] bg-white py-2.5 pl-10 pr-3 text-sm text-[#172337] outline-none focus:border-[#246BA8] focus:ring-2 focus:ring-[#246BA8]/15"
+              className="w-full rounded-md border border-[#DCE3EA] bg-white py-2.5 pl-10 pr-9 text-sm text-[#172337] outline-none focus:border-[#246BA8] focus:ring-2 focus:ring-[#246BA8]/15"
             />
-            <datalist id="inmate-search-options">
-              {inmateOptions.map((option) => (
-                <option key={option} value={option} />
-              ))}
-            </datalist>
+            <button
+              type="button"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => setSuggestionsOpen((open) => !open)}
+              className="absolute right-2 top-1/2 -translate-y-1/2 border-0 bg-transparent px-1 text-lg text-[#64748B]"
+              aria-label="Show inmate suggestions"
+            >
+              ▾
+            </button>
+            {suggestionsOpen && (
+              <div className="absolute z-50 mt-1 max-h-52 w-full overflow-y-auto border border-[#DCE3EA] bg-white shadow-lg">
+                {suggestedOptions.length ? suggestedOptions.map((option) => (
+                  <button
+                    type="button"
+                    key={option.id}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => {
+                      setSearchDisplay(option.label);
+                      setSearch(option.id);
+                      setSuggestionsOpen(false);
+                    }}
+                    className="block w-full border-0 border-b border-[#EEF2F6] bg-white px-3 py-2 text-left text-sm text-[#17324D] last:border-b-0 hover:bg-[#EEF5FB]"
+                  >
+                    {option.label}
+                  </button>
+                )) : (
+                  <div className="px-3 py-3 text-sm text-[#64748B]">No matching inmates</div>
+                )}
+              </div>
+            )}
           </div>
 
           <label className="sr-only" htmlFor="eligibility-status">

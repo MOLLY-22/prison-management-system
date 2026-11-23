@@ -7,6 +7,8 @@ import Visitors from "./pages/Visitors";
 import UserAccess from "./pages/UserAccess";
 import TransferManagement from "./pages/TransferManagement";
 import { PrisonRegistry } from "./pages/PrisonRegistry";
+import ProgramsManagement from "./features/programs/ProgramsManagement";
+import ReleaseManagement from "./pages/ReleaseManagement";
 
 
 type View =
@@ -16,6 +18,7 @@ type View =
   | "admission"
   | "sentences"
   | "visitors"
+  | "programs"
   | "transfers"
   | "release"
   | "access"
@@ -29,8 +32,9 @@ const navigation: { id: View; label: string; short: string }[] = [
   { id: "admission", label: "Admission", short: "file" },
   { id: "sentences", label: "Sentences", short: "file" },
   { id: "visitors", label: "Visits", short: "visit" },
+  { id: "programs", label: "Rehabilitation", short: "file" },
   { id: "transfers", label: "Transfers", short: "arrows" },
-  // { id: "release", label: "Release & discharge", short: "exit" },
+  { id: "release", label: "Release & discharge", short: "exit" },
   { id: "access", label: "User Management", short: "shield" },
   { id: "prisons", label: "Prison registry", short: "building" },
 ];
@@ -234,11 +238,11 @@ function Overview({ onNavigate }: { onNavigate: (view: View) => void }) {
       id: "transfers",
       note: "Movement requests and approvals",
     },
-    // {
-    //   label: "Release Management",
-    //   id: "release",
-    //   note: "Eligibility and discharge",
-    // },
+    {
+      label: "Release Management",
+      id: "release",
+      note: "Eligibility and discharge",
+    },
     {
       label: "Prison Registry",
       id: "prisons",
@@ -293,8 +297,10 @@ function ModuleView({ view, onNavigate }: { view: View; onNavigate: (view: View)
       return <InmateManagement canAdmit userRole="RECORDS OFFICER" section={view === "inmates" ? "overview" : view === "profile" ? "profile" : view === "admission" ? "admission" : "profile-sentences"} onBack={() => onNavigate(view === "admission" ? "inmates" : view)} />;
     case "visitors":
       return <Visitors />;
-    // case "release":
-    //   return <ReleaseManagement />;
+    case "programs":
+      return <ProgramsManagement />;
+    case "release":
+      return <ReleaseManagement />;
     case "access":
       return <UserAccess />;
     case "transfers":
@@ -311,7 +317,7 @@ export default function Dashboard() {
   const visibleNavigation = navigation;
   const [view, setView] = useState<View>("overview");
   const [inmatesOpen, setInmatesOpen] = useState(true);
-  const inmateViews: View[] = ["inmates", "profile", "admission", "sentences", "transfers", "visitors"];
+  const inmateViews: View[] = ["inmates", "profile", "admission", "sentences", "visitors", "transfers", "programs"];
   const active = navigation.find((item) => item.id === view) ?? navigation[0];
   return (
     <div className="min-h-screen bg-[#f5f7fa] font-['DM_Sans',_'Segoe_UI',sans-serif] text-[#182638]">
@@ -343,7 +349,7 @@ export default function Dashboard() {
             <svg className={`size-3.5 transition-transform ${inmatesOpen ? "rotate-90" : ""}`} viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m6 3 5 5-5 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
           </button>
           {inmatesOpen && <div className="mt-1 space-y-1">
-            {navigation.filter((item) => ["inmates", "profile", "admission", "sentences", "transfers", "visitors"].includes(item.id)).map((item) => (
+            {navigation.filter((item) => inmateViews.includes(item.id)).map((item) => (
               <button
                 aria-current={view === item.id ? "page" : undefined}
                 key={item.id}
@@ -405,7 +411,32 @@ export default function Dashboard() {
             </p>
           )}
           <div className="mb-7 flex items-center gap-2 overflow-x-auto lg:hidden">
-            {visibleNavigation.map((item) => (
+            {visibleNavigation.filter((item) => item.id === "overview").map((item) => (
+              <button
+                onClick={() => setView(item.id)}
+                className={`whitespace-nowrap rounded-[4px] border px-3 py-2 text-xs font-bold ${view === item.id ? "border-[#087f9b] bg-[#087f9b] text-white" : "border-[#dfe6ed] bg-white text-[#526a7c]"}`}
+                key={item.id}
+              >
+                {item.label}
+              </button>
+            ))}
+            <button
+              aria-expanded={inmatesOpen}
+              onClick={() => setInmatesOpen((open) => !open)}
+              className={`whitespace-nowrap rounded-[4px] border px-3 py-2 text-xs font-bold ${inmateViews.includes(view) ? "border-[#087f9b] bg-[#087f9b] text-white" : "border-[#dfe6ed] bg-white text-[#526a7c]"}`}
+            >
+              Inmate Management
+            </button>
+            {inmatesOpen && navigation.filter((item) => inmateViews.includes(item.id)).map((item) => (
+              <button
+                onClick={() => setView(item.id)}
+                className={`whitespace-nowrap rounded-[4px] border px-3 py-2 text-xs font-bold ${view === item.id ? "border-[#087f9b] bg-[#087f9b] text-white" : "border-[#dfe6ed] bg-white text-[#526a7c]"}`}
+                key={item.id}
+              >
+                {item.label}
+              </button>
+            ))}
+            {visibleNavigation.filter((item) => !["overview", ...inmateViews].includes(item.id)).map((item) => (
               <button
                 onClick={() => setView(item.id)}
                 className={`whitespace-nowrap rounded-[4px] border px-3 py-2 text-xs font-bold ${view === item.id ? "border-[#087f9b] bg-[#087f9b] text-white" : "border-[#dfe6ed] bg-white text-[#526a7c]"}`}

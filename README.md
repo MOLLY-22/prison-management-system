@@ -4,8 +4,8 @@
 
 All frontend API requests use `VITE_API_URL`, which defaults to `/api/v1`.
 During local development, Vite proxies `/api` to the backend at
-`http://localhost:8080`; start the API before starting the frontend with
-`pnpm dev`.
+`http://localhost:8080`. Start the API separately, then run the frontend with
+`npm run dev`.
 
 For deployment, set `VITE_API_URL` to the real backend's API base URL when
 building the frontend, or configure the production web server to route `/api`
@@ -19,7 +19,7 @@ backend and is never accessed directly from frontend code.
 ## Run locally
 
 ```powershell
-pnpm dev
+npm run dev
 ```
 
 Leave `VITE_API_URL` empty in local development so requests use the Vite proxy:
