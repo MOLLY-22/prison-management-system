@@ -110,7 +110,7 @@ function TransferForm({ onSubmit }: TransferFormProps) {
     } catch (error: unknown) {
       setFormError(
         axios.isAxiosError(error) && !error.response
-          ? "The transfer could not be confirmed; the API may have accepted it before the connection failed. Check the transfer list before retrying."
+          ? "We couldn’t confirm whether your request was submitted. Check the transfer list before trying again."
           : messageFrom(error),
       );
       setConfirmationOpen(false);

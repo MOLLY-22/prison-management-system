@@ -90,7 +90,7 @@ function TransferTable({ transfers, onSelectTransfer }: TransferTableProps) {
         Transfer Records
       </Typography>
       <Typography variant="body2" sx={{ mb: 2, color: "text.secondary" }}>
-        Search requests or filter them by their current API status.
+        Search requests or filter them by status.
       </Typography>
       <TextField
         label="Search transfers"
