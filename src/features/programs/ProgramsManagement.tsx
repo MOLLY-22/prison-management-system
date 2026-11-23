@@ -1,6 +1,7 @@
 import { Children, useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import {
   Alert,
+  Autocomplete,
   Box,
   Button,
   Chip,
@@ -21,6 +22,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
+import { inmateService, type Inmate } from '../../api/inmateService'
 import {
   createProgram,
   createProgramAttendance,
@@ -79,6 +81,11 @@ export default function ProgramsManagement() {
   const [programForm, setProgramForm] = useState<ProgramForm>(emptyProgram)
   const [enrollmentForm, setEnrollmentForm] = useState<EnrollmentForm>(emptyEnrollment)
   const [attendanceForm, setAttendanceForm] = useState<AttendanceForm>(emptyAttendance)
+  const [inmates, setInmates] = useState<Inmate[]>([])
+  const [loadingInmates, setLoadingInmates] = useState(false)
+  const [inmateLoadError, setInmateLoadError] = useState<string | null>(null)
+  const [detailsOpen, setDetailsOpen] = useState(false)
+  const [detailsKind, setDetailsKind] = useState<'programs' | 'enrollments' | 'attendance'>('programs')
 
   async function loadLists() {
     return Promise.all([
@@ -122,6 +129,19 @@ export default function ProgramsManagement() {
       active = false
     }
   }, [])
+
+  async function loadInmates() {
+    setLoadingInmates(true)
+    setInmateLoadError(null)
+    try {
+      setInmates(await inmateService.getInmates())
+    } catch (error: unknown) {
+      console.error('Loading inmates for rehabilitation failed:', error)
+      setInmateLoadError(errorMessage(error, 'Could not load inmate records.'))
+    } finally {
+      setLoadingInmates(false)
+    }
+  }
 
   async function refreshAfterSave() {
     try {
@@ -217,10 +237,16 @@ export default function ProgramsManagement() {
               </Typography>
             </Box>
             <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
-              <Button variant="outlined" onClick={() => setEnrollmentOpen(true)}>
+              <Button variant="outlined" onClick={() => {
+                setEnrollmentOpen(true)
+                void loadInmates()
+              }}>
                 Enroll inmate
               </Button>
-              <Button variant="outlined" onClick={() => setAttendanceOpen(true)}>
+              <Button variant="outlined" onClick={() => {
+                setAttendanceOpen(true)
+                void loadInmates()
+              }}>
                 Record attendance
               </Button>
               <Button variant="contained" onClick={() => setProgramOpen(true)}>
@@ -235,73 +261,275 @@ export default function ProgramsManagement() {
         {saveError && <Alert severity="error" onClose={() => setSaveError(null)}>{saveError}</Alert>}
 
         <Box className="module-metrics" sx={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))' }}>
-          <Metric label="Active programs" value={programs.length} note="Available for enrollment" />
-          <Metric label="Inmate enrollments" value={enrollments.length} note="Recorded program placements" />
-          <Metric label="Attendance records" value={attendance.length} note="Sessions marked present or absent" />
+          <Metric
+            label="Active programs"
+            value={programs.length}
+            note="Available for enrollment"
+            onClick={() => {
+              setDetailsKind('programs')
+              setDetailsOpen(true)
+            }}
+          />
+          <Metric
+            label="Inmate enrollments"
+            value={enrollments.length}
+            note="Recorded program placements"
+            onClick={() => {
+              setDetailsKind('enrollments')
+              setDetailsOpen(true)
+            }}
+          />
+          <Metric
+            label="Attendance records"
+            value={attendance.length}
+            note="Sessions marked present or absent"
+            onClick={() => {
+              setDetailsKind('attendance')
+              setDetailsOpen(true)
+            }}
+          />
         </Box>
 
-        <RecordTable
-          title="Rehabilitation programs"
-          summary={`${programs.length} program${programs.length === 1 ? '' : 's'}`}
-          headers={['Program', 'Facilitator', 'Program dates', 'Description']}
-          loading={loading || refreshing}
-          empty={loadError ? 'Programs could not be loaded.' : 'No rehabilitation programs have been created.'}
-        >
-          {programs.map((program) => (
-            <TableRow key={program.id}>
-              <TableCell>
-                <Typography sx={{ fontWeight: 700 }}>{program.name}</Typography>
-                <Typography variant="caption" color="text.secondary">ID: {program.id}</Typography>
-              </TableCell>
-              <TableCell>{program.facilitator || '—'}</TableCell>
-              <TableCell>{[program.startDate, program.endDate].filter(Boolean).join(' – ') || '—'}</TableCell>
-              <TableCell>{program.description || '—'}</TableCell>
-            </TableRow>
-          ))}
-        </RecordTable>
+        <Box className="program-records-target">
+          <RecordTable
+            title="Rehabilitation programs"
+            summary={`${programs.length} program${programs.length === 1 ? '' : 's'}`}
+            headers={['Program', 'Facilitator', 'Program dates', 'Description']}
+            loading={loading || refreshing}
+            empty={loadError ? 'Programs could not be loaded.' : 'No rehabilitation programs have been created.'}
+          >
+            {programs.map((program) => (
+              <TableRow key={program.id}>
+                <TableCell>
+                  <Typography sx={{ fontWeight: 700 }}>{program.name}</Typography>
+                  <Typography variant="caption" color="text.secondary">ID: {program.id}</Typography>
+                </TableCell>
+                <TableCell>{program.facilitator || '—'}</TableCell>
+                <TableCell>{[program.startDate, program.endDate].filter(Boolean).join(' – ') || '—'}</TableCell>
+                <TableCell>{program.description || '—'}</TableCell>
+              </TableRow>
+            ))}
+          </RecordTable>
+        </Box>
 
-        <RecordTable
-          title="Inmate enrollments"
-          summary={`${enrollments.length} enrollment${enrollments.length === 1 ? '' : 's'}`}
-          headers={['Inmate ID', 'Program', 'Enrollment date']}
-          loading={loading || refreshing}
-          empty={loadError ? 'Enrollments could not be loaded.' : 'No inmates are enrolled yet.'}
-        >
-          {enrollments.map((enrollment) => (
-            <TableRow key={enrollment.id}>
-              <TableCell><code>{enrollment.inmateId}</code></TableCell>
-              <TableCell>{enrollment.programName || programName(enrollment.programId)}</TableCell>
-              <TableCell>{enrollment.enrollmentDate}</TableCell>
-            </TableRow>
-          ))}
-        </RecordTable>
+        <Box className="program-records-target">
+          <RecordTable
+            title="Inmate enrollments"
+            summary={`${enrollments.length} enrollment${enrollments.length === 1 ? '' : 's'}`}
+            headers={['Inmate ID', 'Program', 'Enrollment date']}
+            loading={loading || refreshing}
+            empty={loadError ? 'Enrollments could not be loaded.' : 'No inmates are enrolled yet.'}
+          >
+            {enrollments.map((enrollment) => (
+              <TableRow key={enrollment.id}>
+                <TableCell><code>{enrollment.inmateId}</code></TableCell>
+                <TableCell>{enrollment.programName || programName(enrollment.programId)}</TableCell>
+                <TableCell>{enrollment.enrollmentDate}</TableCell>
+              </TableRow>
+            ))}
+          </RecordTable>
+        </Box>
 
-        <RecordTable
-          title="Session attendance"
-          summary={`${attendance.length} attendance record${attendance.length === 1 ? '' : 's'}`}
-          headers={['Inmate ID', 'Program', 'Session date', 'Status', 'Remarks']}
-          loading={loading || refreshing}
-          empty={loadError ? 'Attendance could not be loaded.' : 'No attendance has been recorded.'}
-        >
-          {attendance.map((record) => (
-            <TableRow key={record.id}>
-              <TableCell><code>{record.inmateId}</code></TableCell>
-              <TableCell>{record.programName || programName(record.programId)}</TableCell>
-              <TableCell>{record.sessionDate}</TableCell>
-              <TableCell>
-                <Chip
-                  size="small"
-                  color={record.attendanceStatus === 'present' ? 'success' : 'default'}
-                  label={record.attendanceStatus}
-                />
-              </TableCell>
-              <TableCell>{record.remarks || '—'}</TableCell>
-            </TableRow>
-          ))}
-        </RecordTable>
+        <Box className="program-records-target">
+          <RecordTable
+            title="Session attendance"
+            summary={`${attendance.length} attendance record${attendance.length === 1 ? '' : 's'}`}
+            headers={['Inmate ID', 'Program', 'Session date', 'Status', 'Remarks']}
+            loading={loading || refreshing}
+            empty={loadError ? 'Attendance could not be loaded.' : 'No attendance has been recorded.'}
+          >
+            {attendance.map((record) => (
+              <TableRow key={record.id}>
+                <TableCell><code>{record.inmateId}</code></TableCell>
+                <TableCell>{record.programName || programName(record.programId)}</TableCell>
+                <TableCell>{record.sessionDate}</TableCell>
+                <TableCell>
+                  <Chip
+                    size="small"
+                    color={record.attendanceStatus === 'present' ? 'success' : 'default'}
+                    label={record.attendanceStatus}
+                  />
+                </TableCell>
+                <TableCell>{record.remarks || '—'}</TableCell>
+              </TableRow>
+            ))}
+          </RecordTable>
+        </Box>
       </Stack>
 
-      <Dialog open={programOpen} onClose={() => !saving && setProgramOpen(false)} fullWidth maxWidth="sm">
+      <Dialog
+        open={detailsOpen}
+        onClose={() => setDetailsOpen(false)}
+        fullWidth
+        maxWidth="sm"
+        sx={{
+          '& .MuiDialog-paper': {
+            height: '520px',
+            maxHeight: '520px',
+          },
+        }}
+        aria-labelledby="rehabilitation-details-title"
+      >
+        <DialogTitle id="rehabilitation-details-title">
+          {detailsKind === 'programs'
+            ? 'Active rehabilitation programs'
+            : detailsKind === 'enrollments'
+              ? 'Inmate enrollment details'
+              : 'Program attendance details'}
+        </DialogTitle>
+        <DialogContent dividers>
+          {detailsKind === 'programs' && (
+            <Stack spacing={2}>
+              <Box className="rehabilitation-detail-summary">
+                <Box>
+                  <Typography>Active programs</Typography>
+                  <strong>{programs.length}</strong>
+                </Box>
+                <Box>
+                  <Typography>Facilitators</Typography>
+                  <strong>{new Set(programs.map((program) => program.facilitator).filter(Boolean)).size}</strong>
+                </Box>
+              </Box>
+              <TableContainer>
+                <Table size="small" aria-label="Active rehabilitation program details">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Program</TableCell>
+                      <TableCell>Facilitator</TableCell>
+                      <TableCell>Start date</TableCell>
+                      <TableCell>End date</TableCell>
+                      <TableCell>Description</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {loading || refreshing ? (
+                      <TableRow><TableCell colSpan={5} align="center"><CircularProgress size={24} /></TableCell></TableRow>
+                    ) : programs.length ? programs.map((program) => (
+                      <TableRow key={program.id}>
+                        <TableCell><strong>{program.name}</strong><br /><Typography component="span" variant="caption">ID: {program.id}</Typography></TableCell>
+                        <TableCell>{program.facilitator || '—'}</TableCell>
+                        <TableCell>{program.startDate || '—'}</TableCell>
+                        <TableCell>{program.endDate || '—'}</TableCell>
+                        <TableCell>{program.description || '—'}</TableCell>
+                      </TableRow>
+                    )) : (
+                      <TableRow><TableCell colSpan={5} align="center">No rehabilitation programs have been created.</TableCell></TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </Stack>
+          )}
+
+          {detailsKind === 'enrollments' && (
+            <Stack spacing={2}>
+              <Box className="rehabilitation-detail-summary">
+                <Box>
+                  <Typography>Total enrollments</Typography>
+                  <strong>{enrollments.length}</strong>
+                </Box>
+                <Box>
+                  <Typography>Enrolled inmates</Typography>
+                  <strong>{new Set(enrollments.map((enrollment) => enrollment.inmateId)).size}</strong>
+                </Box>
+              </Box>
+              <TableContainer>
+                <Table size="small" aria-label="Inmate rehabilitation enrollment details">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Inmate ID</TableCell>
+                      <TableCell>Program</TableCell>
+                      <TableCell>Enrollment date</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {loading || refreshing ? (
+                      <TableRow><TableCell colSpan={3} align="center"><CircularProgress size={24} /></TableCell></TableRow>
+                    ) : enrollments.length ? enrollments.map((enrollment) => (
+                      <TableRow key={enrollment.id}>
+                        <TableCell><code>{enrollment.inmateId}</code></TableCell>
+                        <TableCell>{enrollment.programName || programName(enrollment.programId)}</TableCell>
+                        <TableCell>{enrollment.enrollmentDate || '—'}</TableCell>
+                      </TableRow>
+                    )) : (
+                      <TableRow><TableCell colSpan={3} align="center">No inmates are enrolled yet.</TableCell></TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </Stack>
+          )}
+
+          {detailsKind === 'attendance' && (
+            <Stack spacing={2}>
+              <Box className="rehabilitation-detail-summary">
+                <Box>
+                  <Typography>Total sessions</Typography>
+                  <strong>{attendance.length}</strong>
+                </Box>
+                <Box>
+                  <Typography>Present</Typography>
+                  <strong>{attendance.filter((record) => record.attendanceStatus === 'present').length}</strong>
+                </Box>
+                <Box>
+                  <Typography>Absent</Typography>
+                  <strong>{attendance.filter((record) => record.attendanceStatus === 'absent').length}</strong>
+                </Box>
+              </Box>
+              <TableContainer>
+                <Table size="small" aria-label="Rehabilitation attendance details">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Inmate ID</TableCell>
+                      <TableCell>Program</TableCell>
+                      <TableCell>Session date</TableCell>
+                      <TableCell>Status</TableCell>
+                      <TableCell>Remarks</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {loading || refreshing ? (
+                      <TableRow><TableCell colSpan={5} align="center"><CircularProgress size={24} /></TableCell></TableRow>
+                    ) : attendance.length ? attendance.map((record) => (
+                      <TableRow key={record.id}>
+                        <TableCell><code>{record.inmateId}</code></TableCell>
+                        <TableCell>{record.programName || programName(record.programId)}</TableCell>
+                        <TableCell>{record.sessionDate || '—'}</TableCell>
+                        <TableCell>
+                          <Chip
+                            size="small"
+                            color={record.attendanceStatus === 'present' ? 'success' : 'default'}
+                            label={record.attendanceStatus}
+                          />
+                        </TableCell>
+                        <TableCell>{record.remarks || '—'}</TableCell>
+                      </TableRow>
+                    )) : (
+                      <TableRow><TableCell colSpan={5} align="center">No attendance has been recorded.</TableCell></TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </Stack>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDetailsOpen(false)}>Close</Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={programOpen}
+        onClose={() => !saving && setProgramOpen(false)}
+        fullWidth
+        maxWidth="sm"
+        sx={{
+          '& .MuiDialog-paper': {
+            height: '520px',
+            maxHeight: '520px',
+          },
+        }}
+      >
         <Box component="form" onSubmit={saveProgram}>
           <DialogTitle>Create rehabilitation program</DialogTitle>
           <DialogContent>
@@ -359,12 +587,12 @@ export default function ProgramsManagement() {
           <DialogContent>
             <Stack spacing={2} sx={{ pt: 1 }}>
               {saveError && <Alert severity="error">{saveError}</Alert>}
-              <TextField
-                required
-                label="Inmate ID"
-                placeholder="Enter the inmate's ID"
+              <InmateSelect
+                inmates={inmates}
                 value={enrollmentForm.inmateId}
-                onChange={(event) => setEnrollmentForm({ ...enrollmentForm, inmateId: event.target.value })}
+                onChange={(inmateId) => setEnrollmentForm({ ...enrollmentForm, inmateId })}
+                loading={loadingInmates}
+                error={inmateLoadError}
               />
               <ProgramSelect
                 programs={programs}
@@ -384,7 +612,7 @@ export default function ProgramsManagement() {
           </DialogContent>
           <DialogActions>
             <Button onClick={() => setEnrollmentOpen(false)} disabled={saving}>Cancel</Button>
-            <Button type="submit" variant="contained" disabled={saving || programs.length === 0}>
+            <Button type="submit" variant="contained" disabled={saving || programs.length === 0 || !enrollmentForm.inmateId}>
               {saving ? 'Saving…' : 'Enroll inmate'}
             </Button>
           </DialogActions>
@@ -397,12 +625,12 @@ export default function ProgramsManagement() {
           <DialogContent>
             <Stack spacing={2} sx={{ pt: 1 }}>
               {saveError && <Alert severity="error">{saveError}</Alert>}
-              <TextField
-                required
-                label="Inmate ID"
-                placeholder="Enter the inmate's ID"
+              <InmateSelect
+                inmates={inmates}
                 value={attendanceForm.inmateId}
-                onChange={(event) => setAttendanceForm({ ...attendanceForm, inmateId: event.target.value })}
+                onChange={(inmateId) => setAttendanceForm({ ...attendanceForm, inmateId })}
+                loading={loadingInmates}
+                error={inmateLoadError}
               />
               <ProgramSelect
                 programs={programs}
@@ -442,13 +670,63 @@ export default function ProgramsManagement() {
           </DialogContent>
           <DialogActions>
             <Button onClick={() => setAttendanceOpen(false)} disabled={saving}>Cancel</Button>
-            <Button type="submit" variant="contained" disabled={saving || programs.length === 0}>
+            <Button type="submit" variant="contained" disabled={saving || programs.length === 0 || !attendanceForm.inmateId}>
               {saving ? 'Saving…' : 'Save attendance'}
             </Button>
           </DialogActions>
         </Box>
       </Dialog>
     </Box>
+  )
+}
+
+function InmateSelect({
+  inmates,
+  value,
+  onChange,
+  loading,
+  error,
+}: {
+  inmates: Inmate[]
+  value: string
+  onChange: (inmateId: string) => void
+  loading: boolean
+  error: string | null
+}) {
+  const selectedInmate = inmates.find((inmate) => inmate.id === value) ?? null
+
+  return (
+    <Autocomplete
+      options={inmates}
+      value={selectedInmate}
+      loading={loading}
+      disabled={Boolean(error)}
+      getOptionLabel={(inmate) =>
+        `${inmate.id} — ${[inmate.firstName, inmate.lastName].filter(Boolean).join(' ') || 'Name unavailable'}`
+      }
+      isOptionEqualToValue={(option, selected) => option.id === selected.id}
+      onChange={(_, inmate) => onChange(inmate?.id ?? '')}
+      onInputChange={(_, __, reason) => {
+        if (reason === 'input' && value) onChange('')
+      }}
+      renderInput={(params) => (
+        <TextField
+          {...params}
+          required
+          label="Inmate ID"
+          placeholder="Search by inmate ID or name"
+          error={Boolean(error)}
+          helperText={
+            error ??
+            (loading
+              ? 'Loading inmate records…'
+              : inmates.length === 0
+                ? 'No inmate records are available.'
+                : 'Search by inmate ID or name.')
+          }
+        />
+      )}
+    />
   )
 }
 
@@ -527,12 +805,29 @@ function RecordTable({
   )
 }
 
-function Metric({ label, value, note }: { label: string; value: number; note: string }) {
+function Metric({
+  label,
+  value,
+  note,
+  onClick,
+}: {
+  label: string
+  value: number
+  note: string
+  onClick: () => void
+}) {
   return (
-    <Paper className="module-metric" elevation={0}>
-      <Typography>{label}</Typography>
-      <strong>{value.toLocaleString()}</strong>
-      <Typography variant="body2">{note}</Typography>
-    </Paper>
+    <Button
+      className="module-metric-link"
+      onClick={onClick}
+      aria-label={`View all ${label.toLowerCase()}`}
+      variant="text"
+    >
+      <Paper className="module-metric" elevation={0}>
+        <Typography>{label}</Typography>
+        <strong>{value.toLocaleString()}</strong>
+        <Typography variant="body2">{note}</Typography>
+      </Paper>
+    </Button>
   )
 }

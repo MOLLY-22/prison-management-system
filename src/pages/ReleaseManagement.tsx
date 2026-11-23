@@ -12,6 +12,7 @@ import {
   TableBody,
   TableCell,
   TableContainer,
+  TableHead,
   TableRow,
   Typography,
 } from "@mui/material";
@@ -27,6 +28,7 @@ import {
 import "./releaseManagement.css";
 
 type EligibilityStatus = "all" | "progress" | "ready" | "hold";
+type ReleaseMetricDetails = "all" | "ready" | "hold";
 
 function messageFrom(error: unknown) {
   return error instanceof Error ? error.message : "Unable to load inmate records.";
@@ -97,6 +99,8 @@ export default function ReleaseManagement() {
   const [selectedInmateId, setSelectedInmateId] = useState("");
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [eventDialogOpen, setEventDialogOpen] = useState(false);
+  const [metricDetailsOpen, setMetricDetailsOpen] = useState(false);
+  const [metricDetailsKind, setMetricDetailsKind] = useState<ReleaseMetricDetails>("all");
 
   const fetchInmates = useCallback(async () => {
     console.log("Fetching inmate records from API...");
@@ -263,56 +267,183 @@ export default function ReleaseManagement() {
         )}
 
         <Box className="module-metrics">
-          <Box className="module-metric">
+          <button
+            type="button"
+            className={`module-metric-button${eligibilityStatus === "all" ? " is-selected" : ""}`}
+            aria-pressed={eligibilityStatus === "all"}
+            onClick={() => {
+              setMetricDetailsKind("all");
+              setMetricDetailsOpen(true);
+            }}
+          >
+            <Box className="module-metric">
             <p>Inmate records</p>
             <strong>{loading ? "…" : inmates.length}</strong>
-          </Box>
-          <Box className="module-metric">
+            </Box>
+          </button>
+          <button
+            type="button"
+            className={`module-metric-button${eligibilityStatus === "ready" ? " is-selected" : ""}`}
+            aria-pressed={eligibilityStatus === "ready"}
+            onClick={() => {
+              setMetricDetailsKind("ready");
+              setMetricDetailsOpen(true);
+            }}
+          >
+            <Box className="module-metric">
             <p>Ready for authorization</p>
             <strong>{loading ? "…" : readyCount}</strong>
-          </Box>
-          <Box className="module-metric">
+            </Box>
+          </button>
+          <button
+            type="button"
+            className={`module-metric-button${eligibilityStatus === "hold" ? " is-selected" : ""}`}
+            aria-pressed={eligibilityStatus === "hold"}
+            onClick={() => {
+              setMetricDetailsKind("hold");
+              setMetricDetailsOpen(true);
+            }}
+          >
+            <Box className="module-metric">
             <p>On hold</p>
             <strong>{loading ? "…" : holdCount}</strong>
-          </Box>
+            </Box>
+          </button>
         </Box>
 
-        <ReleaseEligibilityQueueDashboard
-          search={search}
-          setSearch={setSearch}
-          eligibilityStatus={eligibilityStatus}
-          setEligibilityStatus={setEligibilityStatus}
-        />
+        <Box className="release-queue-target">
+          <ReleaseEligibilityQueueDashboard
+            search={search}
+            setSearch={setSearch}
+            eligibilityStatus={eligibilityStatus}
+            setEligibilityStatus={setEligibilityStatus}
+            inmates={inmates}
+          />
 
-        <TableData
-          header="Release eligibility queue"
-          description="Review inmate placement, projected release details, and clearance status."
-          columns={columns}
-          rows={filteredInmates}
-          loading={loading}
-          loadingMessage="Loading inmate records…"
-          emptyMessage={
-            loadError
-              ? "Inmate records could not be loaded."
-              : "No inmates match the current search or status filter."
-          }
-          ariaLabel="Inmate release eligibility"
-          footer={`Showing ${filteredInmates.length} of ${inmates.length} inmate records`}
-          actions={{
-            title: "Action",
-            render: (inmate) => (
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedInmateId(String(inmate.id));
-                  setDetailsOpen(true);
-                }}
-              >
-                Review
-              </button>
-            ),
+          <TableData
+            header="Release eligibility queue"
+            description="Review inmate placement, projected release details, and clearance status."
+            columns={columns}
+            rows={filteredInmates}
+            loading={loading}
+            loadingMessage="Loading inmate records…"
+            emptyMessage={
+              loadError
+                ? "Inmate records could not be loaded."
+                : "No inmates match the current search or status filter."
+            }
+            ariaLabel="Inmate release eligibility"
+            footer={`Showing ${filteredInmates.length} of ${inmates.length} inmate records`}
+            actions={{
+              title: "Action",
+              render: (inmate) => (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedInmateId(String(inmate.id));
+                    setDetailsOpen(true);
+                  }}
+                >
+                  Review
+                </button>
+              ),
+            }}
+          />
+        </Box>
+
+        <Dialog
+          open={metricDetailsOpen}
+          onClose={() => setMetricDetailsOpen(false)}
+          fullWidth
+          maxWidth="sm"
+          sx={{
+            "& .MuiDialog-paper": {
+              height: "520px",
+              maxHeight: "520px",
+            },
           }}
-        />
+          aria-labelledby="release-metric-details-title"
+        >
+          <DialogTitle id="release-metric-details-title">
+            {metricDetailsKind === "ready"
+              ? "Ready for authorization"
+              : metricDetailsKind === "hold"
+                ? "Inmates on hold"
+                : "Inmate records"}
+          </DialogTitle>
+          <DialogContent dividers>
+            {(() => {
+              const detailInmates = inmates.filter((inmate) =>
+                metricDetailsKind === "all"
+                  ? true
+                  : eligibilityType(inmate) === metricDetailsKind,
+              );
+
+              return (
+                <Stack spacing={2}>
+                  <Box className="release-detail-summary">
+                    <Box>
+                      <Typography>Total records</Typography>
+                      <strong>{detailInmates.length}</strong>
+                    </Box>
+                  </Box>
+                  <TableContainer>
+                    <Table size="small" aria-label="Release metric details">
+                      <TableHead>
+                        <TableRow>
+                          <TableCell>Inmate</TableCell>
+                          <TableCell>Placement</TableCell>
+                          <TableCell>Projected release</TableCell>
+                          <TableCell>Status</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {loading ? (
+                          <TableRow>
+                            <TableCell colSpan={4} align="center">Loading inmate records…</TableCell>
+                          </TableRow>
+                        ) : detailInmates.length ? (
+                          detailInmates.map((inmate) => (
+                            <TableRow key={inmate.id}>
+                              <TableCell>
+                                <strong>{inmateName(inmate) || "Name unavailable"}</strong>
+                                <br />
+                                <Typography component="span" variant="caption">ID: {inmate.id}</Typography>
+                              </TableCell>
+                              <TableCell>
+                                {[
+                                  inmateText(inmate, ["prisonName", "prison_name"]),
+                                  inmateText(inmate, ["blockName", "block_name", "cellName", "cell_name", "cellId", "cell_id"]),
+                                ].filter(Boolean).join(" · ") || "Not provided"}
+                              </TableCell>
+                              <TableCell>
+                                {inmateValue(inmate, [
+                                  "projectedReleaseDate",
+                                  "expectedReleaseDate",
+                                  "sentenceExpiry",
+                                  "sentenceEndDate",
+                                  "sentence_end_date",
+                                ])}
+                              </TableCell>
+                              <TableCell>{eligibilityLabel(inmate)}</TableCell>
+                            </TableRow>
+                          ))
+                        ) : (
+                          <TableRow>
+                            <TableCell colSpan={4} align="center">No matching inmate records.</TableCell>
+                          </TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                </Stack>
+              );
+            })()}
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setMetricDetailsOpen(false)}>Close</Button>
+          </DialogActions>
+        </Dialog>
 
         <Dialog
           open={detailsOpen && Boolean(selectedInmate)}

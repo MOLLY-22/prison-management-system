@@ -1,11 +1,13 @@
 
 type EligibilityStatus = 'all' | 'progress' | 'ready' | 'hold';
+import type { InmateRecord } from '../api/releaseAndDischargeService';
 
 type ReleaseEligibilityQueueDashboardProps = {
   search: string;
   setSearch: (value: string) => void;
   eligibilityStatus: EligibilityStatus;
   setEligibilityStatus: (value: EligibilityStatus) => void;
+  inmates: InmateRecord[];
 };
 
 export default function ReleaseEligibilityQueueDashboard({
@@ -13,7 +15,18 @@ export default function ReleaseEligibilityQueueDashboard({
   setSearch,
   eligibilityStatus,
   setEligibilityStatus,
+  inmates,
 }: ReleaseEligibilityQueueDashboardProps) {
+  const inmateOptions = inmates.map((inmate) => {
+    const name = [
+      typeof inmate.fullName === 'string' ? inmate.fullName : '',
+      typeof inmate.name === 'string' ? inmate.name : '',
+      typeof inmate.firstName === 'string' ? inmate.firstName : '',
+      typeof inmate.lastName === 'string' ? inmate.lastName : '',
+    ].find((value) => value.trim()) || 'Name unavailable';
+    return `${name} · ${String(inmate.id)}`;
+  });
+
   return (
     <section>
       <div className="queue-header flex flex-col gap-1 lg:flex-row lg:items-center lg:justify-between">
@@ -38,12 +51,29 @@ export default function ReleaseEligibilityQueueDashboard({
 
             <input
               type="search"
+              list="inmate-search-options"
               value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search inmate or ID..."
-              aria-label="Search inmate or ID"
+              onChange={(event) => {
+                const value = event.target.value;
+                const selected = inmates.find((inmate) => {
+                  const name = typeof inmate.fullName === 'string'
+                    ? inmate.fullName
+                    : typeof inmate.name === 'string'
+                      ? inmate.name
+                      : [inmate.firstName, inmate.lastName].filter(Boolean).join(' ');
+                  return `${name || 'Name unavailable'} · ${String(inmate.id)}` === value;
+                });
+                setSearch(selected ? String(selected.id) : value);
+              }}
+              placeholder="Search or select inmate..."
+              aria-label="Search or select inmate ID"
               className="w-full rounded-md border border-[#DCE3EA] bg-white py-2.5 pl-10 pr-3 text-sm text-[#172337] outline-none focus:border-[#246BA8] focus:ring-2 focus:ring-[#246BA8]/15"
             />
+            <datalist id="inmate-search-options">
+              {inmateOptions.map((option) => (
+                <option key={option} value={option} />
+              ))}
+            </datalist>
           </div>
 
           <label className="sr-only" htmlFor="eligibility-status">
