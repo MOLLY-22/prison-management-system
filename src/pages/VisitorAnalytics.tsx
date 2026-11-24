@@ -1,222 +1,174 @@
 import { useEffect, useMemo, useState } from "react";
+import {
+  Alert, Box, Button, Chip, FormControl, MenuItem, Paper, Select,
+  Stack, Table, TableBody, TableCell, TableContainer, TableHead,
+  TablePagination, TableRow, TextField, Typography,
+} from "@mui/material";
 import { visitorService, type Visitor } from "../api/visitorService";
 import "./visitorManagement.css";
 
-type AnalyticsPeriod = "week" | "month" | "year" | "all";
+type AnalyticsPeriod = "day" | "week" | "month" | "year";
+type Bucket = { key: string; label: string; start: Date; end: Date; count: number };
 
-function classifyVisit(visitor: Visitor) {
-  const type = visitor.visitType || "";
-  if (/legal|attorney|lawyer|counsel/i.test(type)) return "Legal";
-  if (/family|friend/i.test(type)) return "Family & friends";
-  if (/official|professional|staff|government/i.test(type)) return "Official";
-  return "Other";
+function startOfWeek(date: Date) {
+  const start = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  start.setDate(start.getDate() - ((start.getDay() + 6) % 7));
+  return start;
+}
+
+function toBucket(date: Date, period: AnalyticsPeriod): Bucket {
+  let start: Date;
+  let end: Date;
+  let label: string;
+  if (period === "day") {
+    start = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    end = new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1);
+    label = start.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  } else if (period === "week") {
+    start = startOfWeek(date);
+    end = new Date(start);
+    end.setDate(end.getDate() + 7);
+    label = `${start.toLocaleDateString(undefined, { month: "short", day: "numeric" })}–${new Date(end.getTime() - 1).toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
+  } else if (period === "month") {
+    start = new Date(date.getFullYear(), date.getMonth(), 1);
+    end = new Date(date.getFullYear(), date.getMonth() + 1, 1);
+    label = start.toLocaleDateString(undefined, { month: "short", year: "numeric" });
+  } else {
+    start = new Date(date.getFullYear(), 0, 1);
+    end = new Date(date.getFullYear() + 1, 0, 1);
+    label = String(date.getFullYear());
+  }
+  return { key: start.toISOString().slice(0, 10), label, start, end, count: 0 };
+}
+
+function buildBuckets(visitors: Visitor[], period: AnalyticsPeriod) {
+  const now = new Date();
+  const buckets = new Map<string, Bucket>();
+  const count = period === "day" ? 14 : period === "week" ? 12 : period === "month" ? 12 : 5;
+  for (let offset = count - 1; offset >= 0; offset -= 1) {
+    const date = new Date(now);
+    if (period === "day") date.setDate(date.getDate() - offset);
+    else if (period === "week") date.setDate(date.getDate() - offset * 7);
+    else if (period === "month") date.setMonth(date.getMonth() - offset, 1);
+    else date.setFullYear(date.getFullYear() - offset, 0, 1);
+    const bucket = toBucket(date, period);
+    buckets.set(bucket.key, bucket);
+  }
+  visitors.forEach((visitor) => {
+    const date = new Date(`${visitor.date}T${visitor.time || "00:00"}:00`);
+    if (Number.isNaN(date.getTime())) return;
+    const bucket = buckets.get(toBucket(date, period).key);
+    if (bucket) bucket.count += 1;
+  });
+  return [...buckets.values()];
+}
+
+function formatRange(bucket: Bucket, period: AnalyticsPeriod) {
+  if (period === "day") return bucket.start.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric", year: "numeric" });
+  if (period === "year") return bucket.label;
+  const options: Intl.DateTimeFormatOptions = { month: "short", day: "numeric", year: "numeric" };
+  return `${bucket.start.toLocaleDateString(undefined, options)} – ${new Date(bucket.end.getTime() - 1).toLocaleDateString(undefined, options)}`;
 }
 
 export default function VisitorAnalytics() {
   const [visitors, setVisitors] = useState<Visitor[]>([]);
   const [period, setPeriod] = useState<AnalyticsPeriod>("month");
+  const [selectedKey, setSelectedKey] = useState("");
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [reload, setReload] = useState(0);
 
   useEffect(() => {
     let active = true;
     setLoading(true);
-    setError("");
+    visitorService.getVisitors()
+      .then((records) => { if (active) setVisitors(records); })
+      .catch((reason: unknown) => { if (active) setError(reason instanceof Error ? reason.message : "Unable to load visits."); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, []);
 
-    visitorService
-      .getVisitors()
-      .then((records) => {
-        if (active) setVisitors(records);
-      })
-      .catch((reason: unknown) => {
-        if (active) {
-          setError(reason instanceof Error ? reason.message : "Could not load visit analytics.");
-        }
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
+  const buckets = useMemo(() => buildBuckets(visitors, period), [visitors, period]);
+  const selected = buckets.find((bucket) => bucket.key === selectedKey) ?? buckets[buckets.length - 1];
+  const max = Math.max(1, ...buckets.map((bucket) => bucket.count));
+  const periodVisits = useMemo(() => visitors.filter((visitor) => {
+    const date = new Date(`${visitor.date}T${visitor.time || "00:00"}:00`);
+    return Boolean(selected && !Number.isNaN(date.getTime()) && date >= selected.start && date < selected.end);
+  }), [visitors, selected]);
+  const matching = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    return periodVisits.filter((visitor) => !query || [visitor.id, visitor.name, visitor.inmate, visitor.inmateId, visitor.visitType].join(" ").toLowerCase().includes(query))
+      .sort((a, b) => new Date(`${b.date}T${b.time || "00:00"}`).getTime() - new Date(`${a.date}T${a.time || "00:00"}`).getTime());
+  }, [periodVisits, search]);
+  const familyCount = periodVisits.filter((visitor) => /family|friend/i.test(visitor.visitType)).length;
+  const legalCount = periodVisits.filter((visitor) => /legal|attorney|lawyer|counsel/i.test(visitor.visitType)).length;
+  const uniqueCount = new Set(periodVisits.map((visitor) => visitor.name.trim().toLowerCase()).filter(Boolean)).size;
 
-    return () => {
-      active = false;
-    };
-  }, [reload]);
+  function changePeriod(next: AnalyticsPeriod) {
+    setPeriod(next);
+    setSelectedKey("");
+    setPage(0);
+  }
 
-  const analytics = useMemo(() => {
-    const now = new Date();
-    const periodStart = new Date(now);
-    periodStart.setHours(0, 0, 0, 0);
+  return <Box className="module-workspace" sx={{ maxWidth: 1500, mx: "auto" }}>
+    <Stack spacing={3}>
+      <Stack direction={{ xs: "column", sm: "row" }} spacing={2} sx={{ justifyContent: "space-between", alignItems: { xs: "stretch", sm: "end" } }}>
+        <Box><Typography variant="h5" sx={{ fontWeight: 800, color: "#17324d" }}>Visitor Analytics</Typography><Typography color="text.secondary">Track visit activity over time and inspect the records behind each total.</Typography></Box>
+        <FormControl size="small" sx={{ minWidth: 170 }}>
+          <Select aria-label="Group visits by" value={period} onChange={(event) => changePeriod(event.target.value as AnalyticsPeriod)}>
+            <MenuItem value="day">By day</MenuItem><MenuItem value="week">By week</MenuItem><MenuItem value="month">By month</MenuItem><MenuItem value="year">By year</MenuItem>
+          </Select>
+        </FormControl>
+      </Stack>
+      {error && <Alert severity="error" action={<Button color="inherit" size="small" onClick={() => window.location.reload()}>Retry</Button>}>{error}</Alert>}
 
-    if (period === "week") periodStart.setDate(periodStart.getDate() - 6);
-    if (period === "month") periodStart.setDate(periodStart.getDate() - 29);
-    if (period === "year") periodStart.setFullYear(periodStart.getFullYear() - 1);
+      <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "repeat(4, 1fr)" }, gap: 2 }}>
+        {[
+          { label: `Visits · selected ${period}`, value: selected?.count ?? 0, note: selected ? formatRange(selected, period) : "No period selected" },
+          { label: "Unique visitors", value: uniqueCount, note: "Distinct names in period" },
+          { label: "Family & friends", value: familyCount, note: "Family visit volume" },
+          { label: "Legal visits", value: legalCount, note: "Legal and counsel visits" },
+        ].map((item) => (
+          <Paper key={item.label} sx={{ p: 2.5 }}>
+            <Typography variant="body2" color="text.secondary">{item.label}</Typography>
+            <Typography variant="h4" sx={{ mt: 1, fontWeight: 800, color: "#17324d" }}>{item.value}</Typography>
+            <Typography variant="caption" color="text.secondary">{item.note}</Typography>
+          </Paper>
+        ))}
+      </Box>
 
-    const filtered = period === "all"
-      ? visitors
-      : visitors.filter((visitor) => {
-          if (!visitor.date) return false;
-          const date = new Date(`${visitor.date}T00:00:00`);
-          return !Number.isNaN(date.getTime()) && date >= periodStart && date <= now;
-        });
+      <Paper sx={{ p: { xs: 2, md: 3 } }}>
+        <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ mb: 2, justifyContent: "space-between", alignItems: { xs: "stretch", sm: "center" } }}>
+          <Box><Typography variant="h6">Visit volume</Typography><Typography variant="body2" color="text.secondary">Select a bar to view its visit details below.</Typography></Box>
+          <Chip label={loading ? "Loading records…" : `${visitors.length} records loaded`} variant="outlined" />
+        </Stack>
+        <Box role="group" aria-label={`Visits by ${period}`} sx={{ display: "flex", alignItems: "stretch", gap: { xs: 0.5, sm: 1.5 }, minHeight: 270, overflowX: "auto", borderBottom: "1px solid #dfe5eb", pt: 2 }}>
+          {buckets.map((bucket) => {
+            const active = selected?.key === bucket.key;
+            return <button key={bucket.key} type="button" aria-pressed={active} aria-label={`${bucket.label}: ${bucket.count} visits; select to view details`} onClick={() => { setSelectedKey(bucket.key); setPage(0); }} style={{ background: "none", border: 0, cursor: "pointer", color: "inherit", font: "inherit", minWidth: 54, flex: 1, padding: 0 }}>
+              <span style={{ height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "end" }}>
+                <Typography variant="caption" sx={{ mb: 0.5, fontWeight: active ? 800 : 500 }}>{bucket.count}</Typography>
+                <span style={{ width: "65%", height: `${Math.max(2, bucket.count / max * 165)}px`, minHeight: 4, borderRadius: "4px 4px 0 0", background: active ? "#0d5b91" : "#8db7d3", outline: active ? "2px solid #0d5b91" : "none", outlineOffset: 2 }} />
+                <Typography variant="caption" color={active ? "text.primary" : "text.secondary"} noWrap sx={{ mt: 1, maxWidth: "100%", fontWeight: active ? 700 : 400 }}>{bucket.label}</Typography>
+              </span>
+            </button>;
+          })}
+        </Box>
+      </Paper>
 
-    const types = filtered.reduce<Record<string, number>>((counts, visitor) => {
-      const category = classifyVisit(visitor);
-      counts[category] = (counts[category] || 0) + 1;
-      return counts;
-    }, {});
-
-    const uniqueVisitors = new Set(
-      filtered.map((visitor) => visitor.name.trim().toLowerCase()).filter(Boolean),
-    ).size;
-
-    let buckets: { label: string; count: number }[] = [];
-
-    if (period === "week") {
-      buckets = Array.from({ length: 7 }, (_, index) => {
-        const date = new Date(periodStart);
-        date.setDate(periodStart.getDate() + index);
-        const key = date.toISOString().slice(0, 10);
-        return {
-          label: date.toLocaleDateString(undefined, { weekday: "short" }),
-          count: filtered.filter((visitor) => visitor.date === key).length,
-        };
-      });
-    } else if (period === "month") {
-      buckets = Array.from({ length: 5 }, (_, index) => {
-        const start = new Date(periodStart);
-        start.setDate(periodStart.getDate() + index * 7);
-        const end = new Date(start);
-        end.setDate(start.getDate() + 6);
-        const count = filtered.filter((visitor) => {
-          if (!visitor.date) return false;
-          const date = new Date(`${visitor.date}T00:00:00`);
-          return date >= start && date <= end;
-        }).length;
-        return {
-          label: start.toLocaleDateString(undefined, { day: "numeric", month: "short" }),
-          count,
-        };
-      });
-    } else {
-      const monthCount = period === "year" ? 12 : 6;
-      buckets = Array.from({ length: monthCount }, (_, index) => {
-        const date = new Date(now.getFullYear(), now.getMonth() - monthCount + 1 + index, 1);
-        return {
-          label: date.toLocaleDateString(undefined, { month: "short", year: period === "all" ? "2-digit" : undefined }),
-          count: filtered.filter((visitor) => {
-            if (!visitor.date) return false;
-            const visitDate = new Date(`${visitor.date}T00:00:00`);
-            return visitDate.getFullYear() === date.getFullYear() && visitDate.getMonth() === date.getMonth();
-          }).length,
-        };
-      });
-    }
-
-    return { filtered, types, uniqueVisitors, buckets };
-  }, [period, visitors]);
-
-  const maxCount = Math.max(...analytics.buckets.map((bucket) => bucket.count), 1);
-
-  return (
-    <main className="page-content visitor-dashboard visitor-analytics-page" id="visitor-dashboard">
-      <header className="analytics-page-heading">
-        <div>
-          <p className="eyebrow">FACILITY OPERATIONS / ANALYTICS</p>
-          <h1>Visitor Analytics</h1>
-          <p>Monitor visit activity, visitor volume, and visit categories.</p>
-        </div>
-        <button type="button" className="analytics-refresh" onClick={() => setReload((count) => count + 1)} disabled={loading}>
-          {loading ? "Refreshing…" : "Refresh data"}
-        </button>
-      </header>
-
-      {error && (
-        <p className="pending-note" role="alert">
-          {error}{" "}
-          <button type="button" className="history-retry" onClick={() => setReload((count) => count + 1)}>Retry</button>
-        </p>
-      )}
-
-      <section className="visitor-analytics" aria-labelledby="visitor-analytics-title">
-        <div className="analytics-heading">
-          <div>
-            <p className="visitor-section-kicker">Visit performance</p>
-            <h2 id="visitor-analytics-title">Visitor activity overview</h2>
-          </div>
-          <div className="analytics-periods" role="group" aria-label="Analytics period">
-            {([["week", "Week"], ["month", "Month"], ["year", "Year"], ["all", "All time"]] as const).map(([value, label]) => (
-              <button
-                key={value}
-                type="button"
-                className={period === value ? "selected" : ""}
-                aria-pressed={period === value}
-                onClick={() => setPeriod(value)}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="analytics-content">
-          <div className="analytics-summary">
-            <article>
-              <span>Total visits</span>
-              <strong>{analytics.filtered.length}</strong>
-              <small>{period === "all" ? "Across all records" : `In the selected ${period}`}</small>
-            </article>
-            <article>
-              <span>Unique visitors</span>
-              <strong>{analytics.uniqueVisitors}</strong>
-              <small>Distinct visitor names</small>
-            </article>
-            <article>
-              <span>Family &amp; friends</span>
-              <strong>{analytics.types["Family & friends"] || 0}</strong>
-              <small>Family visit volume</small>
-            </article>
-          </div>
-
-          <div className="analytics-chart" aria-label="Visitor volume chart">
-            <div className="analytics-chart-heading">
-              <span>Visitor volume</span>
-              <strong>{analytics.filtered.length} visits</strong>
-            </div>
-            {loading ? (
-              <p className="analytics-loading">Loading analytics…</p>
-            ) : (
-              <div className="analytics-bars">
-                {analytics.buckets.map((bucket) => {
-                  const height = Math.max(bucket.count ? 18 : 4, (bucket.count / maxCount) * 100);
-                  return (
-                    <div className="analytics-bar-item" key={bucket.label}>
-                      <strong>{bucket.count}</strong>
-                      <div className="analytics-bar-track"><span style={{ height: `${height}%` }} /></div>
-                      <small>{bucket.label}</small>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          <div className="analytics-breakdown">
-            <div className="analytics-chart-heading"><span>Visits by type</span></div>
-            {[["Family & friends", "#2563eb"], ["Legal", "#14a38b"], ["Official", "#d97706"], ["Other", "#94a3b8"]].map(([type, color]) => {
-              const count = analytics.types[type] || 0;
-              const percentage = analytics.filtered.length ? Math.round((count / analytics.filtered.length) * 100) : 0;
-              return (
-                <div className="analytics-type-row" key={type}>
-                  <div><i style={{ background: color }} /><span>{type}</span></div>
-                  <strong>{count}</strong>
-                  <small>{percentage}%</small>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </section>
-    </main>
-  );
+      <Paper sx={{ p: { xs: 2, md: 3 } }}>
+        <Stack direction={{ xs: "column", sm: "row" }} spacing={2} sx={{ mb: 2, justifyContent: "space-between", alignItems: { xs: "stretch", sm: "center" } }}>
+          <Box><Typography variant="h6">Visit details</Typography><Typography variant="body2" color="text.secondary">{selected ? `${formatRange(selected, period)} · ${matching.length} matching visits` : "Select a chart bar to see details."}</Typography></Box>
+          <TextField size="small" label="Search this period" placeholder="Visitor, inmate, type, or ID" value={search} onChange={(event) => { setSearch(event.target.value); setPage(0); }} sx={{ minWidth: { sm: 300 } }} />
+        </Stack>
+        <TableContainer sx={{ overflowX: "auto" }}><Table size="small" aria-label="Visit details"><TableHead><TableRow><TableCell>Visit date</TableCell><TableCell>Visitor</TableCell><TableCell>Inmate</TableCell><TableCell>Time</TableCell><TableCell>Visit type</TableCell></TableRow></TableHead><TableBody>
+          {matching.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage).map((visitor) => <TableRow key={visitor.id} hover><TableCell sx={{ minWidth: 155 }}>{visitor.date ? new Date(`${visitor.date}T00:00:00`).toLocaleDateString() : "—"}</TableCell><TableCell sx={{ minWidth: 160 }}>{visitor.name || "Unknown visitor"}<Typography component="span" variant="caption" sx={{ display: "block" }} color="text.secondary">ID: {visitor.id || "—"}</Typography></TableCell><TableCell sx={{ minWidth: 180 }}>{visitor.inmate || "—"}<Typography component="span" variant="caption" sx={{ display: "block" }} color="text.secondary">{visitor.inmateId || "—"}</Typography></TableCell><TableCell sx={{ minWidth: 120 }}>{visitor.time || "—"}{visitor.endTime ? ` – ${visitor.endTime}` : ""}</TableCell><TableCell>{visitor.visitType || "Other"}</TableCell></TableRow>)}
+          {!matching.length && <TableRow><TableCell colSpan={5} align="center" sx={{ py: 4 }}>{loading ? "Loading visits…" : "No visits found for this period."}</TableCell></TableRow>}
+        </TableBody></Table></TableContainer>
+        <TablePagination component="div" count={matching.length} page={page} onPageChange={(_, nextPage) => setPage(nextPage)} rowsPerPage={rowsPerPage} onRowsPerPageChange={(event) => { setRowsPerPage(Number(event.target.value)); setPage(0); }} rowsPerPageOptions={[5, 10, 25]} />
+      </Paper>
+    </Stack>
+  </Box>;
 }
