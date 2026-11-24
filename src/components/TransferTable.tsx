@@ -28,6 +28,7 @@ type TransferTableProps = {
 const statuses: TransferStatus[] = [
   "PENDING",
   "APPROVED",
+  "CONFIRMED",
   "REJECTED",
   "IN_TRANSIT",
   "RECEIVED",
@@ -40,6 +41,7 @@ const statusColors: Record<
 > = {
   PENDING: "warning",
   APPROVED: "info",
+  CONFIRMED: "info",
   IN_TRANSIT: "primary",
   RECEIVED: "success",
   CANCELLED: "default",

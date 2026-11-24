@@ -8,6 +8,7 @@ import ReleaseManagement from "../pages/ReleaseManagement";
 import UserAccess from "../pages/UserAccess";
 import TransferManagement from "../pages/TransferManagement";
 import { PrisonRegistry } from "../pages/PrisonRegistry";
+import { transferService } from "../api/transferService";
 
 
 type View =
@@ -325,8 +326,45 @@ export default function Dashboard() {
   const visibleNavigation = navigation;
   const [view, setView] = useState<View>("overview");
   const [inmatesOpen, setInmatesOpen] = useState(true);
+  const [incomingTransferCount, setIncomingTransferCount] = useState(0);
   const inmateViews: View[] = ["inmates", "profile", "admission", "sentences", "transfers", "visitors"];
   const active = navigation.find((item) => item.id === view) ?? navigation[0];
+
+  useEffect(() => {
+    const prisonId = user?.prisonId;
+    if (!prisonId) {
+      setIncomingTransferCount(0);
+      return;
+    }
+    let live = true;
+    const refreshIncomingCount = () => {
+      transferService.getTransfers({ prisonId })
+        .then((records) => {
+          if (!live) return;
+          const openStatuses = new Set(["PENDING", "APPROVED", "CONFIRMED", "IN_TRANSIT"]);
+          setIncomingTransferCount(records.filter((transfer) =>
+            transfer.destinationPrisonId === prisonId && openStatuses.has(transfer.status),
+          ).length);
+        })
+        .catch(() => {
+          // Keep the last known count if a refresh temporarily fails.
+        });
+    };
+    refreshIncomingCount();
+    const interval = window.setInterval(refreshIncomingCount, 30_000);
+    window.addEventListener("focus", refreshIncomingCount);
+    return () => {
+      live = false;
+      window.clearInterval(interval);
+      window.removeEventListener("focus", refreshIncomingCount);
+    };
+  }, [user?.prisonId]);
+
+  const incomingBadge = () => incomingTransferCount > 0 && (
+    <span aria-label={`${incomingTransferCount} incoming transfers awaiting completion`} className="ml-auto grid h-5 min-w-5 place-items-center rounded-full bg-[#db5947] px-1 text-[10px] font-bold leading-none text-white">
+      {incomingTransferCount > 99 ? "99+" : incomingTransferCount}
+    </span>
+  );
   return (
     <div className="min-h-screen bg-[#f5f7fa] font-['DM_Sans',_'Segoe_UI',sans-serif] text-[#182638]">
       <aside className="fixed inset-y-0 left-0 z-20 hidden w-[264px] flex-col border-r border-white/[0.06] bg-[#101a2d] text-white lg:flex">
@@ -363,7 +401,7 @@ export default function Dashboard() {
                 key={item.id}
                 onClick={() => setView(item.id)}
                 className={`relative ml-3 flex min-h-9 w-[calc(100%-0.75rem)] items-center rounded-lg border-l pl-4 text-left text-[12px] transition-colors ${view === item.id ? "border-[#36c6bf] bg-[#16435a] font-semibold text-white" : "border-white/10 text-slate-300 hover:bg-white/[0.06] hover:text-white"}`}
-              >{item.label}</button>
+              >{item.label}{item.id === "transfers" && incomingBadge()}</button>
             ))}
           </div>}
           {visibleNavigation.filter((item) => !["overview", ...inmateViews].includes(item.id)).map((item) => (
@@ -375,6 +413,7 @@ export default function Dashboard() {
             >
               <NavigationIcon name={item.short} />
               <span className="truncate">{item.label}</span>
+              {item.id === "transfers" && incomingBadge()}
             </button>
           ))}
         </nav>
@@ -425,7 +464,7 @@ export default function Dashboard() {
                 className={`whitespace-nowrap rounded-[4px] border px-3 py-2 text-xs font-bold ${view === item.id ? "border-[#087f9b] bg-[#087f9b] text-white" : "border-[#dfe6ed] bg-white text-[#526a7c]"}`}
                 key={item.id}
               >
-                {item.label}
+                {item.label}{item.id === "transfers" && incomingTransferCount > 0 ? ` (${incomingTransferCount})` : ""}
               </button>
             ))}
           </div>

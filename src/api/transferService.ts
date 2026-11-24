@@ -5,6 +5,7 @@ export type TransferStatus =
     | "PENDING"
     | "APPROVED"
     | "REJECTED"
+    | "CONFIRMED"
     | "IN_TRANSIT"
     | "RECEIVED"
     | "CANCELLED";
@@ -24,6 +25,9 @@ export type TransferRecord = {
     approvedBy: string | null;
     requestedAt: string;
     decidedAt: string | null;
+    receivedCellId: string | null;
+    receivedAt: string | null;
+    receivedBy: string | null;
 };
 
 export type CreateTransferRequest = {
@@ -58,21 +62,16 @@ export const transferService = {
         return normalizeTransfer(itemFrom(response.data));
     },
 
-    async approveTransfer(id: string, destinationCellId: string): Promise<TransferRecord> {
-        const response = await api.post(
-            `/transfers/${encodeURIComponent(id)}/approve`,
-            { cellId: destinationCellId },
-        );
+    async changeStatus(id: string, status: TransferStatus, destinationPrisonId?: string): Promise<TransferRecord> {
+        const response = await api.post(`/transfers/${encodeURIComponent(id)}/status`, {
+            status,
+            ...(destinationPrisonId ? { destinationPrisonId } : {}),
+        });
         return normalizeTransfer(itemFrom(response.data));
     },
 
-    async rejectTransfer(id: string): Promise<TransferRecord> {
-        const response = await api.post(`/transfers/${encodeURIComponent(id)}/reject`);
-        return normalizeTransfer(itemFrom(response.data));
-    },
-
-    async cancelTransfer(id: string): Promise<TransferRecord> {
-        const response = await api.post(`/transfers/${encodeURIComponent(id)}/cancel`);
+    async receiveTransfer(id: string): Promise<TransferRecord> {
+        const response = await api.post(`/transfers/${encodeURIComponent(id)}/status`, { status: "RECEIVED" });
         return normalizeTransfer(itemFrom(response.data));
     },
 };
@@ -95,8 +94,11 @@ function normalizeTransfer(payload: unknown): TransferRecord {
         reason: String(firstValue(record, ["reason"], "")),
         status: String(firstValue(record, ["status"], "PENDING")).toUpperCase() as TransferStatus,
         requestedBy: String(firstValue(record, ["requestedByUsername", "requestedBy", "requested_by"], "")),
-        approvedBy: firstValue(record, ["approvedByUsername", "approvedBy", "approved_by"], null) as string | null,
+        approvedBy: firstValue(record, ["decidedBy", "approvedByUsername", "approvedBy", "approved_by"], null) as string | null,
         requestedAt: String(firstValue(record, ["requestedAt", "requested_at", "createdAt"], "")),
         decidedAt: firstValue(record, ["decidedAt", "decided_at", "approvedAt"], null) as string | null,
+        receivedCellId: firstValue(record, ["receivedCellId", "received_cell_id"], null) as string | null,
+        receivedAt: firstValue(record, ["receivedAt", "received_at"], null) as string | null,
+        receivedBy: firstValue(record, ["receivedBy", "received_by"], null) as string | null,
     };
 }
