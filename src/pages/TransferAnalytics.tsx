@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import {
-  Alert, Box, Chip, FormControl, MenuItem, Paper, Select, Stack,
-  Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
-  TextField, Typography,
+  Alert, Box, Button, Chip, FormControl, MenuItem, Paper, Select,
+  Stack, Table, TableBody, TableCell, TableContainer, TableHead,
+  TablePagination, TableRow, TextField, Typography,
 } from "@mui/material";
 import { transferService, type TransferRecord } from "../api/transferService";
 
 type Period = "day" | "week" | "month" | "year";
-type Bucket = { key: string; label: string; count: number };
+type Bucket = { key: string; label: string; start: Date; end: Date; count: number };
+
+const periodNames: Record<Period, string> = { day: "day", week: "week", month: "month", year: "year" };
 
 function startOfWeek(date: Date) {
   const start = new Date(date.getFullYear(), date.getMonth(), date.getDate());
@@ -15,43 +17,67 @@ function startOfWeek(date: Date) {
   return start;
 }
 
-function periodBucket(date: Date, period: Period): Bucket {
-  const year = date.getFullYear();
-  if (period === "day") return { key: `${year}-${date.getMonth()}-${date.getDate()}`, label: date.toLocaleDateString(undefined, { month: "short", day: "numeric" }), count: 0 };
-  if (period === "week") {
-    const start = startOfWeek(date);
-    return { key: `${start.getFullYear()}-${start.getMonth()}-${start.getDate()}`, label: start.toLocaleDateString(undefined, { month: "short", day: "numeric" }), count: 0 };
+function toBucket(date: Date, period: Period): Bucket {
+  let start: Date;
+  let end: Date;
+  let label: string;
+  if (period === "day") {
+    start = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    end = new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1);
+    label = start.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  } else if (period === "week") {
+    start = startOfWeek(date);
+    end = new Date(start);
+    end.setDate(end.getDate() + 7);
+    label = `${start.toLocaleDateString(undefined, { month: "short", day: "numeric" })}–${new Date(end.getTime() - 1).toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
+  } else if (period === "month") {
+    start = new Date(date.getFullYear(), date.getMonth(), 1);
+    end = new Date(date.getFullYear(), date.getMonth() + 1, 1);
+    label = start.toLocaleDateString(undefined, { month: "short", year: "numeric" });
+  } else {
+    start = new Date(date.getFullYear(), 0, 1);
+    end = new Date(date.getFullYear() + 1, 0, 1);
+    label = String(date.getFullYear());
   }
-  if (period === "month") return { key: `${year}-${date.getMonth()}`, label: date.toLocaleDateString(undefined, { month: "short", year: "numeric" }), count: 0 };
-  return { key: String(year), label: String(year), count: 0 };
+  return { key: start.toISOString().slice(0, 10), label, start, end, count: 0 };
 }
 
 function buildBuckets(transfers: TransferRecord[], period: Period) {
-  const current = new Date();
-  const bucketMap = new Map<string, Bucket>();
-  const periods = period === "day" ? 14 : period === "week" ? 12 : period === "month" ? 12 : 5;
-  for (let offset = periods - 1; offset >= 0; offset -= 1) {
-    const date = new Date(current);
+  const now = new Date();
+  const buckets = new Map<string, Bucket>();
+  const count = period === "day" ? 14 : period === "week" ? 12 : period === "month" ? 12 : 5;
+  for (let offset = count - 1; offset >= 0; offset -= 1) {
+    const date = new Date(now);
     if (period === "day") date.setDate(date.getDate() - offset);
     else if (period === "week") date.setDate(date.getDate() - offset * 7);
     else if (period === "month") date.setMonth(date.getMonth() - offset, 1);
     else date.setFullYear(date.getFullYear() - offset, 0, 1);
-    const bucket = periodBucket(date, period);
-    if (!bucketMap.has(bucket.key)) bucketMap.set(bucket.key, bucket);
+    const bucket = toBucket(date, period);
+    if (!buckets.has(bucket.key)) buckets.set(bucket.key, bucket);
   }
   transfers.forEach((transfer) => {
     const date = new Date(transfer.requestedAt);
     if (Number.isNaN(date.getTime())) return;
-    const bucket = bucketMap.get(periodBucket(date, period).key);
+    const bucket = buckets.get(toBucket(date, period).key);
     if (bucket) bucket.count += 1;
   });
-  return [...bucketMap.values()];
+  return [...buckets.values()];
+}
+
+function formatRange(bucket: Bucket, period: Period) {
+  if (period === "day") return bucket.start.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric", year: "numeric" });
+  if (period === "year") return bucket.label;
+  const options: Intl.DateTimeFormatOptions = { month: "short", day: "numeric", year: "numeric" };
+  return `${bucket.start.toLocaleDateString(undefined, options)} – ${new Date(bucket.end.getTime() - 1).toLocaleDateString(undefined, options)}`;
 }
 
 export default function TransferAnalytics() {
   const [transfers, setTransfers] = useState<TransferRecord[]>([]);
   const [period, setPeriod] = useState<Period>("month");
+  const [selectedKey, setSelectedKey] = useState("");
   const [search, setSearch] = useState("");
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -65,46 +91,75 @@ export default function TransferAnalytics() {
   }, []);
 
   const buckets = useMemo(() => buildBuckets(transfers, period), [transfers, period]);
-  const total = buckets.reduce((sum, bucket) => sum + bucket.count, 0);
+  const selected = buckets.find((bucket) => bucket.key === selectedKey) ?? buckets[buckets.length - 1];
   const max = Math.max(1, ...buckets.map((bucket) => bucket.count));
-  const rows = useMemo(() => {
+  const periodTransfers = useMemo(() => transfers.filter((transfer) => {
+      const date = new Date(transfer.requestedAt);
+      return Boolean(selected && date >= selected.start && date < selected.end);
+    }), [transfers, selected]);
+  const matching = useMemo(() => {
     const query = search.trim().toLowerCase();
-    return [...transfers]
-      .filter((t) => !query || [t.id, t.inmateName, t.inmateNumber, t.sourcePrisonName, t.destinationPrisonName, t.reason, t.status].join(" ").toLowerCase().includes(query))
+    return periodTransfers.filter((transfer) => !query || [transfer.id, transfer.inmateName, transfer.inmateNumber, transfer.sourcePrisonName, transfer.destinationPrisonName, transfer.reason, transfer.status].join(" ").toLowerCase().includes(query))
       .sort((a, b) => new Date(b.requestedAt).getTime() - new Date(a.requestedAt).getTime());
-  }, [transfers, search]);
+  }, [periodTransfers, search]);
+  const pendingCount = periodTransfers.filter((transfer) => transfer.status === "PENDING").length;
+  const receivedCount = periodTransfers.filter((transfer) => transfer.status === "RECEIVED").length;
+
+  function changePeriod(next: Period) {
+    setPeriod(next);
+    setSelectedKey("");
+    setPage(0);
+  }
 
   return <Box className="module-workspace" sx={{ maxWidth: 1500, mx: "auto" }}>
     <Stack spacing={3}>
-      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "end", gap: 2, flexWrap: "wrap" }}>
-        <Box><Typography variant="h4" sx={{ fontWeight: 800 }}>Transfer Analytics</Typography><Typography color="text.secondary" sx={{ mt: 0.5 }}>Transfer activity and request details.</Typography></Box>
-        <FormControl size="small" sx={{ minWidth: 150 }}><Select aria-label="Group transfers by" value={period} onChange={(event) => setPeriod(event.target.value as Period)}>
-          <MenuItem value="day">Daily</MenuItem><MenuItem value="week">Weekly</MenuItem><MenuItem value="month">Monthly</MenuItem><MenuItem value="year">Yearly</MenuItem>
-        </Select></FormControl>
+      <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" alignItems={{ xs: "stretch", sm: "end" }} spacing={2}>
+        <Box><Typography color="text.secondary">Track transfer requests over time and inspect the records behind each total.</Typography></Box>
+        <FormControl size="small" sx={{ minWidth: 170 }}>
+          <Select aria-label="Group transfers by" value={period} onChange={(event) => changePeriod(event.target.value as Period)}>
+            <MenuItem value="day">By day</MenuItem><MenuItem value="week">By week</MenuItem><MenuItem value="month">By month</MenuItem><MenuItem value="year">By year</MenuItem>
+          </Select>
+        </FormControl>
+      </Stack>
+      {error && <Alert severity="error" action={<Button color="inherit" size="small" onClick={() => window.location.reload()}>Retry</Button>}>{error}</Alert>}
+
+      <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "repeat(3, 1fr)" }, gap: 2 }}>
+        {[
+          { label: `Requests · selected ${periodNames[period]}`, value: selected?.count ?? 0, note: selected ? formatRange(selected, period) : "No period selected" },
+          { label: "Pending in period", value: pendingCount, note: "Awaiting a decision" },
+          { label: "Received in period", value: receivedCount, note: "Marked as received" },
+        ].map((item) => <Paper key={item.label} sx={{ p: 2.5 }}><Typography variant="body2" color="text.secondary">{item.label}</Typography><Typography variant="h4" sx={{ mt: 1, fontWeight: 800, color: "#17324d" }}>{item.value}</Typography><Typography variant="caption" color="text.secondary">{item.note}</Typography></Paper>)}
       </Box>
-      {error && <Alert severity="error">{error}</Alert>}
+
       <Paper sx={{ p: { xs: 2, md: 3 } }}>
-        <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
-          <Box><Typography variant="h6">Transfers by {period}</Typography><Typography variant="body2" color="text.secondary">{total} requests in the periods shown</Typography></Box>
-          <Chip label={loading ? "Loading" : `${transfers.length} records`} variant="outlined" />
+        <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" alignItems={{ xs: "stretch", sm: "center" }} spacing={1} sx={{ mb: 2 }}>
+          <Box><Typography variant="h6">Transfer volume</Typography><Typography variant="body2" color="text.secondary">Select a bar to view its transfer details below.</Typography></Box>
+          <Chip label={loading ? "Loading records…" : `${transfers.length} records loaded`} variant="outlined" />
         </Stack>
-        <Box role="img" aria-label={`Bar chart of transfers by ${period}`} sx={{ display: "flex", alignItems: "end", gap: { xs: 0.5, sm: 1.5 }, height: 250, overflowX: "auto", borderBottom: "1px solid #dfe5eb", pt: 2 }}>
-          {buckets.map((bucket) => <Box key={bucket.key} title={`${bucket.label}: ${bucket.count} transfers`} sx={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "end", minWidth: 48, height: "100%", flex: 1 }}>
-            <Typography variant="caption" sx={{ mb: 0.5 }}>{bucket.count}</Typography>
-            <Box sx={{ width: "65%", minHeight: bucket.count ? 4 : 2, height: `${Math.max(1, bucket.count / max * 75)}%`, bgcolor: "#2876a8", borderRadius: "4px 4px 0 0" }} />
-            <Typography variant="caption" color="text.secondary" noWrap sx={{ mt: 0.75, maxWidth: "100%" }}>{bucket.label}</Typography>
-          </Box>)}
+        <Box role="group" aria-label={`Transfers by ${period}`} sx={{ display: "flex", alignItems: "stretch", gap: { xs: 0.5, sm: 1.5 }, minHeight: 270, overflowX: "auto", borderBottom: "1px solid #dfe5eb", pt: 2 }}>
+          {buckets.map((bucket) => {
+            const active = selected?.key === bucket.key;
+            return <button key={bucket.key} type="button" aria-pressed={active} aria-label={`${bucket.label}: ${bucket.count} transfers; select to view details`} onClick={() => { setSelectedKey(bucket.key); setPage(0); }} style={{ background: "none", border: 0, cursor: "pointer", color: "inherit", font: "inherit", minWidth: 54, flex: 1, padding: 0 }}>
+              <span style={{ height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "end" }}>
+                <Typography variant="caption" sx={{ mb: 0.5, fontWeight: active ? 800 : 500 }}>{bucket.count}</Typography>
+                <span style={{ width: "65%", height: `${Math.max(2, bucket.count / max * 165)}px`, minHeight: 4, borderRadius: "4px 4px 0 0", background: active ? "#0d5b91" : "#8db7d3", outline: active ? "2px solid #0d5b91" : "none", outlineOffset: 2 }} />
+                <Typography variant="caption" color={active ? "text.primary" : "text.secondary"} noWrap sx={{ mt: 1, maxWidth: "100%", fontWeight: active ? 700 : 400 }}>{bucket.label}</Typography>
+              </span>
+            </button>;
+          })}
         </Box>
       </Paper>
+
       <Paper sx={{ p: { xs: 2, md: 3 } }}>
         <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" alignItems={{ xs: "stretch", sm: "center" }} spacing={2} sx={{ mb: 2 }}>
-          <Box><Typography variant="h6">Transfer Details</Typography><Typography variant="body2" color="text.secondary">Search recorded transfer requests.</Typography></Box>
-          <TextField size="small" label="Search transfers" placeholder="Inmate, prison, status, or ID" value={search} onChange={(event) => setSearch(event.target.value)} sx={{ minWidth: { sm: 300 } }} />
+          <Box><Typography variant="h6">Transfer details</Typography><Typography variant="body2" color="text.secondary">{selected ? `${formatRange(selected, period)} · ${matching.length} matching transfers` : "Select a chart bar to see details."}</Typography></Box>
+          <TextField size="small" label="Search this period" placeholder="Inmate, prison, status, or ID" value={search} onChange={(event) => { setSearch(event.target.value); setPage(0); }} sx={{ minWidth: { sm: 300 } }} />
         </Stack>
         <TableContainer sx={{ overflowX: "auto" }}><Table size="small" aria-label="Transfer details"><TableHead><TableRow><TableCell>Requested</TableCell><TableCell>Inmate</TableCell><TableCell>Transfer route</TableCell><TableCell>Reason</TableCell><TableCell>Status</TableCell></TableRow></TableHead><TableBody>
-          {rows.map((t) => <TableRow key={t.id} hover><TableCell sx={{ minWidth: 155 }}>{t.requestedAt ? new Date(t.requestedAt).toLocaleString() : "—"}</TableCell><TableCell sx={{ minWidth: 160 }}>{t.inmateName || "Unknown inmate"}<Typography variant="caption" display="block" color="text.secondary">{t.inmateNumber || t.inmateId || "—"}</Typography></TableCell><TableCell sx={{ minWidth: 210 }}>{t.sourcePrisonName || t.sourcePrisonId || "—"} → {t.destinationPrisonName || t.destinationPrisonId || "—"}</TableCell><TableCell sx={{ minWidth: 180 }}>{t.reason || "—"}</TableCell><TableCell>{t.status.replaceAll("_", " ")}</TableCell></TableRow>)}
-          {!rows.length && <TableRow><TableCell colSpan={5} align="center" sx={{ py: 4 }}>{loading ? "Loading transfers…" : "No transfers match your search."}</TableCell></TableRow>}
+          {matching.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage).map((transfer) => <TableRow key={transfer.id} hover><TableCell sx={{ minWidth: 155 }}>{transfer.requestedAt ? new Date(transfer.requestedAt).toLocaleString() : "—"}</TableCell><TableCell sx={{ minWidth: 160 }}>{transfer.inmateName || "Unknown inmate"}<Typography variant="caption" display="block" color="text.secondary">{transfer.inmateNumber || transfer.inmateId || "—"}</Typography></TableCell><TableCell sx={{ minWidth: 210 }}>{transfer.sourcePrisonName || transfer.sourcePrisonId || "—"} → {transfer.destinationPrisonName || transfer.destinationPrisonId || "—"}</TableCell><TableCell sx={{ minWidth: 180 }}>{transfer.reason || "—"}</TableCell><TableCell>{transfer.status.replaceAll("_", " ")}</TableCell></TableRow>)}
+          {!matching.length && <TableRow><TableCell colSpan={5} align="center" sx={{ py: 4 }}>{loading ? "Loading transfers…" : "No transfers found for this period."}</TableCell></TableRow>}
         </TableBody></Table></TableContainer>
+        <TablePagination component="div" count={matching.length} page={page} onPageChange={(_, nextPage) => setPage(nextPage)} rowsPerPage={rowsPerPage} onRowsPerPageChange={(event) => { setRowsPerPage(Number(event.target.value)); setPage(0); }} rowsPerPageOptions={[5, 10, 25]} />
       </Paper>
     </Stack>
   </Box>;
