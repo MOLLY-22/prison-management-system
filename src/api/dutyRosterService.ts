@@ -54,8 +54,12 @@ export const dutyRosterService = {
     return collectionFrom(data).map((item) => normalizeShift(item));
   },
 
-  async createRoster(prisonId: string, startDate: string, endDate: string): Promise<DutyRoster> {
-    const { data } = await api.post("/rosters", { prisonId, periodStart: startDate, periodEnd: endDate });
+  async createRoster(prisonId: string | undefined, startDate: string, endDate: string): Promise<DutyRoster> {
+    const { data } = await api.post("/rosters", {
+      ...(prisonId ? { prisonId } : {}),
+      periodStart: startDate,
+      periodEnd: endDate,
+    });
     return normalizeRoster(itemFrom(data));
   },
 

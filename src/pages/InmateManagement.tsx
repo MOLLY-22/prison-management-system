@@ -142,6 +142,7 @@ export function InmateManagement({ canAdmit, userRole, section, onBack }: Props)
   const [admissionPhoto, setAdmissionPhoto] = useState<File | null>(null);
   const [cells, setCells] = useState<Cell[]>([]);
   const [loadingCells, setLoadingCells] = useState(false);
+  const [cellLoadError, setCellLoadError] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
   const [admissionError, setAdmissionError] = useState<string | null>(null);
   const [selectedInmateId, setSelectedInmateId] = useState<string | null>(null);
@@ -181,9 +182,15 @@ export function InmateManagement({ canAdmit, userRole, section, onBack }: Props)
     if (!admissionOpen) return;
 
     setLoadingCells(true);
+    setCellLoadError("");
     inmateService.getCells({ size: 100 })
-      .then(setCells)
-      .catch(() => setCells([]))
+      .then((records) => setCells(records.filter((cell) => cell.availableSpaces > 0)))
+      .catch((error: unknown) => {
+        setCells([]);
+        setCellLoadError(axios.isAxiosError(error) && error.response?.data?.message
+          ? String(error.response.data.message)
+          : "Could not load cell availability. Try again before admitting an inmate.");
+      })
       .finally(() => setLoadingCells(false));
   }, [admissionOpen, userRole]);
   const filtered = useMemo(
@@ -220,6 +227,10 @@ export function InmateManagement({ canAdmit, userRole, section, onBack }: Props)
     ].filter(([, value]) => !value).map(([field]) => field);
     if (missingFields.length) {
       setAdmissionError(`Complete the following required fields: ${missingFields.join(", ")}.`);
+      return;
+    }
+    if (!cells.some((cell) => cell.id === admission.cell && cell.availableSpaces > 0)) {
+      setAdmissionError("Choose a cell that currently has available space.");
       return;
     }
     const offenceText = [admission.offense === "Other" ? admission.offenseOther.trim() : admission.offense.trim(), admission.crimeDescription.trim()].filter(Boolean).join(" — ");
@@ -259,6 +270,10 @@ export function InmateManagement({ canAdmit, userRole, section, onBack }: Props)
     setAdmissionError(null);
     setNotice(null);
     try {
+      const admissionCell = await inmateService.getCell(request.cellId);
+      if (admissionCell.availableSpaces <= 0) {
+        throw new Error("That cell no longer has available space. Choose another cell.");
+      }
       const created = admissionPhoto
         ? await inmateService.createInmateWithPhoto(request, admissionPhoto)
         : await inmateService.createInmate(request);
@@ -483,7 +498,8 @@ export function InmateManagement({ canAdmit, userRole, section, onBack }: Props)
           <Box component="fieldset" className="admission-section">
             <legend>Cell allocation</legend>
             <Box className="admission-fields admission-placement-fields">
-              {cells.length > 0 ? <TextField
+              {cellLoadError && <Alert severity="error">{cellLoadError}</Alert>}
+              <TextField
                 select
                 required
                 label="Cell"
@@ -491,18 +507,20 @@ export function InmateManagement({ canAdmit, userRole, section, onBack }: Props)
                 onChange={(event) =>
                   setAdmission({ ...admission, cell: event.target.value })
                 }
-                helperText="Choose a cell with available space."
+                disabled={loadingCells || Boolean(cellLoadError) || cells.length === 0}
+                helperText={loadingCells ? "Loading cell availability…" : "Choose a cell with available space. Availability uses current capacity and occupancy."}
               >
+                <MenuItem value="" disabled>Select an available cell</MenuItem>
                 {cells.map((cell) => (
                   <MenuItem
                     key={cell.id}
                     value={cell.id}
-                    disabled={cell.availableSpaces <= 0}
                   >
-                    {cell.name || cell.id} ({cell.availableSpaces} available)
+                    {[cell.prisonName, cell.blockName, cell.name || `Cell ${cell.cellNumber}`].filter(Boolean).join(" · ")} · {cell.currentOccupancy}/{cell.capacity} occupied · {cell.availableSpaces} available
                   </MenuItem>
                 ))}
-              </TextField> : <TextField required label="Cell ID" value={admission.cell} onChange={(event) => setAdmission({ ...admission, cell: event.target.value })} helperText={loadingCells ? "Loading cells…" : "Enter the cell identifier."} />}
+              </TextField>
+              {!loadingCells && !cellLoadError && cells.length === 0 && <Alert severity="warning">No cells currently have available spaces. Add capacity or move an inmate before admitting another.</Alert>}
             </Box>
           </Box>
           <Box component="fieldset" className="admission-section">

@@ -90,7 +90,7 @@ function DutyRosters() {
   const canManage = !user || isManagerRole(role);
   const [rosters, setRosters] = useState<DutyRoster[]>([]);
   const [officers, setOfficers] = useState<User[]>([]);
-  const selectedPrisonId = user?.prisonId ?? "";
+  const [selectedPrisonId, setSelectedPrisonId] = useState(user?.prisonId ?? "");
   const [rosterStatusFilter, setRosterStatusFilter] = useState<"ALL" | RosterStatus>("ALL");
   const [selectedRosterId, setSelectedRosterId] = useState("");
   const today = localDate(new Date());
@@ -119,13 +119,12 @@ function DutyRosters() {
     preferredRosterId?: string,
     statusOverride: "ALL" | RosterStatus = rosterStatusFilter,
   ) {
-    if (!selectedPrisonId) {
-      throw new Error("Your account is not linked to a prison. Ask an administrator to assign your facility.");
-    }
     const users = await userService.getUsers();
+    const prisonId = selectedPrisonId || users.find((record) => record.id === user?.id)?.prisonId || "";
+    if (!selectedPrisonId) setSelectedPrisonId(prisonId);
     setOfficers(users.filter(isPrisonOfficer));
     const rosterRecords = await dutyRosterService.getRosters({
-      prisonId: selectedPrisonId,
+      ...(prisonId ? { prisonId } : {}),
       ...(statusOverride === "ALL" ? {} : { status: statusOverride }),
     });
     const nextSelected = preferredRosterId && rosterRecords.some((roster) => roster.id === preferredRosterId)
@@ -164,14 +163,13 @@ function DutyRosters() {
       setError("");
       try {
         if (canManage) {
-          if (!selectedPrisonId) {
-            throw new Error("Your account is not linked to a prison. Ask an administrator to assign your facility.");
-          }
           const users = await userService.getUsers();
           if (!active) return;
+          const prisonId = selectedPrisonId || users.find((record) => record.id === user?.id)?.prisonId || "";
+          if (!selectedPrisonId) setSelectedPrisonId(prisonId);
           setOfficers(users.filter(isPrisonOfficer));
           const rosterRecords = await dutyRosterService.getRosters({
-            prisonId: selectedPrisonId,
+            ...(prisonId ? { prisonId } : {}),
             ...(rosterStatusFilter === "ALL" ? {} : { status: rosterStatusFilter }),
           });
           if (!active) return;
@@ -195,7 +193,7 @@ function DutyRosters() {
     }
     void load();
     return () => { active = false; };
-  }, [canManage]);
+  }, [canManage, user?.id]);
 
   async function runManagerAction(action: () => Promise<unknown>, message: string, rosterId?: string) {
     setSaving(true);
@@ -214,10 +212,6 @@ function DutyRosters() {
 
   function handleCreateRoster(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!selectedPrisonId) {
-      setError("Choose a prison for this roster.");
-      return;
-    }
     if (rangeStart > rangeEnd) {
       setError("The end date must be on or after the start date.");
       return;
@@ -338,7 +332,7 @@ function DutyRosters() {
                 <Box component="form" onSubmit={handleCreateRoster} sx={{ display: "flex", flexWrap: "wrap", gap: 2, alignItems: "center" }}>
                   <TextField label="Start date" type="date" value={rangeStart} onChange={(event) => setRangeStart(event.target.value)} required slotProps={{ inputLabel: { shrink: true } }} />
                   <TextField label="End date" type="date" value={rangeEnd} onChange={(event) => setRangeEnd(event.target.value)} required slotProps={{ inputLabel: { shrink: true } }} />
-                  <Button type="submit" variant="contained" disabled={saving || !selectedPrisonId || !rangeStart || !rangeEnd}>Create draft</Button>
+                  <Button type="submit" variant="contained" disabled={saving || !rangeStart || !rangeEnd}>Create draft</Button>
                 </Box>
               </Stack>
             </Paper>

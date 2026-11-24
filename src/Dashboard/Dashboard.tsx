@@ -5,7 +5,7 @@ import { collectionFrom } from "../api/dataContract";
 import { InmateManagement } from "../pages/InmateManagement";
 import Visitors from "../pages/Visitors";
 import UserAccess from "../pages/UserAccess";
-import TransferManagement from "../pages/TransferManagement";
+import TransferAnalytics from "../pages/TransferAnalytics";
 import DutyRosters from "../pages/DutyRosters";
 import { PrisonRegistry } from "../pages/PrisonRegistry";
 
@@ -17,7 +17,7 @@ type View =
   | "admission"
   | "sentences"
   | "visitors"
-  | "transfers"
+  | "transfer-analytics"
   | "duty-rosters"
   | "release"
   | "access"
@@ -31,7 +31,7 @@ const navigation: { id: View; label: string; short: string }[] = [
   { id: "admission", label: "Admission", short: "file" },
   { id: "sentences", label: "Sentences", short: "file" },
   { id: "visitors", label: "Visits", short: "visit" },
-  { id: "transfers", label: "Transfers", short: "arrows" },
+  { id: "transfer-analytics", label: "Transfer Analytics", short: "chart" },
   { id: "duty-rosters", label: "Duty rosters", short: "file" },
   // { id: "release", label: "Release & discharge", short: "exit" },
   { id: "access", label: "User Management", short: "shield" },
@@ -46,6 +46,7 @@ function NavigationIcon({ name }: { name: string }) {
     file: <><path d="M7 3.5h7l4 4V20H7z"/><path d="M14 3.5V8h4M10 12h5M10 16h5"/></>,
     visit: <><path d="M3 12s3.2-5 9-5 9 5 9 5-3.2 5-9 5-9-5-9-5Z"/><circle cx="12" cy="12" r="2.2"/></>,
     arrows: <><path d="M4 8h14m-4-4 4 4-4 4M20 16H6m4 4-4-4 4-4"/></>,
+    chart: <><path d="M4 20V4M4 20h17"/><path d="m7 15 4-4 3 2 6-7"/></>,
     exit: <><path d="M13 4h6v16h-6M10 8l4 4-4 4M14 12H3"/></>,
     shield: <><path d="m12 3 7 3v5c0 4.5-2.8 8-7 10-4.2-2-7-5.5-7-10V6z"/><path d="m9 12 2 2 4-4"/></>,
     building: <><path d="M4 20V5l8-2v17M12 8h8v12M2 20h20M7 8v.01M7 12v.01M7 16v.01M16 12v.01M16 16v.01"/></>,
@@ -56,7 +57,6 @@ function NavigationIcon({ name }: { name: string }) {
 const endpointFor: Partial<Record<View, string>> = {
   inmates: "/inmates",
   visitors: "/visits",
-  transfers: "/transfers",
   // release: "/releases",
   access: "/users",
   prisons : "/prisons"
@@ -295,8 +295,8 @@ function ModuleView({ view, onNavigate }: { view: View; onNavigate: (view: View)
     //   return <ReleaseManagement />;
     case "access":
       return <UserAccess />;
-    case "transfers":
-      return <TransferManagement />;
+    case "transfer-analytics":
+      return <TransferAnalytics />;
     case "duty-rosters":
       return <DutyRosters />;
     case "prisons":
@@ -311,7 +311,7 @@ export default function Dashboard() {
   const visibleNavigation = navigation;
   const [view, setView] = useState<View>("overview");
   const [inmatesOpen, setInmatesOpen] = useState(true);
-  const inmateViews: View[] = ["inmates", "profile", "admission", "sentences", "transfers", "visitors"];
+  const inmateViews: View[] = ["inmates", "profile", "admission", "sentences", "visitors"];
   const active = navigation.find((item) => item.id === view) ?? navigation[0];
   return (
     <div className="min-h-screen bg-[#f5f7fa] font-['DM_Sans',_'Segoe_UI',sans-serif] text-[#182638]">
@@ -343,7 +343,7 @@ export default function Dashboard() {
             <svg className={`size-3.5 transition-transform ${inmatesOpen ? "rotate-90" : ""}`} viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m6 3 5 5-5 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
           </button>
           {inmatesOpen && <div className="mt-1 space-y-1">
-            {navigation.filter((item) => ["inmates", "profile", "admission", "sentences", "transfers", "visitors"].includes(item.id)).map((item) => (
+            {navigation.filter((item) => ["inmates", "profile", "admission", "sentences", "visitors"].includes(item.id)).map((item) => (
               <button
                 aria-current={view === item.id ? "page" : undefined}
                 key={item.id}

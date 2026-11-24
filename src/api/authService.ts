@@ -33,6 +33,8 @@ export const authService = {
                     email,
                 );
                 if (!String(id) || !String(name)) return undefined;
+                const facility = firstValue(record, ["facility"], "");
+                const prison = asRecord(firstValue(record, ["prison"], facility));
                 return {
                     id: String(id),
                     name: String(name),
@@ -40,8 +42,18 @@ export const authService = {
                     role: String(
                         firstValue(record, ["role", "userRole", "user_role"], "Authorized officer"),
                     ),
-                    prisonId: firstValue(record, ["prisonId", "prison_id"], null) as string | null,
-                    prisonName: firstValue(record, ["prisonName", "prison_name"], null) as string | null,
+                    prisonId: firstValue(
+                        record,
+                        ["prisonId", "prison_id", "facilityId", "facility_id"],
+                        firstValue(prison, ["id", "prisonId", "prison_id"], null),
+                    ) as string | null,
+                    prisonName: firstValue(
+                        record,
+                        ["prisonName", "prison_name", "facilityName", "facility_name"],
+                        typeof facility === "string" && facility
+                            ? facility
+                            : firstValue(prison, ["name", "prisonName", "prison_name"], null),
+                    ) as string | null,
                 } satisfies AuthUser;
             })
             .find((candidate) => candidate !== undefined);

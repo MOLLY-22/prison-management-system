@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import api from "../api/axiosClient";
 import { collectionFrom, asRecord, itemFrom } from "../api/dataContract";
+import { inmateService, type Cell } from "../api/inmateService";
 
 type Row = Record<string, unknown>;
 type Tab =
@@ -87,11 +88,12 @@ export default function InmateProfile({
     "DISCIPLINARY OFFICER",
     "PRISON OFFICER",
   ].includes(role);
+  const canMoveCell = ["RECORDS OFFICER", "PRISON OFFICER"].includes(role);
   const canManagePrograms = role === "PROGRAM FACILITATOR";
   const canRecordAttendance = ["PROGRAM FACILITATOR", "INSTRUCTOR"].includes(
     role,
   );
-  const visibleTabs: Tab[] = ["Overview", "Sentences"];
+  const visibleTabs: Tab[] = ["Overview", "Sentences", "Cell allocations"];
   const [tab, setTab] = useState<Tab>(initialTab);
   const [record, setRecord] = useState<Row>({});
   const [sentences, setSentences] = useState<Row[]>([]);
@@ -99,6 +101,9 @@ export default function InmateProfile({
   const [visitRows, setVisitRows] = useState<Row[]>([]);
   const [medicalRows, setMedicalRows] = useState<Row[]>([]);
   const [cellRecord, setCellRecord] = useState<Row>({});
+  const [availableCells, setAvailableCells] = useState<Cell[]>([]);
+  const [selectedCellId, setSelectedCellId] = useState("");
+  const [movingCell, setMovingCell] = useState(false);
   const [incidents, setIncidents] = useState<Row[]>([]);
   const [programs, setPrograms] = useState<Row[]>([]);
   const [enrollments, setEnrollments] = useState<Row[]>([]);
@@ -166,13 +171,16 @@ export default function InmateProfile({
           if (active)
             setMedicalRows(collectionFrom(itemFrom(data)).map(asRecord));
         } else if (tab === "Cell allocations") {
-          const cellId = String(field(record, "cellId") ?? "");
-          if (cellId) {
-            const { data } = await api.get(
-              `/cells/${encodeURIComponent(cellId)}`,
-            );
-            if (active) setCellRecord(asRecord(itemFrom(data)));
-          } else if (active) setCellRecord({});
+          const inmate = await inmateService.getInmate(inmateId);
+          if (active) setRecord(inmate as unknown as Row);
+          const currentCell = inmate.cellId ? await inmateService.getCell(inmate.cellId) : null;
+          const prisonId = inmate.prisonId || currentCell?.prisonId || "";
+          const cells = prisonId ? await inmateService.getCells({ prisonId }) : [];
+          if (active) {
+            setCellRecord(currentCell ? currentCell as unknown as Row : {});
+            setAvailableCells(cells.filter((cell) => cell.availableSpaces > 0 && cell.id !== inmate.cellId));
+            setSelectedCellId("");
+          }
         } else if (tab === "Conduct") {
           const { data } = await api.get(
             `/inmates/${encodeURIComponent(inmateId)}/incidents`,
@@ -206,6 +214,36 @@ export default function InmateProfile({
       active = false;
     };
   }, [tab, inmateId, revision]);
+
+  const moveToCell = async () => {
+    const destination = availableCells.find((cell) => cell.id === selectedCellId && cell.availableSpaces > 0);
+    if (!destination) {
+      setError("Choose a cell that currently has available space.");
+      return;
+    }
+    setMovingCell(true);
+    setError("");
+    try {
+      const latestDestination = await inmateService.getCell(destination.id);
+      if (latestDestination.availableSpaces <= 0) {
+        throw new Error("That cell no longer has available space. Choose another cell.");
+      }
+      await inmateService.allocateCell(inmateId, destination.id);
+      const updatedInmate = await inmateService.getInmate(inmateId);
+      const updatedCell = await inmateService.getCell(destination.id);
+      const prisonId = updatedInmate.prisonId || destination.prisonId;
+      const cells = prisonId ? await inmateService.getCells({ prisonId }) : [];
+      setRecord(updatedInmate as unknown as Row);
+      setCellRecord(updatedCell as unknown as Row);
+      setAvailableCells(cells.filter((cell) => cell.availableSpaces > 0 && cell.id !== updatedInmate.cellId));
+      setSelectedCellId("");
+      setNotice(`Cell allocation updated to ${destination.blockName} · ${destination.name}.`);
+    } catch (reason) {
+      setError(errorMessage(reason));
+    } finally {
+      setMovingCell(false);
+    }
+  };
 
   useEffect(
     () => () => {
@@ -710,9 +748,10 @@ export default function InmateProfile({
           ]}
         />
       ) : tab === "Cell allocations" ? (
-        <section className="rounded-xl border border-slate-200 bg-white p-5">
-          <h2 className="font-semibold text-slate-800">Current cell</h2>
-          <dl className="mt-3 grid gap-3 sm:grid-cols-2">
+        <section className="space-y-5 rounded-xl border border-slate-200 bg-white p-5">
+          <div>
+            <h2 className="font-semibold text-slate-800">Current cell</h2>
+            <dl className="mt-3 grid gap-3 sm:grid-cols-2">
             {[
               ["Cell", "name"],
               ["Block", "blockName"],
@@ -727,7 +766,39 @@ export default function InmateProfile({
                 </dd>
               </div>
             ))}
-          </dl>
+            </dl>
+          </div>
+          {canMoveCell && (
+            <div className="grid gap-3 border-t border-slate-200 pt-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+              <label className="grid gap-1 text-xs font-medium text-slate-600">
+                Move to available cell
+                <select
+                  value={selectedCellId}
+                  onChange={(event) => setSelectedCellId(event.target.value)}
+                  disabled={movingCell || availableCells.length === 0}
+                  className="rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-800"
+                >
+                  <option value="">Select a cell</option>
+                  {availableCells.map((cell) => (
+                    <option key={cell.id} value={cell.id}>
+                      {[cell.blockName, cell.name || `Cell ${cell.cellNumber}`].filter(Boolean).join(" · ")} · {cell.currentOccupancy}/{cell.capacity} occupied · {cell.availableSpaces} available
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button
+                type="button"
+                onClick={() => void moveToCell()}
+                disabled={movingCell || !selectedCellId}
+                className="rounded-md bg-[#123c55] px-4 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {movingCell ? "Moving…" : "Move inmate"}
+              </button>
+              {availableCells.length === 0 && (
+                <p className="text-sm text-slate-500 sm:col-span-2">No other cells in this station currently have available space.</p>
+              )}
+            </div>
+          )}
         </section>
       ) : tab === "Conduct" ? (
         <section className="space-y-4">

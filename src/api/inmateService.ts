@@ -1,5 +1,6 @@
 import api from "./axiosClient";
 import { asRecord, collectionFrom, fetchAllPages, firstValue, itemFrom, requiredIdentifier } from "./dataContract";
+import { resolveCellAvailability } from "../utils/cellAvailability";
 
 export type Inmate = {
     id: string;
@@ -45,6 +46,7 @@ export type Cell = {
     id: string;
     name: string;
     prisonId: string;
+    prisonName: string;
     blockId: string;
     blockName: string;
     cellNumber: number;
@@ -175,15 +177,21 @@ export function normalizeInmate(payload: unknown): Inmate {
 
 function normalizeCell(payload: unknown): Cell {
     const record = asRecord(payload);
+    const capacity = Number(firstValue(record, ["capacity"], 0));
+    const occupancy = Number(firstValue(record, ["currentOccupancy", "current_occupancy"], 0));
+    const reportedAvailable = Number(firstValue(record, ["availableSpaces", "available_spaces"], Number.NaN));
+    const cellNumber = Number(firstValue(record, ["cellNumber", "cell_number"], 0));
+    const prison = asRecord(record.prison);
     return {
         id: String(firstValue(record, ["id", "cellId", "cell_id"], "")),
-        name: String(firstValue(record, ["name", "cellName", "cell_name"], "")),
+        name: String(firstValue(record, ["name", "cellName", "cell_name"], cellNumber ? `Cell ${cellNumber}` : "")),
         prisonId: String(firstValue(record, ["prisonId", "prison_id"], "")),
+        prisonName: String(firstValue(record, ["prisonName", "prison_name"], firstValue(prison, ["name"], ""))),
         blockId: String(firstValue(record, ["blockId", "block_id"], "")),
         blockName: String(firstValue(record, ["blockName", "block_name"], "")),
-        cellNumber: Number(firstValue(record, ["cellNumber", "cell_number"], 0)),
-        capacity: Number(firstValue(record, ["capacity"], 0)),
-        currentOccupancy: Number(firstValue(record, ["currentOccupancy", "current_occupancy"], 0)),
-        availableSpaces: Number(firstValue(record, ["availableSpaces", "available_spaces"], 0)),
+        cellNumber,
+        capacity,
+        currentOccupancy: occupancy,
+        availableSpaces: resolveCellAvailability(capacity, occupancy, reportedAvailable),
     };
 }
