@@ -139,13 +139,15 @@ export function InmateManagement({ canAdmit, userRole, section, onBack }: Props)
   const [admissionOpen, setAdmissionOpen] = useState(section === "admission");
   const [admission, setAdmission] = useState<AdmissionForm>(emptyAdmission);
   const [savingAdmission, setSavingAdmission] = useState(false);
-  const [admissionPhoto, setAdmissionPhoto] = useState<File | null>(null);
+  const [admissionPhotos, setAdmissionPhotos] = useState<File[]>([]);
   const [cells, setCells] = useState<Cell[]>([]);
   const [loadingCells, setLoadingCells] = useState(false);
   const [cellLoadError, setCellLoadError] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
   const [admissionError, setAdmissionError] = useState<string | null>(null);
   const [selectedInmateId, setSelectedInmateId] = useState<string | null>(null);
+  const [pendingSentence, setPendingSentence] = useState<{ inmate: string; inmateId: string; payload: Record<string, string> } | null>(null);
+  const [retryingSentence, setRetryingSentence] = useState(false);
 
   useEffect(() => {
     setAdmissionOpen(section === "admission");
@@ -158,7 +160,8 @@ export function InmateManagement({ canAdmit, userRole, section, onBack }: Props)
     setCensusLoadError(false);
     setNotice(null);
     try {
-      const data = await inmateService.getInmates({ page: 0, size: 1000 });
+      // The API caps page size at 100; let the service follow its pagination metadata.
+      const data = await inmateService.getInmates({ size: 100 });
       setRecords(data.map(toDirectoryRecord));
     } catch (error: unknown) {
       setCensusLoadError(true);
@@ -183,14 +186,9 @@ export function InmateManagement({ canAdmit, userRole, section, onBack }: Props)
 
     setLoadingCells(true);
     setCellLoadError("");
-    inmateService.getCells({ size: 100 })
-      .then((records) => setCells(records.filter((cell) => cell.availableSpaces > 0)))
-      .catch((error: unknown) => {
-        setCells([]);
-        setCellLoadError(axios.isAxiosError(error) && error.response?.data?.message
-          ? String(error.response.data.message)
-          : "Could not load cell availability. Try again before admitting an inmate.");
-      })
+    inmateService.getCells({ size: 100, singlePage: true })
+      .then(setCells)
+      .catch((error) => { setCells([]); setCellLoadError(error instanceof Error ? error.message : "Could not load cells."); })
       .finally(() => setLoadingCells(false));
   }, [admissionOpen, userRole]);
   const filtered = useMemo(
@@ -206,9 +204,29 @@ export function InmateManagement({ canAdmit, userRole, section, onBack }: Props)
   );
   const closeAdmission = () => {
     setAdmission(emptyAdmission);
+    setAdmissionPhotos([]);
     setAdmissionError(null);
     if (section === "admission") onBack?.();
     else setAdmissionOpen(false);
+  };
+  const retrySentence = async () => {
+    if (!pendingSentence) return;
+    setRetryingSentence(true);
+    try {
+      const payload = { ...pendingSentence.payload };
+      // Life and undetermined sentences have no fixed end date in the API contract.
+      if (payload.sentenceType !== "FIXED_TERM") delete payload.endDate;
+      await api.post("/sentences", payload);
+      setNotice(`Sentence recorded for ${pendingSentence.inmate}.`);
+      setPendingSentence(null);
+    } catch (error) {
+      const reason = axios.isAxiosError(error)
+        ? error.response?.data?.message || error.message
+        : "sentence service error";
+      setNotice(`Inmate ${pendingSentence.inmate} is enrolled, but the sentence could not be recorded: ${reason}.`);
+    } finally {
+      setRetryingSentence(false);
+    }
   };
   const saveAdmission = async () => {
     const missingFields = [
@@ -229,8 +247,12 @@ export function InmateManagement({ canAdmit, userRole, section, onBack }: Props)
       setAdmissionError(`Complete the following required fields: ${missingFields.join(", ")}.`);
       return;
     }
-    if (!cells.some((cell) => cell.id === admission.cell && cell.availableSpaces > 0)) {
-      setAdmissionError("Choose a cell that currently has available space.");
+    const invalidEmailField = [
+      ["next of kin email", admission.nextOfKinEmail],
+      ["inmate contact email", admission.contactEmail],
+    ].find(([, value]) => value && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim()));
+    if (invalidEmailField) {
+      setAdmissionError(`Enter a valid ${invalidEmailField[0]} address, or leave it blank.`);
       return;
     }
     const offenceText = [admission.offense === "Other" ? admission.offenseOther.trim() : admission.offense.trim(), admission.crimeDescription.trim()].filter(Boolean).join(" — ");
@@ -270,19 +292,50 @@ export function InmateManagement({ canAdmit, userRole, section, onBack }: Props)
     setAdmissionError(null);
     setNotice(null);
     try {
-      const admissionCell = await inmateService.getCell(request.cellId);
-      if (admissionCell.availableSpaces <= 0) {
-        throw new Error("That cell no longer has available space. Choose another cell.");
-      }
-      const created = admissionPhoto
-        ? await inmateService.createInmateWithPhoto(request, admissionPhoto)
-        : await inmateService.createInmate(request);
-      let sentenceWarning = "";
-      if (admission.custodyType === "Sentenced" && created.id) {
+      let created: ApiInmate;
+      let photoWarning = "";
+      if (admissionPhotos.length) {
         try {
-          await api.post("/sentences", { inmateId: created.id, offence: offenceText, sentenceType: admission.sentenceType, startDate: admission.sentenceStartDate, ...(admission.sentenceEndDate ? { endDate: admission.sentenceEndDate } : {}) });
+          created = await inmateService.createInmateWithPhoto(request, admissionPhotos);
+        } catch (photoError) {
+          const message = axios.isAxiosError(photoError) && photoError.response?.data && typeof photoError.response.data === "object" && "message" in photoError.response.data
+            ? String(photoError.response.data.message)
+            : "";
+          if (!message.toLowerCase().includes("photo storage") || !message.toLowerCase().includes("unavailable")) throw photoError;
+
+          // Multipart admission can fail after the inmate row was saved. Check the census
+          // before retrying without photos so an uncertain response cannot create a duplicate.
+          let existing: Inmate[];
+          try {
+            existing = await inmateService.getInmates({ size: 100 });
+          } catch {
+            throw new Error("Photo storage is unavailable and the save result could not be checked. Check the inmate directory before retrying.");
+          }
+          const matchingInmate = existing.find((item) =>
+            item.firstName.trim().toLocaleLowerCase() === request.firstName.toLocaleLowerCase() &&
+            item.lastName.trim().toLocaleLowerCase() === request.lastName.toLocaleLowerCase() &&
+            item.dateOfBirth === request.dateOfBirth && item.admissionDate === request.admissionDate,
+          );
+          if (matchingInmate) {
+            created = matchingInmate;
+            photoWarning = " The inmate was saved, but photo storage is unavailable, so the photo was not saved.";
+          } else {
+            created = await inmateService.createInmate(request);
+            photoWarning = " The inmate was saved without the selected photo because photo storage is unavailable.";
+          }
+        }
+      } else {
+        created = await inmateService.createInmate(request);
+      }
+      let sentenceWarning = photoWarning;
+      if (admission.custodyType === "Sentenced" && created.id) {
+        const sentencePayload = { inmateId: created.id, offence: offenceText, sentenceType: admission.sentenceType, startDate: admission.sentenceStartDate, ...(admission.sentenceType === "FIXED_TERM" && admission.sentenceEndDate ? { endDate: admission.sentenceEndDate } : {}) };
+        try {
+          await api.post("/sentences", sentencePayload);
         } catch (error) {
-          sentenceWarning = ` Inmate enrolled, but the sentence could not be recorded: ${axios.isAxiosError(error) ? error.response?.data?.message || error.message : "sentence service error"}.`;
+          const reason = axios.isAxiosError(error) ? error.response?.data?.message || error.message : "sentence service error";
+          sentenceWarning = ` Inmate enrolled, but the sentence could not be recorded: ${reason}.`;
+          setPendingSentence({ inmate: `${created.firstName} ${created.lastName}`.trim(), inmateId: created.id, payload: sentencePayload });
         }
       }
       const savedInmate: ApiInmate = {
@@ -307,12 +360,14 @@ export function InmateManagement({ canAdmit, userRole, section, onBack }: Props)
             : [savedRecord, ...refreshedRecords];
         });
       } catch {
-        setNotice("Inmate was saved, but the census could not be refreshed.");
+          setNotice(`Inmate was saved, but the census could not be refreshed.${sentenceWarning}`);
       }
     } catch (error) {
       if (axios.isAxiosError(error)) {
         if (error.response?.status === 401) {
           setAdmissionError("Your session has expired. Sign in again before saving an admission.");
+        } else if (error.response?.status === 403) {
+          setAdmissionError("Inmate admissions are handled by a Records Officer account. Sign in with that role or ask your system administrator to assign it to your account.");
         } else if (!error.response) {
           setAdmissionError("The inmate service is unreachable. Make sure the API is running on localhost:8080.");
         } else {
@@ -330,40 +385,31 @@ export function InmateManagement({ canAdmit, userRole, section, onBack }: Props)
       setSavingAdmission(false);
     }
   };
-  if (selectedInmateId && ["overview", "profile", "profile-sentences"].includes(section)) return <InmateProfile inmateId={selectedInmateId} userRole={userRole} initialTab={section === "profile-sentences" ? "Sentences" : "Overview"} onBack={() => setSelectedInmateId(null)} />;
+  if (selectedInmateId && section === "overview") return <InmateProfile inmateId={selectedInmateId} userRole={userRole} initialTab="Overview" onBack={() => setSelectedInmateId(null)} />;
   if (section === "profile-sentences") return <SentenceInmatePicker records={records} loading={loading} error={censusLoadError ? notice : ""} onRetry={() => void loadInmates()} onSelect={setSelectedInmateId} />;
   return (
     <Box className="census-page">
       {!admissionOpen && <>
-      {notice && section !== "admission" && (
+      {notice && (
         <Alert
           className="census-notice"
-          severity={censusLoadError ? "error" : "success"}
-          action={censusLoadError ? <Button color="inherit" size="small" onClick={() => void loadInmates()}>Retry</Button> : undefined}
+          severity={censusLoadError || pendingSentence ? "error" : "success"}
+          action={pendingSentence ? <Button color="inherit" size="small" disabled={retryingSentence} onClick={() => void retrySentence()}>{retryingSentence ? "Retrying…" : "Retry sentence"}</Button> : censusLoadError ? <Button color="inherit" size="small" onClick={() => void loadInmates()}>Retry</Button> : undefined}
           onClose={() => setNotice(null)}
         >
           {notice}
         </Alert>
       )}
       {!admissionOpen && <Box className="portal-heading">
-        <Box className="portal-title-row">
+        <Box className="portal-title-row items-center">
           <Box>
-          <Typography component="h1">{section === "admission" ? "Admission" : section === "profile-sentences" ? "Sentences" : section === "profile" ? "Profile" : "Overview"}</Typography>
+          <Typography component="h1">{section === "admission" ? "Admission" : section === "profile-sentences" ? "Sentences" : section === "profile" ? "Profile" : "Inmates"}</Typography>
           </Box>
+          {section === "overview" && canAdmit && <Button variant="contained" onClick={() => setAdmissionOpen(true)}>New Admission</Button>}
         </Box>
       </Box>}
       {section !== "admission" && <>
       {section === "profile-sentences" && <Alert severity="info">Select an inmate from the table to open their Sentences.</Alert>}
-      {section === "overview" && !censusLoadError && <Box className="census-metrics">
-        <Metric
-          label="Total inmate records"
-          value={censusLoadError ? "—" : records.length.toLocaleString()}
-          note={censusLoadError ? "Unavailable" : "Current census"}
-          tone="blue"
-        />
-        <Metric label="On remand" value={loading ? "—" : records.filter((record) => record.inmateType === "REMAND").length.toLocaleString()} note="From inmate type" tone="blue" />
-        <Metric label="Sentenced" value={loading ? "—" : records.filter((record) => record.inmateType === "SENTENCED").length.toLocaleString()} note="From inmate type" tone="blue" />
-      </Box>}
       <Paper className="filter-bar" elevation={0}>
         <TextField
           placeholder="Search by name, ID, station, or cell"
@@ -393,52 +439,24 @@ export function InmateManagement({ canAdmit, userRole, section, onBack }: Props)
         </Button>
       </Paper>
       <Paper className="directory" elevation={0}>
-        <Box className="directory-title">
-          <Box>
-          <Typography component="h2">{section === "profile" ? "Inmate profiles" : "Inmate Census Directory"}</Typography>
-            <Typography>
-              {section === "profile" ? "Choose an inmate to view their profile." : `${filtered.length} matching record${filtered.length === 1 ? "" : "s"} in the census.`}
-            </Typography>
-          </Box>
-        </Box>
         <TableContainer>
           <Table className="census-table">
             <TableHead>
               <TableRow>
-                <TableCell>Inmate ID</TableCell>
                 <TableCell>Name</TableCell>
-                <TableCell>Date of Birth</TableCell>
-                <TableCell>Inmate Type</TableCell>
-                <TableCell>Station</TableCell>
-                <TableCell>Cell ID</TableCell>
-                <TableCell>Admission Date</TableCell>
-                <TableCell>Profile</TableCell>
+                <TableCell align="right">Actions</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
-              {loading ? <TableRow><TableCell colSpan={8}>Loading inmate records...</TableCell></TableRow> : censusLoadError ? <TableRow><TableCell colSpan={8}>Inmate records are unavailable. Use Retry above after checking the API connection and your account access.</TableCell></TableRow> : !filtered.length ? <TableRow><TableCell colSpan={8}>No inmate records match these filters.</TableCell></TableRow> : filtered.map((record) => (
-                <TableRow key={record.id} hover onClick={() => setSelectedInmateId(record.id)} sx={{ cursor: "pointer" }}>
-                  <TableCell>
-                    <Box className="id-photo">
-                      <span className="mugshot">
-                        {initials(record.fullName)}
-                      </span>
-                      <code>{record.id}</code>
-                    </Box>
-                  </TableCell>
+              {loading ? <TableRow><TableCell colSpan={2}>Loading inmate records...</TableCell></TableRow> : censusLoadError ? <TableRow><TableCell colSpan={2}>Inmate records are unavailable. Use Retry above after checking the API connection and your account access.</TableCell></TableRow> : !filtered.length ? <TableRow><TableCell colSpan={2}>No inmate records match these filters.</TableCell></TableRow> : filtered.map((record) => (
+                <TableRow key={record.id} hover>
                   <TableCell className="full-name">{record.fullName}</TableCell>
-                  <TableCell>{displayDate(record.dateOfBirth)}</TableCell>
-                  <TableCell><Chip label={record.inmateType} /></TableCell>
-                  <TableCell>{record.prisonName || "—"}</TableCell>
-                  <TableCell>{record.cellId || "—"}</TableCell>
-                  <TableCell>{record.admissionDate}</TableCell>
-                  <TableCell><Button size="small" onClick={(event) => { event.stopPropagation(); setSelectedInmateId(record.id); }}>View</Button></TableCell>
+                  <TableCell align="right"><Button size="small" variant="outlined" onClick={() => setSelectedInmateId(record.id)}>View</Button></TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
         </TableContainer>
-        <Box className="pagination">Showing <strong>{filtered.length} of {records.length}</strong> returned inmate records</Box>
       </Paper>
       </>}
       </>}
@@ -490,16 +508,15 @@ export function InmateManagement({ canAdmit, userRole, section, onBack }: Props)
           <Box component="fieldset" className="admission-section">
             <legend>Bio</legend>
             <Box className="admission-fields admission-identity-fields">
-              <Button component="label" variant="outlined">Take or upload photo<input hidden type="file" accept="image/jpeg,image/png" capture="user" onChange={(event) => { const file = event.target.files?.[0] ?? null; if (file && !["image/jpeg", "image/png"].includes(file.type)) { setAdmissionError("Please choose a JPEG or PNG image."); return; } setAdmissionError(null); setAdmissionPhoto(file); }} /></Button>
-              {admissionPhoto && <Typography variant="caption">Selected: {admissionPhoto.name}</Typography>}
+              <Button component="label" variant="outlined">Upload photos<input hidden multiple type="file" accept="image/jpeg,image/png" onChange={(event) => { const files = Array.from(event.target.files ?? []); if (files.some((file) => !["image/jpeg", "image/png"].includes(file.type))) { setAdmissionError("Please choose JPEG or PNG images."); event.target.value = ""; return; } setAdmissionError(null); setAdmissionPhotos((current) => [...current, ...files]); event.target.value = ""; }} /></Button>
+              {admissionPhotos.length > 0 && <Box className="flex flex-wrap items-center gap-2">{admissionPhotos.map((photo, index) => <Chip key={`${photo.name}-${photo.lastModified}-${index}`} size="small" label={photo.name} onDelete={() => setAdmissionPhotos((current) => current.filter((_, itemIndex) => itemIndex !== index))} />)}</Box>}
               <TextField multiline minRows={2} inputProps={{ maxLength: 1000 }} label="Distinguishing features" placeholder="Tattoos, scars, birthmarks, build, hair, identifying marks" value={admission.appearance} onChange={(event) => setAdmission({ ...admission, appearance: event.target.value })} />
             </Box>
           </Box>
           <Box component="fieldset" className="admission-section">
             <legend>Cell allocation</legend>
             <Box className="admission-fields admission-placement-fields">
-              {cellLoadError && <Alert severity="error">{cellLoadError}</Alert>}
-              <TextField
+              {loadingCells ? <Typography className="text-sm text-slate-500">Loading available cells…</Typography> : cellLoadError ? <Alert severity="error" action={<Button color="inherit" size="small" onClick={() => { setLoadingCells(true); setCellLoadError(""); inmateService.getCells({ size: 100, singlePage: true }).then(setCells).catch((error) => setCellLoadError(error instanceof Error ? error.message : "Could not load cells.")).finally(() => setLoadingCells(false)); }}>Retry</Button>}>{cellLoadError}</Alert> : cells.length > 0 ? <TextField
                 select
                 required
                 label="Cell"
@@ -507,20 +524,18 @@ export function InmateManagement({ canAdmit, userRole, section, onBack }: Props)
                 onChange={(event) =>
                   setAdmission({ ...admission, cell: event.target.value })
                 }
-                disabled={loadingCells || Boolean(cellLoadError) || cells.length === 0}
-                helperText={loadingCells ? "Loading cell availability…" : "Choose a cell with available space. Availability uses current capacity and occupancy."}
+                helperText="Choose a cell with available space."
               >
-                <MenuItem value="" disabled>Select an available cell</MenuItem>
                 {cells.map((cell) => (
                   <MenuItem
                     key={cell.id}
                     value={cell.id}
+                    disabled={cell.availableSpaces <= 0}
                   >
-                    {[cell.prisonName, cell.blockName, cell.name || `Cell ${cell.cellNumber}`].filter(Boolean).join(" · ")} · {cell.currentOccupancy}/{cell.capacity} occupied · {cell.availableSpaces} available
+                    {cell.name || cell.id} ({cell.availableSpaces} available · {cell.currentOccupancy}/{cell.capacity} occupied)
                   </MenuItem>
                 ))}
-              </TextField>
-              {!loadingCells && !cellLoadError && cells.length === 0 && <Alert severity="warning">No cells currently have available spaces. Add capacity or move an inmate before admitting another.</Alert>}
+              </TextField> : <Alert severity="warning">No cells are available to select. Add cells in the prison registry, then retry admission.</Alert>}
             </Box>
           </Box>
           <Box component="fieldset" className="admission-section">
@@ -568,7 +583,7 @@ export function InmateManagement({ canAdmit, userRole, section, onBack }: Props)
                 onChange={(event) => setAdmission({ ...admission, sentenceStartDate: event.target.value })}
                 slotProps={{ inputLabel: { shrink: true } }}
               />}
-              {admission.custodyType === "Sentenced" && <TextField
+              {admission.custodyType === "Sentenced" && admission.sentenceType === "FIXED_TERM" && <TextField
                 label="Sentence end date (optional)"
                 type="date"
                 value={admission.sentenceEndDate}
@@ -600,58 +615,36 @@ function SentenceInmatePicker({ records, loading, error, onRetry, onSelect }: { 
   const [query, setQuery] = useState("");
   const matches = records.filter((record) => `${record.fullName} ${record.id}`.toLowerCase().includes(query.toLowerCase()));
   return <Box className="census-page">
-    <Box className="portal-heading"><Box className="portal-title-row"><Box><Typography component="h1">Sentences</Typography></Box></Box></Box>
     {error && <Alert severity="error" action={<Button color="inherit" size="small" onClick={onRetry}>Retry</Button>}>{error}</Alert>}
-    <Paper className="directory max-w-3xl" elevation={0}>
-      <Box className="directory-title"><Box><Typography component="h2">Select an inmate</Typography></Box></Box>
-      <Box className="grid gap-3 p-4 sm:grid-cols-[1fr_1fr]">
-        <TextField label="Search name or ID" value={query} onChange={(event) => setQuery(event.target.value)} />
-        <Typography className="self-center text-sm text-slate-500">{loading ? "Loading inmates…" : `${matches.length} inmates`}</Typography>
+    <Paper className="directory mx-auto max-w-5xl" elevation={0}>
+      <Box className="directory-title flex flex-wrap items-center justify-between gap-3">
+        <Box><Typography component="h2">Find an inmate</Typography><Typography>Search by name or inmate ID, then open their sentence record.</Typography></Box>
+        <Chip size="small" label={loading ? "Loading…" : `${matches.length} ${matches.length === 1 ? "inmate" : "inmates"}`} sx={{ bgcolor: "#edf4f8", color: "#28566f", fontWeight: 700 }} />
       </Box>
-      <Box className="max-h-[55vh] overflow-y-auto divide-y divide-slate-100">
-        {!loading && !matches.length && <Typography className="p-5 text-sm text-slate-500">No inmates found.</Typography>}
-        {matches.map((record) => <button key={record.id} onClick={() => onSelect(record.id)} className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-slate-50">
-          <span className="grid size-9 shrink-0 place-items-center rounded-full bg-[#e7eff4] text-xs font-bold text-[#28566f]">{initials(record.fullName)}</span>
-          <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold text-slate-800">{record.fullName}</span><span className="mt-0.5 block truncate text-xs text-slate-500">{record.id} · {record.inmateType} · {record.cellId || "No cell"}</span></span>
-          <span className="text-xs font-semibold text-[#2876a8]">Open sentences →</span>
-        </button>)}
+      <Box className="flex flex-col gap-3 border-b border-slate-100 bg-[#fbfcfd] p-4 sm:flex-row sm:items-center">
+        <TextField fullWidth label="Search name or inmate ID" placeholder="Type a name or ID" value={query} onChange={(event) => setQuery(event.target.value)} />
+        <Typography className="shrink-0 text-xs text-slate-500">{loading ? "Loading inmate records…" : error ? "Inmate list unavailable" : "Select one inmate to continue"}</Typography>
+      </Box>
+      <Box className="max-h-[60vh] overflow-y-auto">
+        {!loading && !error && !matches.length && <Box className="flex flex-col items-center px-6 py-14 text-center">
+          <Box className="mb-4 grid size-14 place-items-center rounded-2xl bg-[#edf4f8] text-[#28566f]"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" className="size-7"><circle cx="10.8" cy="10.8" r="6.8" stroke="currentColor" strokeWidth="1.7"/><path d="m16 16 4.5 4.5M8 10.8h5.6" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"/></svg></Box>
+          <Typography className="font-semibold text-slate-800">{query.trim() ? "No matching inmates" : "No inmate records yet"}</Typography>
+          <Typography className="mt-1 max-w-md text-sm text-slate-500">{query.trim() ? "Try another name or ID." : "When inmate records are available, search and select one here to manage their sentences and remissions."}</Typography>
+          {query.trim() && <Button size="small" onClick={() => setQuery("")} sx={{ mt: 1.5 }}>Clear search</Button>}
+        </Box>}
+        {matches.map((record) => <Box key={record.id} className="flex flex-wrap items-center gap-3 border-b border-slate-100 px-4 py-4 transition-colors hover:bg-[#f7fafc] sm:px-5">
+          <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-[#e7eff4] text-xs font-bold text-[#28566f]">{initials(record.fullName)}</span>
+          <Box className="min-w-[180px] flex-1">
+            <Typography className="truncate text-sm font-semibold text-slate-800">{record.fullName}</Typography>
+            <Typography className="mt-0.5 truncate text-xs text-slate-500">ID {record.id}</Typography>
+          </Box>
+          <Box className="flex min-w-[155px] items-center gap-2">
+            <Chip size="small" label={record.inmateType === "REMAND" ? "Remand" : "Sentenced"} variant="outlined" sx={{ borderColor: "#d9e3e9", color: "#526579", fontSize: 11 }} />
+            <Typography className="text-xs text-slate-500">Cell {record.cellId || "—"}</Typography>
+          </Box>
+          <Button variant="contained" size="small" onClick={() => onSelect(record.id)} endIcon={<span aria-hidden="true">→</span>} sx={{ ml: "auto", minWidth: 142, textTransform: "none", bgcolor: "#173a59", "&:hover": { bgcolor: "#245879" } }}>View sentences</Button>
+        </Box>)}
       </Box>
     </Paper>
   </Box>;
-}
-
-function Metric({
-  label,
-  value,
-  note,
-  tone,
-  onClick,
-}: {
-  label: string;
-  value: string;
-  note: string;
-  tone: string;
-  onClick?: () => void;
-}) {
-  return (
-    <Paper
-      className={`metric-card ${tone} ${onClick ? "metric-card-link" : ""}`}
-      elevation={0}
-      onClick={onClick}
-      role={onClick ? "button" : undefined}
-      tabIndex={onClick ? 0 : undefined}
-      onKeyDown={(event) => {
-        if (onClick && (event.key === "Enter" || event.key === " ")) onClick();
-      }}
-    >
-      <Box>
-        <Typography>{label}</Typography>
-        <strong>{value}</strong>
-        <small>{note}</small>
-      </Box>
-      {onClick && (
-        <Typography className="metric-action">View schedule →</Typography>
-      )}
-    </Paper>
-  );
 }

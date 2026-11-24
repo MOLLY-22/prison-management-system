@@ -6,7 +6,6 @@ import { InmateManagement } from "../pages/InmateManagement";
 import Visitors from "../pages/Visitors";
 import UserAccess from "../pages/UserAccess";
 import TransferAnalytics from "../pages/TransferAnalytics";
-import DutyRosters from "../pages/DutyRosters";
 import { PrisonRegistry } from "../pages/PrisonRegistry";
 
 
@@ -18,7 +17,6 @@ type View =
   | "sentences"
   | "visitors"
   | "transfer-analytics"
-  | "duty-rosters"
   | "release"
   | "access"
   | "prisons";
@@ -32,7 +30,6 @@ const navigation: { id: View; label: string; short: string }[] = [
   { id: "sentences", label: "Sentences", short: "file" },
   { id: "visitors", label: "Visits", short: "visit" },
   { id: "transfer-analytics", label: "Transfer Analytics", short: "chart" },
-  { id: "duty-rosters", label: "Duty rosters", short: "file" },
   // { id: "release", label: "Release & discharge", short: "exit" },
   { id: "access", label: "User Management", short: "shield" },
   { id: "prisons", label: "Prison registry", short: "building" },
@@ -238,9 +235,6 @@ function Overview({ onNavigate }: { onNavigate: (view: View) => void }) {
       note: "Prison and block allocation",
     },
     {
-      label: "Duty rosters",
-      id: "duty-rosters",
-      note: "Officer shifts and published schedules",
     },
   ];
   return (
@@ -297,8 +291,6 @@ function ModuleView({ view, onNavigate }: { view: View; onNavigate: (view: View)
       return <UserAccess />;
     case "transfer-analytics":
       return <TransferAnalytics />;
-    case "duty-rosters":
-      return <DutyRosters />;
     case "prisons":
       return <PrisonRegistry canManage />;
     case "overview":

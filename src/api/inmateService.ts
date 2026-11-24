@@ -70,6 +70,7 @@ export type CellListParams = {
     page?: number;
     size?: number;
     sort?: string[];
+    singlePage?: boolean;
 };
 
 export type CellAllocation = {
@@ -97,10 +98,12 @@ export const inmateService = {
         const response = await api.post("/inmates", payload);
         return normalizeInmate(itemFrom(response.data));
     },
-    async createInmateWithPhoto(payload: InmateRequest, photo: File): Promise<Inmate> {
+    async createInmateWithPhoto(payload: InmateRequest, photos: File | File[]): Promise<Inmate> {
         const body = new FormData();
         body.append("inmate", new Blob([JSON.stringify(payload)], { type: "application/json" }));
-        body.append("photo", photo);
+        for (const photo of Array.isArray(photos) ? photos : [photos]) {
+            body.append("photo", photo);
+        }
         const response = await api.post("/inmates", body, {
             headers: { "Content-Type": "multipart/form-data" },
         });
@@ -117,8 +120,14 @@ export const inmateService = {
     },
 
     async getCells(params?: CellListParams): Promise<Cell[]> {
-        const query = { size: 100, ...params };
-        if (params?.page !== undefined) {
+        const { singlePage, ...filters } = params ?? {};
+        const query = { size: 100, ...filters };
+        // Admission requests exactly the first 100 cells without a page parameter.
+        if (singlePage) {
+            const response = await api.get("/cells", { params: query });
+            return collectionFrom(response.data).map(normalizeCell);
+        }
+        if (filters.page !== undefined) {
             const response = await api.get("/cells", { params: query });
             return collectionFrom(response.data).map(normalizeCell);
         }

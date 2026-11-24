@@ -140,7 +140,7 @@ export default function Visitors() {
         <div>
           <p className="eyebrow">FACILITY OPERATIONS / VISITORS</p>
           <h1>Visitor Management</h1>
-          
+
         </div>
       </header>
 

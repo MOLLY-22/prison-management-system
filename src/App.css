@@ -1361,6 +1361,9 @@ button.secondary,
 input[type="submit"] {
   border-radius: 0 !important;
 }
+.inmate-profile-tabs button {
+  border-radius: 9999px !important;
+}
 /* Make navigation items have square corners */
 .sidebar a,
 .sidebar button,

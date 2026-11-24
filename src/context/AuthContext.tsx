@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
-import { createContext, useContext, useState } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 import type { PropsWithChildren } from "react";
 
 import { authService } from "../api/authService";
@@ -92,6 +92,16 @@ export function AuthProvider({ children }: PropsWithChildren) {
     const [user, setUser] = useState(readStoredUser);
     const [loading, setLoading] = useState(false);
     const [authError, setAuthError] = useState("");
+
+    useEffect(() => {
+        const handleSessionExpired = () => {
+            setToken(null);
+            setUser(null);
+            setAuthError("Your session expired. Sign in again to continue.");
+        };
+        window.addEventListener("pms:session-expired", handleSessionExpired);
+        return () => window.removeEventListener("pms:session-expired", handleSessionExpired);
+    }, []);
 
     
     const login = async (credentials: LoginCredentials): Promise<AuthResponse> => {
