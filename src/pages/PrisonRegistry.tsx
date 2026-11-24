@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import axios from "axios";
 import {
   Alert,
   Box,
@@ -35,7 +36,12 @@ import {
 import "./admissionDialog.css";
 import "./prisonRegistry.css";
 
-type Props = { canManage: boolean };
+type Props = {
+  canManage: boolean;
+  mode?: "registry" | "housing";
+  assignedPrisonId?: string;
+  assignedPrisonRequired?: boolean;
+};
 type CellDraft = { cellNumber: string; capacity: string };
 type BlockDraft = { name: string; cells: CellDraft[] };
 type ModalState =
@@ -173,6 +179,7 @@ function CreatePrisonDialog({
   const [location, setLocation] = useState("");
   const [blocks, setBlocks] = useState<BlockDraft[]>([newBlock("A")]);
   const [error, setError] = useState<string | null>(null);
+  const [outcomeUncertain, setOutcomeUncertain] = useState(false);
   const [busy, setBusy] = useState(false);
   const setBlock = (index: number, block: BlockDraft) =>
     setBlocks((current) =>
@@ -180,6 +187,7 @@ function CreatePrisonDialog({
     );
 
   const submit = async () => {
+    if (busy || outcomeUncertain) return;
     if (!name.trim()) return setError("Enter the prison name.");
     if (name.trim().length > 160)
       return setError("The prison name can be at most 160 characters.");
@@ -209,7 +217,14 @@ function CreatePrisonDialog({
         })),
       });
     } catch (failure) {
-      setError(errorMessage(failure, "Failed to register the prison."));
+      const uncertain = axios.isAxiosError(failure) &&
+        (!failure.response || failure.response.status >= 500);
+      if (uncertain) {
+        setOutcomeUncertain(true);
+        setError("The API returned an error and may still have saved this prison. Close this dialog and check the directory before retrying.");
+      } else {
+        setError(errorMessage(failure, "Failed to register the prison."));
+      }
       setBusy(false);
     }
   };
@@ -251,6 +266,9 @@ function CreatePrisonDialog({
         </Box>
         <Box component="fieldset" className="admission-section">
           <legend>Blocks &amp; cells</legend>
+          <Typography className="block-hint">
+            Set capacity for each cell individually. Cells in the same block can have different capacities.
+          </Typography>
           <Box className="block-editors">
             {blocks.map((block, index) => (
               <Box className="block-editor" key={index}>
@@ -297,7 +315,7 @@ function CreatePrisonDialog({
         <Button onClick={onClose} disabled={busy}>
           Cancel
         </Button>
-        <Button variant="contained" onClick={submit} disabled={busy}>
+        <Button variant="contained" onClick={submit} disabled={busy || outcomeUncertain}>
           Register prison
         </Button>
       </DialogActions>
@@ -437,8 +455,8 @@ function BlockDialog({
           </Typography>
           <Typography>
             {editing
-              ? "Existing cells are kept. Cells added below are appended."
-              : "Add a block with its cells."}
+              ? "Existing cells are kept. Added cells are appended; each added cell can have its own capacity."
+              : "Add a block and set capacity separately for each cell."}
           </Typography>
         </Box>
         <span>Required fields *</span>
@@ -489,23 +507,48 @@ function Metric({
   label,
   value,
   note,
+  onClick,
+  actionLabel,
 }: {
   label: string;
   value: string;
   note: string;
+  onClick?: () => void;
+  actionLabel?: string;
 }) {
   return (
-    <Paper className="metric-card blue" elevation={0}>
+    <Paper
+      className={`metric-card blue ${onClick ? "metric-card-interactive metric-card-link" : ""}`}
+      elevation={0}
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      aria-label={onClick ? `${label}: ${value}. ${actionLabel ?? "Open details"}` : undefined}
+      onClick={onClick}
+      onKeyDown={(event) => {
+        if (onClick && (event.key === "Enter" || event.key === " ")) {
+          event.preventDefault();
+          onClick();
+        }
+      }}
+    >
       <Box>
         <Typography>{label}</Typography>
         <strong>{value}</strong>
-        <small>{note}</small>
+        {note && <small>{note}</small>}
+        {onClick && actionLabel && <span className="metric-card-action">{actionLabel} →</span>}
       </Box>
     </Paper>
   );
 }
 
-export function PrisonRegistry({ canManage }: Props) {
+export function PrisonRegistry({
+  canManage,
+  mode = "registry",
+  assignedPrisonId = "",
+  assignedPrisonRequired = false,
+}: Props) {
+  const housingMode = mode === "housing";
+  const [showBlocks, setShowBlocks] = useState(!housingMode);
   const [search, setSearch] = useState("");
   const [query, setQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState<ActiveFilter>("all");
@@ -514,12 +557,35 @@ export function PrisonRegistry({ canManage }: Props) {
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
   const [reloadKey, setReloadKey] = useState(0);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(
+    housingMode && assignedPrisonId ? assignedPrisonId : null,
+  );
   const [prison, setPrison] = useState<PrisonDetail | null>(null);
   const [detailKey, setDetailKey] = useState(0);
+  const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
+  const [scrollToBlocks, setScrollToBlocks] = useState(false);
+  const [blockAvailabilityFilter, setBlockAvailabilityFilter] = useState<"all" | "available" | "full">("all");
   const [modal, setModal] = useState<ModalState>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (housingMode) {
+      setSelectedId(assignedPrisonId || null);
+      setPrison(null);
+      setSelectedBlockId(null);
+      setShowBlocks(false);
+    } else {
+      setSelectedId(null);
+      setPrison(null);
+    }
+  }, [housingMode, assignedPrisonId]);
+
+  useEffect(() => {
+    if (!scrollToBlocks || selectedBlockId || !showBlocks) return;
+    document.getElementById("housing-block-list")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    setScrollToBlocks(false);
+  }, [scrollToBlocks, selectedBlockId, showBlocks]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -530,6 +596,15 @@ export function PrisonRegistry({ canManage }: Props) {
   }, [search]);
 
   useEffect(() => {
+    if (housingMode && (assignedPrisonId || assignedPrisonRequired)) {
+      setRecords([]);
+      setTotal(0);
+      setTotalPages(1);
+      if (assignedPrisonRequired && !assignedPrisonId) {
+        setError("Your account's assigned prison was not returned by the profile service. The account may still be assigned; reload your profile or ask an administrator to verify the assignment.");
+      }
+      return;
+    }
     let live = true;
     prisonService.getPrisons(pageIndex, query, activeFilter)
       .then((result) => {
@@ -545,7 +620,7 @@ export function PrisonRegistry({ canManage }: Props) {
     return () => {
       live = false;
     };
-  }, [pageIndex, query, activeFilter, reloadKey]);
+  }, [pageIndex, query, activeFilter, reloadKey, housingMode, assignedPrisonId, assignedPrisonRequired]);
 
   useEffect(() => {
     if (!selectedId) return;
@@ -569,6 +644,8 @@ export function PrisonRegistry({ canManage }: Props) {
   const reloadDetail = () => setDetailKey((key) => key + 1);
   const openPrison = (id: string) => {
     setPrison(null);
+    setSelectedBlockId(null);
+    setShowBlocks(true);
     setError(null);
     setNotice(null);
     setSelectedId(id);
@@ -581,7 +658,32 @@ export function PrisonRegistry({ canManage }: Props) {
   };
 
   const handleCreate = async (payload: PrisonInput) => {
-    await prisonService.createPrison(payload);
+    const matches = (await prisonService.getPrisons(0, payload.name, "all", 100)).records;
+    const key = (value: string | null | undefined) => (value ?? "").trim().toLocaleLowerCase();
+    const samePrison = (candidate: PrisonSummary) =>
+      key(candidate.name) === key(payload.name) && key(candidate.location) === key(payload.location);
+    if (matches.some(samePrison)) {
+      throw new Error("A prison with this name and location already exists. Check the directory before creating another.");
+    }
+    try {
+      await prisonService.createPrison(payload);
+    } catch (failure) {
+      if (axios.isAxiosError(failure) && (!failure.response || failure.response.status >= 500)) {
+        try {
+          const refreshed = await prisonService.getPrisons(0, payload.name, "all", 100);
+          if (refreshed.records.some(samePrison)) {
+            setModal(null);
+            setNotice(`${payload.name} is present in the directory. The API reported an error after saving; no retry was needed.`);
+            setPageIndex(0);
+            reloadList();
+            return;
+          }
+        } catch {
+          // Preserve the original failure if the confirmation lookup also fails.
+        }
+      }
+      throw failure;
+    }
     setModal(null);
     setNotice(`${payload.name} has been registered.`);
     setPageIndex(0);
@@ -652,9 +754,11 @@ export function PrisonRegistry({ canManage }: Props) {
       return (
         <Box className="census-page">
           {banners}
-          <Button className="back-button" onClick={backToList}>
-            ← Back to prison registry
-          </Button>
+          {!(housingMode && assignedPrisonId) && (
+            <Button className="back-button" onClick={backToList}>
+              ← Back to {housingMode ? "housing list" : "prison registry"}
+            </Button>
+          )}
           {!error && <Typography>Loading prison…</Typography>}
         </Box>
       );
@@ -664,24 +768,62 @@ export function PrisonRegistry({ canManage }: Props) {
       (sum, cell) => sum + cell.currentOccupancy,
       0,
     );
+    const selectedBlock = prison.blocks.find((block) => block.id === selectedBlockId) ?? null;
+    const showBlockBrowser = !housingMode || showBlocks;
+    const visibleBlocks = prison.blocks.filter((block) => {
+      const available = block.cells.reduce((sum, cell) => sum + cell.availableSpaces, 0);
+      if (blockAvailabilityFilter === "available") return available > 0;
+      if (blockAvailabilityFilter === "full") return available === 0;
+      return true;
+    });
+    const availableBlockCount = prison.blocks.filter((block) =>
+      block.cells.reduce((sum, cell) => sum + cell.availableSpaces, 0) > 0,
+    ).length;
+    const fullBlockCount = prison.blocks.length - availableBlockCount;
     return (
       <Box className="census-page">
         {banners}
-        <Button className="back-button" onClick={backToList}>
-          ← Back to prison registry
-        </Button>
-        <Box className="portal-heading">
-          <Typography className="crumb">
-            Operations / Prison registry
-          </Typography>
-          <Box className="portal-title-row">
-            <Box>
-              <Typography component="h1">{prison.name}</Typography>
-              <Typography>
-                {prison.location || "No location recorded"}
-              </Typography>
+        {housingMode && showBlocks && !selectedBlock && (
+          <Paper className="block-filter-toolbar" elevation={0}>
+            <Box className="block-filter-copy">
+              <Typography component="p">HOUSING &amp; CELLS</Typography>
+              <Typography component="h2">Block availability</Typography>
             </Box>
-            {canManage && (
+            <Box className="block-filter-options" role="group" aria-label="Filter blocks by availability">
+              {([
+                { value: "all", label: "All blocks", count: prison.blocks.length },
+                { value: "available", label: "Space available", count: availableBlockCount },
+                { value: "full", label: "Full", count: fullBlockCount },
+              ] as const).map((option) => (
+                <Button
+                  key={option.value}
+                  className={`block-filter-option ${blockAvailabilityFilter === option.value ? "active" : ""}`}
+                  aria-pressed={blockAvailabilityFilter === option.value}
+                  onClick={() => setBlockAvailabilityFilter(option.value)}
+                >
+                  <span>{option.label}</span>
+                  <strong>{option.count}</strong>
+                </Button>
+              ))}
+            </Box>
+          </Paper>
+        )}
+        {!(housingMode && assignedPrisonId) && (
+          <Button className="back-button" onClick={backToList}>
+            ← Back to {housingMode ? "housing list" : "prison registry"}
+          </Button>
+        )}
+        {(!housingMode || canManage) && (
+          <Box className="portal-heading">
+            {!housingMode && <Typography className="crumb">Operations / Prison registry</Typography>}
+            <Box className="portal-title-row">
+              {!housingMode && (
+                <Box>
+                  <Typography component="h1">{prison.name}</Typography>
+                  <Typography>{prison.location || "No location recorded"}</Typography>
+                </Box>
+              )}
+              {canManage && (
               <Stack direction="row" spacing={1}>
                 <Button
                   className="workflow-button"
@@ -689,21 +831,29 @@ export function PrisonRegistry({ canManage }: Props) {
                 >
                   Add block
                 </Button>
-                <Button
+                {!housingMode && <Button
                   className="export-button"
                   onClick={() => setModal({ kind: "edit-prison" })}
                 >
                   Edit prison
-                </Button>
+                </Button>}
               </Stack>
-            )}
+              )}
+            </Box>
           </Box>
-        </Box>
-        <Box className="census-metrics prison-metrics">
+        )}
+        {!selectedBlock && <Box className="census-metrics prison-metrics">
           <Metric
             label="Blocks"
             value={String(prison.blocks.length)}
-            note="In this prison"
+            note={housingMode ? "" : "In this prison"}
+            onClick={housingMode ? () => {
+              const opening = !showBlocks;
+              setShowBlocks(opening);
+              setScrollToBlocks(opening);
+              if (!opening) setSelectedBlockId(null);
+            } : undefined}
+            actionLabel={housingMode ? (showBlocks ? "Hide blocks" : "View blocks") : undefined}
           />
           <Metric
             label="Cells"
@@ -716,46 +866,21 @@ export function PrisonRegistry({ canManage }: Props) {
             value={String(occupied)}
             note={`${Math.max(capacity - occupied, 0)} spaces available`}
           />
-        </Box>
-        {prison.blocks.length === 0 && (
-          <Paper className="directory" elevation={0}>
-            <Box className="directory-title">
-              <Typography>This prison has no blocks yet.</Typography>
-            </Box>
-          </Paper>
-        )}
-        {prison.blocks.map((block) => {
-          const blockCapacity = block.cells.reduce(
-            (sum, cell) => sum + cell.capacity,
-            0,
-          );
-          const blockOccupied = block.cells.reduce(
-            (sum, cell) => sum + cell.currentOccupancy,
-            0,
-          );
-          return (
-            <Paper
-              className="directory block-card"
-              elevation={0}
-              key={block.id}
-            >
-              <Box className="directory-title block-title">
+        </Box>}
+        {showBlockBrowser && (selectedBlock ? (
+          <>
+            <Button className="back-button" onClick={() => setSelectedBlockId(null)}>
+              ← Back to blocks
+            </Button>
+            <Paper className="directory" elevation={0}>
+              <Box className="directory-title block-detail-title">
                 <Box>
-                  <Typography component="h2">Block {block.name}</Typography>
+                  <Typography component="h2">Block {selectedBlock.name}</Typography>
                   <Typography>
-                    {block.cells.length} cell
-                    {block.cells.length === 1 ? "" : "s"} · {blockOccupied} of{" "}
-                    {blockCapacity} occupied
+                    {selectedBlock.cells.length} cells · Capacity {selectedBlock.cells.reduce((sum, cell) => sum + cell.capacity, 0)} · {selectedBlock.cells.reduce((sum, cell) => sum + cell.availableSpaces, 0)} spaces available
                   </Typography>
                 </Box>
-                {canManage && (
-                  <Button
-                    size="small"
-                    onClick={() => setModal({ kind: "edit-block", block })}
-                  >
-                    Edit block
-                  </Button>
-                )}
+                {canManage && <Button size="small" onClick={() => setModal({ kind: "edit-block", block: selectedBlock })}>Edit block</Button>}
               </Box>
               <TableContainer>
                 <Table className="census-table">
@@ -764,34 +889,83 @@ export function PrisonRegistry({ canManage }: Props) {
                       <TableCell>Cell</TableCell>
                       <TableCell>Capacity</TableCell>
                       <TableCell>Occupied</TableCell>
-                      <TableCell>Available</TableCell>
+                      <TableCell>Available spaces</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {[...block.cells]
-                      .sort((a, b) => a.cellNumber - b.cellNumber)
-                      .map((cell) => (
-                        <TableRow key={cell.id}>
-                          <TableCell>Cell {cell.cellNumber}</TableCell>
-                          <TableCell>{cell.capacity}</TableCell>
-                          <TableCell>{cell.currentOccupancy}</TableCell>
-                          <TableCell>
-                            <span
-                              className={`cell-state ${cell.availableSpaces === 0 ? "full" : ""}`}
-                            >
-                              {cell.availableSpaces === 0
-                                ? "Full"
-                                : cell.availableSpaces}
-                            </span>
-                          </TableCell>
-                        </TableRow>
-                      ))}
+                    {[...selectedBlock.cells].sort((a, b) => a.cellNumber - b.cellNumber).map((cell) => (
+                      <TableRow key={cell.id}>
+                        <TableCell>Cell {cell.cellNumber}</TableCell>
+                        <TableCell>{cell.capacity}</TableCell>
+                        <TableCell>{cell.currentOccupancy}</TableCell>
+                        <TableCell><span className={`cell-state ${cell.availableSpaces === 0 ? "full" : ""}`}>{cell.availableSpaces === 0 ? "Full" : cell.availableSpaces}</span></TableCell>
+                      </TableRow>
+                    ))}
                   </TableBody>
                 </Table>
               </TableContainer>
             </Paper>
-          );
-        })}
+          </>
+        ) : (
+          <>
+            {prison.blocks.length === 0 ? (
+              <Paper className="directory" elevation={0}>
+                <Box className="directory-title"><Typography>This prison has no blocks yet.</Typography></Box>
+              </Paper>
+            ) : visibleBlocks.length === 0 ? (
+              <Paper className="directory" elevation={0}>
+                <Box className="directory-title"><Typography>No blocks match this availability filter.</Typography></Box>
+              </Paper>
+            ) : (
+              <Paper className="directory block-directory" elevation={0} id="housing-block-list">
+                <TableContainer>
+                  <Table className="census-table block-list-table">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Block</TableCell>
+                        <TableCell>Cells</TableCell>
+                        <TableCell>Capacity</TableCell>
+                        <TableCell>Available spaces</TableCell>
+                        <TableCell align="right">Actions</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                {visibleBlocks.map((block) => {
+                  const blockCapacity = block.cells.reduce((sum, cell) => sum + cell.capacity, 0);
+                  const blockAvailable = block.cells.reduce((sum, cell) => sum + cell.availableSpaces, 0);
+                  const openBlock = () => setSelectedBlockId(block.id);
+                  return (
+                    <TableRow
+                      className="block-list-row"
+                      key={block.id}
+                      tabIndex={0}
+                      role="button"
+                      onClick={openBlock}
+                      onKeyDown={(event) => {
+                        if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) {
+                          event.preventDefault();
+                          openBlock();
+                        }
+                      }}
+                    >
+                      <TableCell className="full-name">Block {block.name}</TableCell>
+                      <TableCell>{block.cells.length}</TableCell>
+                      <TableCell>{blockCapacity}</TableCell>
+                      <TableCell><span className={`cell-state ${blockAvailable === 0 ? "full" : ""}`}>{blockAvailable === 0 ? "Full" : blockAvailable}</span></TableCell>
+                      <TableCell align="right" className="block-list-actions">
+                        {canManage && <Button size="small" onClick={(event) => { event.stopPropagation(); setModal({ kind: "edit-block", block }); }}>Edit</Button>}
+                        <Button className="block-list-view" onClick={(event) => { event.stopPropagation(); openBlock(); }}>View →</Button>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </Paper>
+            )}
+          </>
+        ))}
       </Box>
     );
   };
@@ -800,15 +974,17 @@ export function PrisonRegistry({ canManage }: Props) {
     <Box className="census-page">
       {banners}
       <Box className="portal-heading">
-        <Typography className="crumb">Operations / Prison registry</Typography>
+        <Typography className="crumb">Operations / {housingMode ? "Housing & cells" : "Prison registry"}</Typography>
         <Box className="portal-title-row">
           <Box>
-            <Typography component="h1">Prison registry</Typography>
+            <Typography component="h1">{housingMode ? "Housing & cells" : "Prison registry"}</Typography>
             <Typography>
-              Register prisons and manage their blocks and cells.
+              {housingMode
+                ? "Review blocks, cell capacities, occupancy, and available spaces."
+                : "Register prisons and manage their blocks and cells."}
             </Typography>
           </Box>
-          {canManage && (
+          {canManage && !housingMode && (
             <Stack direction="row" spacing={1}>
               <Button
                 className="workflow-button"
@@ -857,7 +1033,7 @@ export function PrisonRegistry({ canManage }: Props) {
       <Paper className="directory" elevation={0}>
         <Box className="directory-title">
           <Box>
-            <Typography component="h2">Prison directory</Typography>
+            <Typography component="h2">{housingMode ? "Select a prison" : "Prison directory"}</Typography>
             <Typography>
               {total} prison{total === 1 ? "" : "s"} found
             </Typography>
@@ -886,7 +1062,7 @@ export function PrisonRegistry({ canManage }: Props) {
                   </TableCell>
                   <TableCell>
                     <Button size="small" onClick={() => openPrison(record.id)}>
-                      View layout
+                      {housingMode ? (canManage ? "Manage housing" : "View housing") : "View layout"}
                     </Button>
                   </TableCell>
                 </TableRow>
@@ -932,12 +1108,38 @@ export function PrisonRegistry({ canManage }: Props) {
     </Box>
   );
 
+  const missingAssignedPrisonView = () => (
+    <Box className="census-page">
+      <Box className="portal-heading">
+        <Typography className="crumb">Operations / Housing &amp; cells</Typography>
+        <Box className="portal-title-row">
+          <Box>
+            <Typography component="h1">Housing &amp; cells</Typography>
+            <Typography>View blocks, cell capacities, occupancy, and available spaces for your assigned prison.</Typography>
+          </Box>
+        </Box>
+      </Box>
+      <Paper className="directory" elevation={0}>
+        <Box sx={{ p: 3 }}>
+          <Alert severity="error">
+            The system could not load your assigned prison from your account profile. This does not confirm that you are unassigned. Reload the page to refresh your profile; if the issue remains, ask an administrator to verify your Chichiri Prison assignment.
+          </Alert>
+          <Button className="workflow-button" sx={{ mt: 2 }} onClick={() => window.location.reload()}>
+            Reload profile
+          </Button>
+        </Box>
+      </Paper>
+    </Box>
+  );
+
   return (
     <>
-      {selectedId ? detailView() : listView()}
+      {housingMode && assignedPrisonRequired && !assignedPrisonId
+        ? missingAssignedPrisonView()
+        : selectedId ? detailView() : listView()}
       {modal?.kind === "create" && (
         <CreatePrisonDialog
-          onClose={() => setModal(null)}
+          onClose={() => { setModal(null); reloadList(); }}
           onSubmit={handleCreate}
         />
       )}
