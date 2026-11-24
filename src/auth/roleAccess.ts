@@ -5,7 +5,8 @@ export type Workspace =
   | "transfers"
   | "release"
   | "access"
-  | "prisons";
+  | "prisons"
+  | "housing";
 
 export type RoleProfile = {
   label: string;
@@ -17,7 +18,7 @@ export type RoleProfile = {
 };
 
 const allOperational: Workspace[] = [
-  "overview", "inmates", "visitors", "transfers", "release", "access", "prisons",
+  "overview", "inmates", "visitors", "transfers", "release", "access", "prisons", "housing",
 ];
 
 const profiles: Record<string, RoleProfile> = {
@@ -25,14 +26,14 @@ const profiles: Record<string, RoleProfile> = {
     label: "System administrator",
     summary: "Manage personnel access, facility configuration, and system wide custody operations.",
     workspaces: allOperational,
-    primary: ["access", "prisons", "inmates"],
+    primary: ["access", "prisons", "housing", "inmates"],
     canAdmit: false,
     canManagePrisons: true,
   },
   "RECORDS OFFICER": {
     label: "Custody records",
     summary: "Maintain inmate records, admissions, sentence details, transfers, and release preparation.",
-    workspaces: ["overview", "inmates", "transfers", "release"],
+    workspaces: ["overview", "inmates", "transfers", "release", "housing"],
     primary: ["inmates", "transfers", "release"],
     canAdmit: true,
     canManagePrisons: false,
@@ -96,8 +97,8 @@ const profiles: Record<string, RoleProfile> = {
   "OFFICER IN CHARGE": {
     label: "Facility leadership",
     summary: "Oversee facility custody operations, transfers, and release authorization.",
-    workspaces: ["overview", "inmates", "visitors", "transfers", "release", "prisons"],
-    primary: ["release", "transfers", "inmates"],
+    workspaces: ["overview", "inmates", "visitors", "transfers", "release", "prisons", "housing"],
+    primary: ["release", "transfers", "housing", "inmates"],
     canAdmit: false,
     canManagePrisons: true,
   },

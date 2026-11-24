@@ -9,6 +9,7 @@ export type AuthUser = {
     name: string;
     email: string;
     role: string;
+    prisonId?: string | null;
 };
 
 export type LoginCredentials = {
@@ -89,7 +90,32 @@ export function AuthProvider({ children }: PropsWithChildren) {
     const [token, setToken] = useState(readStoredToken);
     const [user, setUser] = useState(readStoredUser);
     const [loading, setLoading] = useState(false);
+    const [isInitializing, setIsInitializing] = useState(() => Boolean(readStoredToken()));
     const [authError, setAuthError] = useState("");
+
+    useEffect(() => {
+        const storedToken = readStoredToken();
+        const storedUser = readStoredUser();
+        if (!storedToken || !storedUser) {
+            setIsInitializing(false);
+            return;
+        }
+        let live = true;
+        authService.currentUser(storedToken, storedUser)
+            .then((profile) => {
+                if (!live) return;
+                const storage = localStorage.getItem("token") ? localStorage : sessionStorage;
+                storeUser(storage, profile);
+                setUser(profile);
+            })
+            .catch(() => {
+                // Keep the cached session; pages can show a useful state if profile hydration fails.
+            })
+            .finally(() => {
+                if (live) setIsInitializing(false);
+            });
+        return () => { live = false; };
+    }, []);
 
     useEffect(() => {
         const handleSessionExpired = () => {
@@ -152,7 +178,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
                 token,
                 isAuthenticated: Boolean(token),
                 loading,
-                isInitializing: false,
+                isInitializing,
                 authError,
                 login,
                 logout,
