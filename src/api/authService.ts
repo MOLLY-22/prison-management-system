@@ -2,6 +2,34 @@ import { asRecord, firstValue, itemFrom } from "./dataContract";
 import api from "./axiosClient";
 import type { AuthUser } from "../context/AuthContext";
 
+function authUserFrom(payload: unknown): AuthUser | undefined {
+    const record = asRecord(itemFrom(payload));
+    const id = firstValue(record, ["id", "userId", "user_id"], "");
+    const email = firstValue(record, ["email", "userEmail", "user_email"], "");
+    const name = firstValue(
+        record,
+        ["name", "fullName", "full_name", "username", "userName"],
+        email,
+    );
+
+    if (!String(id) || !String(name)) return undefined;
+
+    return {
+        id: String(id),
+        name: String(name),
+        email: String(email),
+        role: String(
+            firstValue(record, ["role", "userRole", "user_role"], "Authorized officer"),
+        ),
+        ...(record.prisonId || record.prison_id
+            ? { prisonId: String(record.prisonId ?? record.prison_id) }
+            : {}),
+        ...(record.prisonName || record.prison_name
+            ? { prisonName: String(record.prisonName ?? record.prison_name) }
+            : {}),
+    };
+}
+
 export const authService = {
     login: async (credentials: { username: string; password: string }) => {
         const response = await api.post("auth/login", {
@@ -23,25 +51,7 @@ export const authService = {
         }
 
         const user = [root.user, data.user, result.user, item.user, item]
-            .map((value) => {
-                const record = asRecord(value);
-                const id = firstValue(record, ["id", "userId", "user_id"], "");
-                const email = firstValue(record, ["email", "userEmail", "user_email"], "");
-                const name = firstValue(
-                    record,
-                    ["name", "fullName", "full_name", "username", "userName"],
-                    email,
-                );
-                if (!String(id) || !String(name)) return undefined;
-                return {
-                    id: String(id),
-                    name: String(name),
-                    email: String(email),
-                    role: String(
-                        firstValue(record, ["role", "userRole", "user_role"], "Authorized officer"),
-                    ),
-                } satisfies AuthUser;
-            })
+            .map(authUserFrom)
             .find((candidate) => candidate !== undefined);
 
         return {
@@ -61,6 +71,17 @@ export const authService = {
         await api.post("/auth/logout", undefined, {
             headers: token ? { Authorization: `Bearer ${token}` } : undefined,
         });
+    },
+    
+    me: async (token: string): Promise<AuthUser> => {
+        const response = await api.get("/auth/me", {
+            headers: { Authorization: `Bearer ${token}` },
+        });
+        const user = authUserFrom(response.data);
+        if (!user) {
+            throw new TypeError("Unexpected auth/me response. The user profile is missing an id or name.");
+        }
+        return user;
     },
 
     forgotPassword: async (email: string) => {

@@ -113,15 +113,13 @@ export default function InmateProfile({
   const [revision, setRevision] = useState(0);
 
   useEffect(() => {
-    setTab(initialTab);
-  }, [initialTab]);
-
-  useEffect(() => {
     let active = true;
-    setError("");
-    setNotice("");
-    setLoading(true);
     const load = async () => {
+      if (active) {
+        setError("");
+        setNotice("");
+        setLoading(true);
+      }
       try {
         if (tab === "Overview") {
           const { data } = await api.get(
@@ -166,7 +164,11 @@ export default function InmateProfile({
           if (active)
             setMedicalRows(collectionFrom(itemFrom(data)).map(asRecord));
         } else if (tab === "Cell allocations") {
-          const cellId = String(field(record, "cellId") ?? "");
+          const inmateResponse = await api.get(
+            `/inmates/${encodeURIComponent(inmateId)}`,
+          );
+          const inmateRecord = asRecord(itemFrom(inmateResponse.data));
+          const cellId = String(field(inmateRecord, "cellId") ?? "");
           if (cellId) {
             const { data } = await api.get(
               `/cells/${encodeURIComponent(cellId)}`,
@@ -996,7 +998,7 @@ function HistoryList({
             <tbody className="divide-y divide-slate-100">
               {rows.map((row, index) => (
                 <tr key={String(field(row, "id") ?? index)}>
-                  {fields.map(([label, key]) => (
+                  {fields.map(([, key]) => (
                     <td key={key} className="px-4 py-3 text-slate-700">
                       {key.toLowerCase().includes("date") ||
                       key.toLowerCase().includes("at")

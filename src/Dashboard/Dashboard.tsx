@@ -19,7 +19,6 @@ type View =
   | "sentences"
   | "visitors"
   | "transfers"
-  | "duty-rosters"
   | "release"
   | "access"
   | "prisons";
@@ -33,9 +32,8 @@ const navigation: { id: View; label: string; short: string }[] = [
   { id: "sentences", label: "Sentences", short: "file" },
   { id: "visitors", label: "Visits", short: "visit" },
   { id: "transfers", label: "Transfers", short: "arrows" },
-  { id: "release", label: "Release & discharge", short: "exit" },
-  { id: "access", label: "User Management", short: "shield" },
-  { id: "prisons", label: "Prison registry", short: "building" },
+  { id: "access", label: "Users", short: "shield" },
+  { id: "prisons", label: "Prisons", short: "building" },
 ];
 
 function NavigationIcon({ name }: { name: string }) {
@@ -57,7 +55,6 @@ const endpointFor: Partial<Record<View, string>> = {
   inmates: "/inmates",
   visitors: "/visits",
   transfers: "/transfers",
-  // release: "/releases",
   access: "/users",
   prisons : "/prisons"
 };
@@ -223,29 +220,29 @@ void DataView;
 function Overview({ onNavigate }: { onNavigate: (view: View) => void }) {
   const cards: { label: string; id: View; note: string }[] = [
     {
-      label: "Inmate Management",
+      label: "Inmates",
       id: "inmates",
       note: "Records and custody status",
     },
     {
-      label: "Visitor Management",
+      label: "Visitors",
       id: "visitors",
       note: "Appointments and gate events",
     },
     {
-      label: "Transfer Management",
+      label: "Transfers",
       id: "transfers",
       note: "Movement requests and approvals",
     },
     {
-      label: "Release Management",
+      label: "Releases",
       id: "release",
       note: "Eligibility and discharge",
     },
     {
-      label: "Duty rosters",
-      id: "duty-rosters",
-      note: "Officer shifts and published schedules",
+      label: "Prisons",
+      id: "prisons",
+      note: "Prison management",
     },
   ];
   return (

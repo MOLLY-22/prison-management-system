@@ -79,6 +79,14 @@ export type CellAllocation = {
     newCellOccupancy: number;
 };
 
+export type SentenceRequest = {
+    inmateId: string;
+    offence: string;
+    sentenceType: "FIXED_TERM" | "LIFE" | "UNDETERMINED";
+    startDate: string;
+    endDate?: string;
+};
+
 export const inmateService = {
     async getInmates(params?: InmateListParams): Promise<Inmate[]> {
         const query = { size: 100, ...params };
@@ -145,6 +153,10 @@ export const inmateService = {
             oldCellOccupancy: Number(firstValue(record, ["oldCellOccupancy", "old_cell_occupancy"], 0)),
             newCellOccupancy: Number(firstValue(record, ["newCellOccupancy", "new_cell_occupancy"], 0)),
         };
+    },
+    async createSentence(payload: SentenceRequest): Promise<unknown> {
+        const response = await api.post("/sentences", payload);
+        return itemFrom(response.data);
     },
 };
 

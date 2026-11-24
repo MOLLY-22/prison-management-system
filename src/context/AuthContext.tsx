@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
-import { createContext, useContext, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import type { PropsWithChildren } from "react";
 
 import { authService } from "../api/authService";
@@ -33,9 +33,10 @@ export type AuthContextValue = {
     isInitializing: boolean;
     authError: string;
     login: (credentials: LoginCredentials) => Promise<AuthResponse>;
+    me: () => Promise<void>;
     logout: () => Promise<void>;
 };
-
+                                    
  
 export const AuthContext = createContext<AuthContextValue | null>(null);
 
@@ -120,6 +121,32 @@ export function AuthProvider({ children }: PropsWithChildren) {
         }
     };
 
+    const me = useCallback(async () => {
+        if (!token) return;
+        const userData = await authService.me(token);
+        if (readStoredToken() !== token) return;
+        setUser(userData);
+        const storage = localStorage.getItem("token") === token ? localStorage : sessionStorage;
+        storeUser(storage, userData);
+        setAuthError("");
+    }, [token]);
+
+    useEffect(() => {
+        if (!token) return;
+
+        let active = true;
+        void Promise.resolve().then(me).catch((error: unknown) => {
+            if (!active || readStoredToken() !== token) return;
+            setAuthError(
+                error instanceof Error ? error.message : "Unable to load the signed-in user.",
+            );
+        });
+
+        return () => {
+            active = false;
+        };
+    }, [me, token]);
+
     const logout = async () => {
         const activeToken = token;
 
@@ -148,6 +175,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
                 authError,
                 login,
                 logout,
+                me,
             }}
         >
             {children}
