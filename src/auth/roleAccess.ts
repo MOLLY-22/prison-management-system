@@ -3,6 +3,7 @@ export type Workspace =
   | "inmates"
   | "visitors"
   | "transfers"
+  | "duty-rosters"
   | "release"
   | "access"
   | "prisons";
@@ -17,7 +18,7 @@ export type RoleProfile = {
 };
 
 const allOperational: Workspace[] = [
-  "overview", "inmates", "visitors", "transfers", "release", "access", "prisons",
+  "overview", "inmates", "visitors", "transfers", "duty-rosters", "release", "access", "prisons",
 ];
 
 const profiles: Record<string, RoleProfile> = {
@@ -88,16 +89,16 @@ const profiles: Record<string, RoleProfile> = {
   "DUTY OFFICER": {
     label: "Facility operations",
     summary: "Coordinate daily facility activity, inmate movements, and visit operations.",
-    workspaces: ["overview", "inmates", "visitors", "transfers"],
-    primary: ["transfers", "visitors", "inmates"],
+    workspaces: ["overview", "inmates", "visitors", "transfers", "duty-rosters"],
+    primary: ["duty-rosters", "transfers", "visitors", "inmates"],
     canAdmit: false,
     canManagePrisons: false,
   },
   "OFFICER IN CHARGE": {
     label: "Facility leadership",
     summary: "Oversee facility custody operations, transfers, and release authorization.",
-    workspaces: ["overview", "inmates", "visitors", "transfers", "release", "prisons"],
-    primary: ["release", "transfers", "inmates"],
+    workspaces: ["overview", "inmates", "visitors", "transfers", "duty-rosters", "release", "prisons"],
+    primary: ["release", "transfers", "duty-rosters", "inmates"],
     canAdmit: false,
     canManagePrisons: true,
   },

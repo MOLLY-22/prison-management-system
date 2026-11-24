@@ -8,6 +8,7 @@ import UserAccess from "../pages/UserAccess";
 import TransferManagement from "../pages/TransferManagement";
 import { PrisonRegistry } from "../pages/PrisonRegistry";
 import ReleaseManagement from "../pages/ReleaseManagement";
+import DutyRosters from "../pages/DutyRosters";
 import { getRoleProfile, type Workspace } from "../auth/roleAccess";
 
 
@@ -19,6 +20,7 @@ const navigation: { id: View; label: string; short: string }[] = [
   { id: "inmates", label: "Inmates", short: "people" },
   { id: "visitors", label: "Visits", short: "visit" },
   { id: "transfers", label: "Transfers", short: "arrows" },
+  { id: "duty-rosters", label: "Duty rosters", short: "file" },
   { id: "release", label: "Release & discharge", short: "exit" },
   { id: "access", label: "User Management", short: "shield" },
   { id: "prisons", label: "Prison registry", short: "building" },
@@ -212,6 +214,7 @@ function Overview({ onNavigate, role, navigationItems }: { onNavigate: (view: Vi
     inmates: { label: "Inmate records", note: profile.canAdmit ? "Custody records and new admissions" : "Assigned custody and inmate records" },
     visitors: { label: "Visit operations", note: "Appointments and gate activity" },
     transfers: { label: "Transfers", note: "Movement requests and coordination" },
+    "duty-rosters": { label: "Duty rosters", note: "Officer shifts and published schedules" },
     release: { label: "Release & discharge", note: "Eligibility, clearance, and authorization" },
     access: { label: "User management", note: "Personnel accounts and role assignments" },
     prisons: { label: "Prison registry", note: "Facility and block information" },
@@ -273,6 +276,8 @@ function ModuleView({ view, onNavigate, userRole }: { view: View; onNavigate: (v
       return <UserAccess />;
     case "transfers":
       return <TransferManagement />;
+    case "duty-rosters":
+      return <DutyRosters />;
     case "prisons":
       return <PrisonRegistry canManage={roleProfile.canManagePrisons} />;
     case "overview":

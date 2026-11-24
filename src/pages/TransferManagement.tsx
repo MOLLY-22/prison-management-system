@@ -123,9 +123,8 @@ function TransferManagement() {
     <Box className="transfer-workspace" sx={{ p: { xs: 2, md: 4 }, maxWidth: 1600, mx: "auto" }}>
       <Stack spacing={3}>
         <Box>
-          <Typography variant="h4" sx={{ fontWeight: 700 }}>Transfer Management</Typography>
           <Typography color="text.secondary" sx={{ mt: 1 }}>
-            Create transfer requests, review decisions, and track their API status.
+            Create and review transfer requests, and follow each request’s progress.
           </Typography>
         </Box>
 

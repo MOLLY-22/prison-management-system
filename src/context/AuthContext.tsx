@@ -9,6 +9,8 @@ export type AuthUser = {
     name: string;
     email: string;
     role: string;
+    prisonId?: string | null;
+    prisonName?: string | null;
 };
 
 export type LoginCredentials = {
