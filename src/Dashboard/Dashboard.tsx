@@ -6,19 +6,17 @@ import { InmateManagement } from "../pages/InmateManagement";
 import Visitors from "../pages/Visitors";
 import UserAccess from "../pages/UserAccess";
 import TransferAnalytics from "../pages/TransferAnalytics";
-import ReleaseManagement from "../pages/ReleaseManagement";
 import { PrisonRegistry } from "../pages/PrisonRegistry";
+import ReleaseManagement from "../pages/ReleaseManagement";
 import { getRoleProfile, type Workspace } from "../auth/roleAccess";
 
-type View = Workspace | "profile" | "admission" | "sentences" | "transfer-analytics";
+
+type View = Exclude<Workspace, "transfers"> | "profile" | "admission" | "sentences" | "transfer-analytics";
 type RecordItem = Record<string, string | number | boolean | null>;
 
 const navigation: { id: View; label: string; short: string }[] = [
   { id: "overview", label: "Dashboard", short: "grid" },
-  { id: "inmates", label: "Overview", short: "people" },
-  { id: "profile", label: "Profile", short: "people" },
-  { id: "admission", label: "Admission", short: "file" },
-  { id: "sentences", label: "Sentences", short: "file" },
+  { id: "inmates", label: "Inmates", short: "people" },
   { id: "visitors", label: "Visits", short: "visit" },
   { id: "transfer-analytics", label: "Transfer Analytics", short: "chart" },
   { id: "release", label: "Release & discharge", short: "exit" },
@@ -208,17 +206,9 @@ function DataView({ view }: { view: View }) {
 
 void DataView;
 
-function Overview({
-  onNavigate,
-  role,
-  navigationItems,
-}: {
-  onNavigate: (view: View) => void;
-  role: string;
-  navigationItems: typeof navigation;
-}) {
+function Overview({ onNavigate, role, navigationItems }: { onNavigate: (view: View) => void; role: string; navigationItems: typeof navigation }) {
   const profile = getRoleProfile(role);
-  const cardDetails: Partial<Record<View, { label: string; note: string }>> = {
+  const cardDetails: Record<string, { label: string; note: string }> = {
     inmates: { label: "Inmate records", note: profile.canAdmit ? "Custody records and new admissions" : "Assigned custody and inmate records" },
     visitors: { label: "Visit operations", note: "Appointments and gate activity" },
     "transfer-analytics": { label: "Transfer Analytics", note: "Transfer volumes and request details" },
@@ -227,7 +217,7 @@ function Overview({
     prisons: { label: "Prison registry", note: "Facility and block information" },
   };
   const cards = profile.primary
-    .map((id) => id === "transfers" ? "transfer-analytics" : id)
+    .map((id): View => id === "transfers" ? "transfer-analytics" : id)
     .filter((id) => navigationItems.some((item) => item.id === id))
     .map((id) => ({ id, ...cardDetails[id] }));
   return (
@@ -235,11 +225,10 @@ function Overview({
       <section className="mb-6 flex flex-wrap items-end justify-between gap-5">
         <div>
           <p className="text-[11px] font-extrabold uppercase tracking-[0.16em] text-[#2876a8]">
-            Facility command center
+            {profile.label}
           </p>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-[#526579]">
-            Review the operational workspaces used to manage custody, movement,
-            visits, release, and staff access.
+            {profile.summary}
           </p>
         </div>
         <span className="border-l-2 border-[#c58a36] pl-3 text-xs font-bold uppercase tracking-[0.12em] text-[#748696]">
@@ -285,10 +274,10 @@ function ModuleView({ view, onNavigate, userRole }: { view: View; onNavigate: (v
       return <UserAccess />;
     case "transfer-analytics":
       return <TransferAnalytics />;
-    case "overview":
-      return null;
     case "prisons":
       return <PrisonRegistry canManage={roleProfile.canManagePrisons} />;
+    case "overview":
+      return null;
   }
 }
 
@@ -301,10 +290,6 @@ export default function Dashboard() {
       : roleProfile.workspaces.includes(item.id as Workspace),
   );
   const [view, setView] = useState<View>("overview");
-  const [inmatesOpen, setInmatesOpen] = useState(true);
-  const inmateViews: View[] = roleProfile.workspaces.includes("inmates")
-    ? ["inmates", "profile", "sentences", ...(roleProfile.canAdmit ? ["admission" as const] : [])]
-    : [];
   const active = navigation.find((item) => item.id === view) ?? navigation[0];
   return (
     <div className="min-h-screen bg-[#f5f7fa] font-['DM_Sans',_'Segoe_UI',sans-serif] text-[#182638]">
@@ -326,26 +311,7 @@ export default function Dashboard() {
               <span className="truncate">{item.label}</span>
             </button>
           ))}
-          <button
-            aria-expanded={inmatesOpen}
-            onClick={() => setInmatesOpen((open) => !open)}
-            className={`flex min-h-10 w-full items-center gap-3 rounded-lg px-3 text-left text-[13px] font-medium transition-colors ${inmateViews.includes(view) ? "text-white" : "text-slate-300 hover:bg-white/[0.06] hover:text-white"}`}
-          >
-            <NavigationIcon name="people" />
-            <span className="flex-1">Inmate Management</span>
-            <svg className={`size-3.5 transition-transform ${inmatesOpen ? "rotate-90" : ""}`} viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m6 3 5 5-5 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-          </button>
-          {inmatesOpen && <div className="mt-1 space-y-1">
-            {navigation.filter((item) => ["inmates", "profile", "admission", "sentences"].includes(item.id) && (item.id !== "admission" || roleProfile.canAdmit) && roleProfile.workspaces.includes("inmates")).map((item) => (
-              <button
-                aria-current={view === item.id ? "page" : undefined}
-                key={item.id}
-                onClick={() => setView(item.id)}
-                className={`relative ml-3 flex min-h-9 w-[calc(100%-0.75rem)] items-center rounded-lg border-l pl-4 text-left text-[12px] transition-colors ${view === item.id ? "border-[#36c6bf] bg-[#16435a] font-semibold text-white" : "border-white/10 text-slate-300 hover:bg-white/[0.06] hover:text-white"}`}
-              >{item.label}</button>
-            ))}
-          </div>}
-          {visibleNavigation.filter((item) => !["overview", ...inmateViews].includes(item.id)).map((item) => (
+          {visibleNavigation.filter((item) => item.id !== "overview").map((item) => (
             <button
               aria-current={view === item.id ? "page" : undefined}
               className={`relative flex min-h-10 w-full items-center gap-3 rounded-lg px-3 text-left text-[13px] transition-colors ${view === item.id ? "bg-[#16435a] font-semibold text-white before:absolute before:left-0 before:h-7 before:w-[3px] before:rounded-r before:bg-[#36c6bf]" : "text-slate-300 hover:bg-white/[0.06] hover:text-white"}`}
