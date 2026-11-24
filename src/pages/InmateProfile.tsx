@@ -1,6 +1,12 @@
 import { useEffect, useState } from "react";
 import api from "../api/axiosClient";
-import { collectionFrom, asRecord, itemFrom } from "../api/dataContract";
+import { collectionFrom, asRecord, fetchAllPages, itemFrom } from "../api/dataContract";
+import { sentenceService } from "../api/sentenceService";
+import { visitorService } from "../api/visitorService";
+import { transferService } from "../api/transferService";
+import { prisonService, type PrisonSummary } from "../api/prisonService";
+import { inmateService, type Cell } from "../api/inmateService";
+import { normalizeRole } from "../auth/roleAccess";
 
 type Row = Record<string, unknown>;
 type Tab =
@@ -15,7 +21,10 @@ type Tab =
 type FormKind =
   | "sentence"
   | "remission"
-  | "extension"
+  | "transfer"
+  | "visit"
+  | "medical"
+  | "cell"
   | "incident"
   | "enrollment"
   | "attendance";
@@ -78,20 +87,35 @@ export default function InmateProfile({
   initialTab = "Overview",
   onBack,
 }: Props) {
-  const role = userRole
-    .replace(/^ROLE_/, "")
-    .replace(/_/g, " ")
-    .toUpperCase();
+  const role = normalizeRole(userRole);
   const canLogConduct = [
     "RECORDS OFFICER",
     "DISCIPLINARY OFFICER",
     "PRISON OFFICER",
+    "SUPER ADMIN",
   ].includes(role);
-  const canManagePrograms = role === "PROGRAM FACILITATOR";
-  const canRecordAttendance = ["PROGRAM FACILITATOR", "INSTRUCTOR"].includes(
+  const canManagePrograms = ["REHABILITATION OFFICER", "SUPER ADMIN"].includes(role);
+  const canRecordAttendance = ["REHABILITATION OFFICER", "INSTRUCTOR", "SUPER ADMIN"].includes(
     role,
   );
-  const visibleTabs: Tab[] = ["Overview", "Sentences"];
+  const tabsByRole: Record<string, Tab[]> = {
+    "SUPER ADMIN": ["Sentences", "Transfers", "Visits", "Medical", "Cell allocations", "Conduct", "Rehabilitation"],
+    "RECORDS OFFICER": ["Sentences", "Transfers", "Visits", "Cell allocations"],
+    "CASE OFFICER": ["Sentences", "Transfers"],
+    "VISITOR OFFICER": ["Visits"],
+    "DUTY OFFICER": ["Transfers", "Visits"],
+    "PRISON OFFICER": ["Transfers", "Visits", "Cell allocations", "Conduct"],
+    "OFFICER IN CHARGE": ["Sentences", "Transfers", "Visits", "Conduct"],
+    "DISCIPLINARY OFFICER": ["Conduct"],
+    "MEDICAL OFFICER": ["Medical"],
+    "REHABILITATION OFFICER": ["Rehabilitation", "Conduct"],
+    "INSTRUCTOR": ["Rehabilitation"],
+  };
+  const visibleTabs: Tab[] = ["Overview", ...(tabsByRole[role] ?? [])];
+  const canInitiateTransfer = ["RECORDS OFFICER", "CASE OFFICER", "DUTY OFFICER", "OFFICER IN CHARGE", "PRISON OFFICER", "SUPER ADMIN"].includes(role);
+  const canRecordVisit = ["VISITOR OFFICER", "RECORDS OFFICER", "DUTY OFFICER", "OFFICER IN CHARGE", "PRISON OFFICER", "SUPER ADMIN"].includes(role);
+  const canRecordMedical = ["MEDICAL OFFICER", "SUPER ADMIN"].includes(role);
+  const canAllocateCell = ["RECORDS OFFICER", "PRISON OFFICER", "OFFICER IN CHARGE", "SUPER ADMIN"].includes(role);
   const [tab, setTab] = useState<Tab>(initialTab);
   const [record, setRecord] = useState<Row>({});
   const [sentences, setSentences] = useState<Row[]>([]);
@@ -111,6 +135,8 @@ export default function InmateProfile({
   const [form, setForm] = useState<Record<string, string>>({});
   const [photo, setPhoto] = useState("");
   const [revision, setRevision] = useState(0);
+  const [prisons, setPrisons] = useState<PrisonSummary[]>([]);
+  const [availableCells, setAvailableCells] = useState<Cell[]>([]);
 
   useEffect(() => {
     setTab(initialTab);
@@ -123,11 +149,24 @@ export default function InmateProfile({
     setLoading(true);
     const load = async () => {
       try {
+        const inmateResponse = await api.get(
+          `/inmates/${encodeURIComponent(inmateId)}`,
+        );
+        if (active) setRecord(asRecord(itemFrom(inmateResponse.data)));
+
+        if (tab === "Transfers") {
+          try {
+            const image = await api.get(
+              `/inmates/${encodeURIComponent(inmateId)}/photo`,
+              { responseType: "blob" },
+            );
+            if (active) setPhoto(URL.createObjectURL(image.data));
+          } catch {
+            /* Inmates may not have a photo. */
+          }
+        }
+
         if (tab === "Overview") {
-          const { data } = await api.get(
-            `/inmates/${encodeURIComponent(inmateId)}`,
-          );
-          if (active) setRecord(asRecord(itemFrom(data)));
           try {
             const image = await api.get(
               `/inmates/${encodeURIComponent(inmateId)}/photo`,
@@ -138,41 +177,43 @@ export default function InmateProfile({
             /* Inmates may not have a photo. */
           }
         } else if (tab === "Sentences") {
-          const { data } = await api.get(
-            `/inmates/${encodeURIComponent(inmateId)}/sentences`,
-          );
-          if (active) setSentences(collectionFrom(data).map(asRecord));
+          const rows = await sentenceService.listForInmate(inmateId);
+          if (active) setSentences(rows);
         } else if (tab === "Transfers") {
-          const { data } = await api.get("/transfers", {
-            params: { page: 0, size: 500 },
-          });
+          const [rows, prisonPage] = await Promise.all([
+            fetchAllPages<unknown>((page) =>
+              api.get("/transfers", { params: { page, size: 100 } }).then(({ data }) => data),
+            ),
+            prisonService.getPrisons(0, "", "active", 100),
+          ]);
+          if (active) setPrisons(prisonPage.records);
           if (active)
             setTransferRows(
-              collectionFrom(itemFrom(data))
-                .map(asRecord)
+              rows.map(asRecord)
                 .filter((row) => String(field(row, "inmateId")) === inmateId),
             );
         } else if (tab === "Visits") {
-          const { data } = await api.get(
-            `/inmates/${encodeURIComponent(inmateId)}/visits`,
-            { params: { page: 0, size: 100 } },
-          );
-          if (active)
-            setVisitRows(collectionFrom(itemFrom(data)).map(asRecord));
+          const visits = await visitorService.getInmateVisitHistory(inmateId);
+          if (active) setVisitRows(visits.map((visit) => ({
+            ...visit,
+            visitDate: visit.date,
+            visitor: visit.name,
+            startDateTime: visit.time,
+            endDateTime: visit.endTime,
+          })));
         } else if (tab === "Medical") {
-          const { data } = await api.get("/medical-visits", {
-            params: { inmateId, size: 100 },
-          });
-          if (active)
-            setMedicalRows(collectionFrom(itemFrom(data)).map(asRecord));
+          const visits = await visitorService.getInmateVisitHistory(inmateId);
+          if (active) setMedicalRows(visits.filter((visit) => visit.visitType === "HEALTH").map((visit) => ({ ...visit, visitDate: visit.date })));
         } else if (tab === "Cell allocations") {
           const cellId = String(field(record, "cellId") ?? "");
-          if (cellId) {
-            const { data } = await api.get(
-              `/cells/${encodeURIComponent(cellId)}`,
-            );
-            if (active) setCellRecord(asRecord(itemFrom(data)));
-          } else if (active) setCellRecord({});
+          const [cellResult, cellsResult] = await Promise.all([
+            cellId ? api.get(`/cells/${encodeURIComponent(cellId)}`).then(({ data }) => asRecord(itemFrom(data))) : Promise.resolve({}),
+            inmateService.getCells({ prisonId: String(field(record, "prisonId") ?? "") || undefined }),
+          ]);
+          if (active) {
+            setCellRecord(cellResult);
+            setAvailableCells(cellsResult.filter((cell) => cell.availableSpaces > 0));
+          }
         } else if (tab === "Conduct") {
           const { data } = await api.get(
             `/inmates/${encodeURIComponent(inmateId)}/incidents`,
@@ -224,6 +265,8 @@ export default function InmateProfile({
       kind,
       ...(sentenceId ? { sentenceId } : {}),
       ...(kind === "attendance" ? { attendanceStatus: "present" } : {}),
+      ...(kind === "visit" ? { visitType: "FAMILY", visitDate: new Date().toISOString().slice(0, 10) } : {}),
+      ...(kind === "medical" ? { visitDate: new Date().toISOString().slice(0, 10) } : {}),
     });
     setFormKind(kind);
   };
@@ -250,6 +293,7 @@ export default function InmateProfile({
 
   const saveSentenceAction = async () => {
     setError("");
+    setNotice("");
     const offenceText = [
       form.offenceCategory === "Other"
         ? form.offenceOther?.trim()
@@ -273,8 +317,14 @@ export default function InmateProfile({
               form.effectiveDate,
               form.reason,
             ]
-          : formKind === "extension"
-            ? [form.sentenceId, form.proposedEndDate, form.reason]
+          : formKind === "transfer"
+            ? [form.destinationPrisonId, form.reason]
+            : formKind === "visit"
+              ? [form.visitorFullName, form.visitDate, form.startTime, form.endTime, ...(form.visitType === "LEGAL" ? [form.legalCaseNumber] : [])]
+              : formKind === "medical"
+                ? [form.visitDate, form.startTime, form.endTime, form.sickness, form.diagnosis]
+                : formKind === "cell"
+                  ? [form.cellId]
             : formKind === "incident"
               ? [form.incidentDate, form.description]
               : formKind === "enrollment"
@@ -325,25 +375,64 @@ export default function InmateProfile({
           ...(form.endDate ? { endDate: form.endDate } : {}),
         });
         setNotice("Sentence recorded.");
+      } else if (formKind === "transfer") {
+        await transferService.createTransfer({
+          inmateId,
+          destinationPrisonId: form.destinationPrisonId,
+          reason: form.reason.trim(),
+        });
+        setNotice("Transfer request submitted.");
+      } else if (formKind === "visit") {
+        if (form.endTime <= form.startTime) {
+          setError("The visit end time must be later than its start time.");
+          return;
+        }
+        if (form.visitType === "LEGAL") {
+          await visitorService.registerLegalVisit({
+            inmateId,
+            visitDate: form.visitDate,
+            startTime: form.startTime,
+            endTime: form.endTime,
+            legalCaseNumber: form.legalCaseNumber.trim(),
+            ...(form.legalRepresentative?.trim() ? { legalRepresentative: form.legalRepresentative.trim() } : {}),
+          });
+        } else {
+          await visitorService.registerVisitor({
+            inmateId,
+            visitorFullName: form.visitorFullName.trim(),
+            visitDate: form.visitDate,
+            startTime: form.startTime,
+            endTime: form.endTime,
+            ...(form.itemsBrought?.trim() ? { itemsBrought: form.itemsBrought.trim() } : {}),
+          });
+        }
+        setNotice("Visit recorded.");
+      } else if (formKind === "medical") {
+        if (form.endTime <= form.startTime) {
+          setError("The medical visit end time must be later than its start time.");
+          return;
+        }
+        await visitorService.registerMedicalVisit({
+          inmateId,
+          visitDate: form.visitDate,
+          startTime: form.startTime,
+          endTime: form.endTime,
+          sickness: form.sickness.trim(),
+          diagnosis: form.diagnosis.trim(),
+          ...(form.medicationsProvided?.trim() ? { medicationsProvided: form.medicationsProvided.trim() } : {}),
+          ...(form.recommendations?.trim() ? { recommendations: form.recommendations.trim() } : {}),
+        });
+        setNotice("Medical visit recorded.");
+      } else if (formKind === "cell") {
+        await inmateService.allocateCell(inmateId, form.cellId);
+        setNotice("Cell allocation updated.");
       } else if (formKind === "remission") {
-        await api.post(
-          `/sentences/${encodeURIComponent(form.sentenceId)}/remissions`,
-          {
-            remissionPercentage: Number(form.remissionPercentage),
-            effectiveDate: form.effectiveDate,
-            reason: form.reason?.trim(),
-          },
-        );
+        await sentenceService.addRemission(form.sentenceId, {
+          remissionPercentage: Number(form.remissionPercentage),
+          effectiveDate: form.effectiveDate,
+          reason: form.reason?.trim() ?? "",
+        });
         setNotice("Remission recorded.");
-      } else if (formKind === "extension") {
-        await api.post(
-          `/sentences/${encodeURIComponent(form.sentenceId)}/extensions`,
-          {
-            proposedEndDate: form.proposedEndDate,
-            reason: form.reason?.trim(),
-          },
-        );
-        setNotice("Extension request sent.");
       } else if (formKind === "incident") {
         await api.post("/incidents", {
           participants: [
@@ -384,18 +473,6 @@ export default function InmateProfile({
     }
   };
 
-  const updateSentenceStatus = async (id: string, status: string) => {
-    try {
-      await api.patch(`/sentences/${encodeURIComponent(id)}/status`, {
-        status,
-      });
-      setRevision((current) => current + 1);
-      setNotice("Sentence status updated.");
-    } catch (reason) {
-      setError(errorMessage(reason));
-    }
-  };
-
   return (
     <section className="mx-auto max-w-[1440px] space-y-5">
       <button
@@ -404,7 +481,7 @@ export default function InmateProfile({
       >
         ← <span>Back to inmate list</span>
       </button>
-      <header className="flex flex-wrap items-center gap-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+      <header className="grid gap-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center">
         {photo ? (
           <img
             src={photo}
@@ -420,21 +497,19 @@ export default function InmateProfile({
               .join("")}
           </div>
         )}
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0">
           <h1 className="truncate text-2xl font-semibold text-[#162d40]">
             {inmateName}
           </h1>
-          <p className="mt-1 text-xs text-slate-500">
-            {inmateId} · {shown(field(record, "prisonName"))}
-          </p>
         </div>
-        <span className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-600">
+        <span className="w-fit rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold capitalize text-slate-600">
           {shown(field(record, "inmateType"))}
         </span>
       </header>
 
       <nav
-        className="flex gap-1 overflow-x-auto border-b border-slate-200"
+        role="tablist"
+        className="inmate-profile-tabs flex max-w-full flex-wrap gap-3 overflow-x-auto py-1"
         aria-label="Inmate profile tabs"
       >
         {visibleTabs.map((name) => (
@@ -446,8 +521,9 @@ export default function InmateProfile({
               setFormKind(null);
               setTab(name);
             }}
-            className={`whitespace-nowrap border-b-2 px-4 py-3 text-sm font-semibold ${tab === name ? "border-[#168c91] text-[#126b73]" : "border-transparent text-slate-500 hover:text-slate-800"}`}
+            className={`inline-flex shrink-0 items-center gap-2 rounded-full border px-5 py-2.5 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#168c91] focus-visible:ring-offset-2 ${tab === name ? "border-[#123c55] bg-[#123c55] text-white shadow-md" : "border-slate-200 bg-white text-slate-600 shadow-sm hover:border-[#168c91] hover:bg-[#f3fbfb] hover:text-[#123c55]"}`}
           >
+            <span aria-hidden="true" className={`size-2 rounded-full ${tab === name ? "bg-[#69d2ca]" : "bg-slate-300"}`} />
             {name}
           </button>
         ))}
@@ -601,70 +677,47 @@ export default function InmateProfile({
           ) : (
             sentences.map((sentence) => {
               const id = String(field(sentence, "id") ?? "");
-              const offence = shown(field(sentence, "offence"));
+              const offenceValue = shown(field(sentence, "offence"));
+              const [offence, embeddedDescription] = offenceValue.split(" — ", 2);
+              const crimeDescription = shown(field(sentence, "crimeDescription") ?? embeddedDescription);
               return (
                 <article
                   key={id}
-                  className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
+                  className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"
                 >
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <h3 className="font-semibold text-slate-800">
-                        {offence}
-                      </h3>
-                      <p className="mt-1 text-xs text-slate-500">
-                        {shown(field(sentence, "sentenceType"))} ·{" "}
-                        {dateLabel(field(sentence, "startDate"))}
-                        {field(sentence, "endDate")
-                          ? ` – ${dateLabel(field(sentence, "endDate"))}`
-                          : ""}
-                      </p>
+                  <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 px-5 py-4">
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Offence</p>
+                      <h3 className="mt-1 text-base font-semibold text-slate-800">{offence}</h3>
                     </div>
-                    <label className="flex items-center gap-2 text-xs text-slate-600">
-                      Status
-                      <select
-                        value={String(field(sentence, "status") ?? "ACTIVE")}
-                        onChange={(event) =>
-                          void updateSentenceStatus(id, event.target.value)
-                        }
-                        className="rounded-md border border-slate-300 px-2 py-2"
-                      >
-                        <option value="ACTIVE">Active</option>
-                        <option value="COMPLETED">Completed</option>
-                        <option value="COMMUTED">Commuted</option>
-                      </select>
-                    </label>
+                    <span className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-600">{shown(field(sentence, "status"))}</span>
                   </div>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {["RECORDS OFFICER", "PRISON OFFICER"].includes(role) && (
-                      <button
-                        onClick={() => openForm("remission", id)}
-                        className="rounded-md border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700"
-                      >
-                        Add remission
-                      </button>
-                    )}
-                    {[
-                      "RECORDS OFFICER",
-                      "PRISON OFFICER",
-                      "SUPER ADMIN",
-                      "COMMISSIONER",
-                    ].includes(role) && (
-                      <button
-                        onClick={() => openForm("extension", id)}
-                        className="rounded-md border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700"
-                      >
-                        Request extension
-                      </button>
-                    )}
+                  <dl className="grid gap-3 px-5 py-4 sm:grid-cols-3">
+                    <div className="rounded-lg bg-slate-50 px-3 py-2.5">
+                      <dt className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">Sentence type</dt>
+                      <dd className="mt-1 text-sm font-semibold capitalize text-slate-700">{shown(field(sentence, "sentenceType")).replace(/_/g, " ")}</dd>
+                    </div>
+                    <div className="rounded-lg bg-slate-50 px-3 py-2.5">
+                      <dt className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">Start date</dt>
+                      <dd className="mt-1 text-sm font-semibold text-slate-700">{dateLabel(field(sentence, "startDate"))}</dd>
+                    </div>
+                    <div className="rounded-lg bg-slate-50 px-3 py-2.5">
+                      <dt className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">End date</dt>
+                      <dd className="mt-1 text-sm font-semibold text-slate-700">{field(sentence, "endDate") ? dateLabel(field(sentence, "endDate")) : "Not set"}</dd>
+                    </div>
+                  </dl>
+                  <div className="mx-5 mb-4 rounded-lg border border-slate-100 px-3 py-2.5">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">Crime description</p>
+                    <p className="mt-1 text-sm leading-6 text-slate-700">{crimeDescription === "—" ? "No separate description recorded." : crimeDescription}</p>
                   </div>
-                  <div className="mt-3 grid gap-3 md:grid-cols-2">
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-y border-slate-100 bg-slate-50/70 px-5 py-3">
+                    <span className="text-xs font-semibold text-slate-600">Sentence actions</span>
+                    <div className="flex flex-wrap gap-2">
+                      {["RECORDS OFFICER", "PRISON OFFICER"].includes(role) && <button onClick={() => openForm("remission", id)} className="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">Add remission</button>}
+                    </div>
+                  </div>
+                  <div className="grid gap-3 p-4 md:grid-cols-2">
                     <Remissions sentenceId={id} revision={revision} />
-                    <Extensions
-                      sentenceId={id}
-                      revision={revision}
-                      canDecide={false}
-                    />
                   </div>
                 </article>
               );
@@ -672,46 +725,41 @@ export default function InmateProfile({
           )}
         </section>
       ) : tab === "Transfers" ? (
-        <HistoryList
-          title="Transfer history"
-          rows={transferRows}
-          fields={[
-            ["Date", "requestedAt"],
-            ["From", "sourcePrisonName"],
-            ["To", "destinationPrisonName"],
-            ["Status", "status"],
-            ["Reason", "reason"],
-          ]}
-        />
+        <section className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-lg font-semibold text-slate-800">Transfer history</h2>
+            {canInitiateTransfer && <button onClick={() => openForm("transfer")} className="rounded-lg bg-[#123c55] px-3.5 py-2 text-xs font-semibold text-white">Initiate transfer</button>}
+          </div>
+          {formKind === "transfer" && <ProfileActionForm kind="transfer" form={form} programs={[]} prisons={prisons} currentPrisonId={String(field(record, "prisonId") ?? "")} onChange={setForm} onCancel={() => setFormKind(null)} onSave={() => void saveSentenceAction()} />}
+          <HistoryList title="Transfer history" rows={transferRows} fields={[["Date", "requestedAt"], ["From", "sourcePrisonName"], ["To", "destinationPrisonName"], ["Status", "status"], ["Reason", "reason"]]} />
+        </section>
       ) : tab === "Visits" ? (
-        <HistoryList
-          title="Visit history"
-          rows={visitRows}
-          fields={[
-            ["Date", "visitDate"],
-            ["Type", "visitType"],
-            ["Visitor", "visitor"],
-            ["Start", "startDateTime"],
-            ["End", "endDateTime"],
-            ["Items brought", "itemsBrought"],
-            ["Legal representative", "legalRepresentative"],
-          ]}
-        />
+        <section className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-lg font-semibold text-slate-800">Visit history</h2>
+            {canRecordVisit && <button onClick={() => openForm("visit")} className="rounded-lg bg-[#123c55] px-3.5 py-2 text-xs font-semibold text-white">Record visit</button>}
+          </div>
+          {formKind === "visit" && <ProfileActionForm kind="visit" form={form} programs={[]} onChange={setForm} onCancel={() => setFormKind(null)} onSave={() => void saveSentenceAction()} />}
+          <HistoryList title="Visit history" rows={visitRows} fields={[["Date", "visitDate"], ["Type", "visitType"], ["Visitor", "name"], ["Start", "time"], ["End", "endTime"], ["Items brought", "itemsBrought"], ["Legal representative", "legalRepresentative"]]} />
+        </section>
       ) : tab === "Medical" ? (
-        <HistoryList
-          title="Medical history"
-          rows={medicalRows}
-          fields={[
-            ["Date", "visitDate"],
-            ["Sickness", "sickness"],
-            ["Diagnosis", "diagnosis"],
-            ["Medication", "medicationsProvided"],
-            ["Recommendations", "recommendations"],
-          ]}
-        />
+        <section className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-lg font-semibold text-slate-800">Medical history</h2>
+            {canRecordMedical && <button onClick={() => openForm("medical")} className="rounded-lg bg-[#123c55] px-3.5 py-2 text-xs font-semibold text-white">Record medical visit</button>}
+          </div>
+          {formKind === "medical" && <ProfileActionForm kind="medical" form={form} programs={[]} onChange={setForm} onCancel={() => setFormKind(null)} onSave={() => void saveSentenceAction()} />}
+          <HistoryList title="Medical history" rows={medicalRows} fields={[["Date", "visitDate"], ["Sickness", "sickness"], ["Diagnosis", "diagnosis"], ["Medication", "medicationsProvided"], ["Recommendations", "recommendations"]]} />
+        </section>
       ) : tab === "Cell allocations" ? (
-        <section className="rounded-xl border border-slate-200 bg-white p-5">
-          <h2 className="font-semibold text-slate-800">Current cell</h2>
+        <section className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-lg font-semibold text-slate-800">Cell allocation</h2>
+            {canAllocateCell && <button onClick={() => openForm("cell")} className="rounded-lg bg-[#123c55] px-3.5 py-2 text-xs font-semibold text-white">Change cell</button>}
+          </div>
+          {formKind === "cell" && <ProfileActionForm kind="cell" form={form} programs={[]} cells={availableCells} onChange={setForm} onCancel={() => setFormKind(null)} onSave={() => void saveSentenceAction()} />}
+          <div className="rounded-xl border border-slate-200 bg-white p-5">
+          <h3 className="font-semibold text-slate-800">Current cell</h3>
           <dl className="mt-3 grid gap-3 sm:grid-cols-2">
             {[
               ["Cell", "name"],
@@ -728,6 +776,7 @@ export default function InmateProfile({
               </div>
             ))}
           </dl>
+          </div>
         </section>
       ) : tab === "Conduct" ? (
         <section className="space-y-4">
@@ -924,21 +973,19 @@ function Remissions({
   const [error, setError] = useState("");
   useEffect(() => {
     let active = true;
-    api
-      .get(`/sentences/${encodeURIComponent(sentenceId)}/remissions`)
-      .then(({ data }) => active && setRows(collectionFrom(data).map(asRecord)))
+    sentenceService
+      .listRemissions(sentenceId)
+      .then((data) => active && setRows(data))
       .catch((reason) => active && setError(errorMessage(reason)));
     return () => {
       active = false;
     };
   }, [sentenceId, revision]);
   return (
-    <details className="rounded-lg border border-slate-200 p-3">
-      <summary className="cursor-pointer text-sm font-semibold text-slate-700">
-        Remissions ({rows.length})
-      </summary>
+    <section className="rounded-lg border border-slate-200 p-3">
+      <h4 className="text-sm font-semibold text-slate-700">Remissions ({rows.length})</h4>
       {error ? (
-        <p className="mt-2 text-xs text-rose-700">{error}</p>
+        <p role="alert" className="mt-2 text-xs text-rose-700">{error}</p>
       ) : rows.length ? (
         <div className="mt-2 space-y-2">
           {rows.map((row) => (
@@ -961,7 +1008,7 @@ function Remissions({
       ) : (
         <p className="mt-2 text-xs text-slate-500">No remissions recorded.</p>
       )}
-    </details>
+    </section>
   );
 }
 
@@ -996,7 +1043,7 @@ function HistoryList({
             <tbody className="divide-y divide-slate-100">
               {rows.map((row, index) => (
                 <tr key={String(field(row, "id") ?? index)}>
-                  {fields.map(([label, key]) => (
+                  {fields.map(([, key]) => (
                     <td key={key} className="px-4 py-3 text-slate-700">
                       {key.toLowerCase().includes("date") ||
                       key.toLowerCase().includes("at")
@@ -1014,101 +1061,13 @@ function HistoryList({
   );
 }
 
-function Extensions({
-  sentenceId,
-  revision,
-  canDecide,
-}: {
-  sentenceId: string;
-  revision: number;
-  canDecide: boolean;
-}) {
-  const [rows, setRows] = useState<Row[]>([]);
-  const [error, setError] = useState("");
-  const [savingId, setSavingId] = useState("");
-  useEffect(() => {
-    let active = true;
-    api
-      .get(`/sentences/${encodeURIComponent(sentenceId)}/extensions`)
-      .then(({ data }) => active && setRows(collectionFrom(data).map(asRecord)))
-      .catch((reason) => active && setError(errorMessage(reason)));
-    return () => {
-      active = false;
-    };
-  }, [sentenceId, revision]);
-  const decide = async (id: string, decision: "APPROVED" | "REJECTED") => {
-    setSavingId(id);
-    setError("");
-    try {
-      await api.post(
-        `/sentence-extensions/${encodeURIComponent(id)}/decision`,
-        { decision },
-      );
-      const { data } = await api.get(
-        `/sentences/${encodeURIComponent(sentenceId)}/extensions`,
-      );
-      setRows(collectionFrom(data).map(asRecord));
-    } catch (reason) {
-      setError(errorMessage(reason));
-    } finally {
-      setSavingId("");
-    }
-  };
-  return (
-    <details className="rounded-lg border border-slate-200 p-3">
-      <summary className="cursor-pointer text-sm font-semibold text-slate-700">
-        Extensions ({rows.length})
-      </summary>
-      {error ? (
-        <p className="mt-2 text-xs text-rose-700">{error}</p>
-      ) : rows.length ? (
-        <div className="mt-2 space-y-2">
-          {rows.map((row) => {
-            const id = String(field(row, "id") ?? "");
-            const decision = String(field(row, "decision") ?? "PENDING");
-            return (
-              <div
-                key={id}
-                className="border-t border-slate-100 pt-2 text-xs text-slate-600"
-              >
-                <p>
-                  {dateLabel(field(row, "originalEndDate"))} →{" "}
-                  {dateLabel(field(row, "proposedEndDate"))} · {decision}
-                </p>
-                <p className="mt-1">{shown(field(row, "reason"))}</p>
-                {canDecide && decision === "PENDING" && (
-                  <div className="mt-2 flex gap-2">
-                    <button
-                      disabled={savingId === id}
-                      onClick={() => void decide(id, "APPROVED")}
-                      className="rounded border border-slate-300 px-2 py-1"
-                    >
-                      Approve
-                    </button>
-                    <button
-                      disabled={savingId === id}
-                      onClick={() => void decide(id, "REJECTED")}
-                      className="rounded border border-slate-300 px-2 py-1"
-                    >
-                      Reject
-                    </button>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      ) : (
-        <p className="mt-2 text-xs text-slate-500">No extension requests.</p>
-      )}
-    </details>
-  );
-}
-
 function ProfileActionForm({
   kind,
   form,
   programs,
+  prisons = [],
+  cells = [],
+  currentPrisonId = "",
   onChange,
   onCancel,
   onSave,
@@ -1116,6 +1075,9 @@ function ProfileActionForm({
   kind: FormKind;
   form: Record<string, string>;
   programs: Row[];
+  prisons?: PrisonSummary[];
+  cells?: Cell[];
+  currentPrisonId?: string;
   onChange: (form: Record<string, string>) => void;
   onCancel: () => void;
   onSave: () => void;
@@ -1127,9 +1089,15 @@ function ProfileActionForm({
       ? "Record sentence"
       : kind === "remission"
         ? "Add remission"
-        : kind === "extension"
-          ? "Request extension"
-          : kind === "incident"
+      : kind === "transfer"
+          ? "Initiate transfer"
+          : kind === "visit"
+            ? "Record visit"
+            : kind === "medical"
+              ? "Record medical visit"
+              : kind === "cell"
+                ? "Change cell allocation"
+        : kind === "incident"
             ? "Log incident"
             : kind === "enrollment"
               ? "Enroll in program"
@@ -1138,6 +1106,43 @@ function ProfileActionForm({
     <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <h3 className="mb-3 font-semibold text-slate-800">{title}</h3>
       <div className="grid gap-3 sm:grid-cols-2">
+        {kind === "transfer" && <>
+          <label className="grid gap-1 text-xs font-medium text-slate-600 sm:col-span-2">Destination prison
+            <select required value={form.destinationPrisonId ?? ""} onChange={(event) => change("destinationPrisonId", event.target.value)} className="rounded-md border border-slate-300 px-3 py-2 text-sm">
+              <option value="">Choose a destination</option>{prisons.filter((prison) => prison.id !== currentPrisonId).map((prison) => <option key={prison.id} value={prison.id}>{prison.name}{prison.location ? ` · ${prison.location}` : ""}</option>)}
+            </select>
+          </label>
+          <label className="grid gap-1 text-xs font-medium text-slate-600 sm:col-span-2">Transfer reason
+            <textarea required maxLength={2000} value={form.reason ?? ""} onChange={(event) => change("reason", event.target.value)} className="min-h-20 rounded-md border border-slate-300 px-3 py-2 text-sm" />
+          </label>
+        </>}
+        {kind === "visit" && <>
+          <label className="grid gap-1 text-xs font-medium text-slate-600">Visit type
+            <select value={form.visitType ?? "FAMILY"} onChange={(event) => change("visitType", event.target.value)} className="rounded-md border border-slate-300 px-3 py-2 text-sm"><option value="FAMILY">Family or friends</option><option value="LEGAL">Legal representative</option></select>
+          </label>
+          {form.visitType === "LEGAL" ? <>
+            <label className="grid gap-1 text-xs font-medium text-slate-600">Legal case number<input required maxLength={255} value={form.legalCaseNumber ?? ""} onChange={(event) => change("legalCaseNumber", event.target.value)} className="rounded-md border border-slate-300 px-3 py-2 text-sm" /></label>
+            <label className="grid gap-1 text-xs font-medium text-slate-600">Legal representative<input maxLength={255} value={form.legalRepresentative ?? ""} onChange={(event) => change("legalRepresentative", event.target.value)} className="rounded-md border border-slate-300 px-3 py-2 text-sm" /></label>
+          </> : <label className="grid gap-1 text-xs font-medium text-slate-600">Visitor full name<input required maxLength={255} value={form.visitorFullName ?? ""} onChange={(event) => change("visitorFullName", event.target.value)} className="rounded-md border border-slate-300 px-3 py-2 text-sm" /></label>}
+          <label className="grid gap-1 text-xs font-medium text-slate-600">Visit date<input required type="date" value={form.visitDate ?? ""} onChange={(event) => change("visitDate", event.target.value)} className="rounded-md border border-slate-300 px-3 py-2 text-sm" /></label>
+          <label className="grid gap-1 text-xs font-medium text-slate-600">Start time<input required type="time" value={form.startTime ?? ""} onChange={(event) => change("startTime", event.target.value)} className="rounded-md border border-slate-300 px-3 py-2 text-sm" /></label>
+          <label className="grid gap-1 text-xs font-medium text-slate-600">End time<input required type="time" value={form.endTime ?? ""} onChange={(event) => change("endTime", event.target.value)} className="rounded-md border border-slate-300 px-3 py-2 text-sm" /></label>
+          <label className="grid gap-1 text-xs font-medium text-slate-600">Start time<input required type="time" value={form.startTime ?? ""} onChange={(event) => change("startTime", event.target.value)} className="rounded-md border border-slate-300 px-3 py-2 text-sm" /></label>
+          <label className="grid gap-1 text-xs font-medium text-slate-600">End time<input required type="time" value={form.endTime ?? ""} onChange={(event) => change("endTime", event.target.value)} className="rounded-md border border-slate-300 px-3 py-2 text-sm" /></label>
+          {form.visitType !== "LEGAL" && <label className="grid gap-1 text-xs font-medium text-slate-600 sm:col-span-2">Items brought (optional)<textarea maxLength={1000} value={form.itemsBrought ?? ""} onChange={(event) => change("itemsBrought", event.target.value)} className="min-h-16 rounded-md border border-slate-300 px-3 py-2 text-sm" /></label>}
+        </>}
+        {kind === "medical" && <>
+          <label className="grid gap-1 text-xs font-medium text-slate-600">Visit date<input required type="date" value={form.visitDate ?? ""} onChange={(event) => change("visitDate", event.target.value)} className="rounded-md border border-slate-300 px-3 py-2 text-sm" /></label>
+          <label className="grid gap-1 text-xs font-medium text-slate-600">Start time<input required type="time" value={form.startTime ?? ""} onChange={(event) => change("startTime", event.target.value)} className="rounded-md border border-slate-300 px-3 py-2 text-sm" /></label>
+          <label className="grid gap-1 text-xs font-medium text-slate-600">End time<input required type="time" value={form.endTime ?? ""} onChange={(event) => change("endTime", event.target.value)} className="rounded-md border border-slate-300 px-3 py-2 text-sm" /></label>
+          <label className="grid gap-1 text-xs font-medium text-slate-600">Sickness / complaint<input required maxLength={10000} value={form.sickness ?? ""} onChange={(event) => change("sickness", event.target.value)} className="rounded-md border border-slate-300 px-3 py-2 text-sm" /></label>
+          <label className="grid gap-1 text-xs font-medium text-slate-600 sm:col-span-2">Diagnosis<textarea required maxLength={10000} value={form.diagnosis ?? ""} onChange={(event) => change("diagnosis", event.target.value)} className="min-h-20 rounded-md border border-slate-300 px-3 py-2 text-sm" /></label>
+          <label className="grid gap-1 text-xs font-medium text-slate-600">Medication provided<textarea maxLength={10000} value={form.medicationsProvided ?? ""} onChange={(event) => change("medicationsProvided", event.target.value)} className="min-h-16 rounded-md border border-slate-300 px-3 py-2 text-sm" /></label>
+          <label className="grid gap-1 text-xs font-medium text-slate-600">Recommendations<textarea maxLength={10000} value={form.recommendations ?? ""} onChange={(event) => change("recommendations", event.target.value)} className="min-h-16 rounded-md border border-slate-300 px-3 py-2 text-sm" /></label>
+        </>}
+        {kind === "cell" && <label className="grid gap-1 text-xs font-medium text-slate-600 sm:col-span-2">Available cell
+          <select required value={form.cellId ?? ""} onChange={(event) => change("cellId", event.target.value)} className="rounded-md border border-slate-300 px-3 py-2 text-sm"><option value="">Choose a cell</option>{cells.map((cell) => <option key={cell.id} value={cell.id}>{cell.blockName} · {cell.name} ({cell.availableSpaces} available)</option>)}</select>
+        </label>}
         {kind === "sentence" && (
           <>
             <label className="grid gap-1 text-xs font-medium text-slate-600">
@@ -1214,15 +1219,17 @@ function ProfileActionForm({
                 className="rounded-md border border-slate-300 px-3 py-2 text-sm"
               />
             </label>
-            <label className="grid gap-1 text-xs font-medium text-slate-600">
-              End date (optional)
-              <input
-                type="date"
-                value={form.endDate ?? ""}
-                onChange={(event) => change("endDate", event.target.value)}
-                className="rounded-md border border-slate-300 px-3 py-2 text-sm"
-              />
-            </label>
+            {form.sentenceType === "FIXED_TERM" && (
+              <label className="grid gap-1 text-xs font-medium text-slate-600">
+                End date (optional)
+                <input
+                  type="date"
+                  value={form.endDate ?? ""}
+                  onChange={(event) => change("endDate", event.target.value)}
+                  className="rounded-md border border-slate-300 px-3 py-2 text-sm"
+                />
+              </label>
+            )}
           </>
         )}
         {kind === "remission" && (
@@ -1250,31 +1257,6 @@ function ProfileActionForm({
                 value={form.effectiveDate ?? ""}
                 onChange={(event) =>
                   change("effectiveDate", event.target.value)
-                }
-                className="rounded-md border border-slate-300 px-3 py-2 text-sm"
-              />
-            </label>
-            <label className="grid gap-1 text-xs font-medium text-slate-600 sm:col-span-2">
-              Reason
-              <textarea
-                required
-                value={form.reason ?? ""}
-                onChange={(event) => change("reason", event.target.value)}
-                className="min-h-20 rounded-md border border-slate-300 px-3 py-2 text-sm"
-              />
-            </label>
-          </>
-        )}
-        {kind === "extension" && (
-          <>
-            <label className="grid gap-1 text-xs font-medium text-slate-600">
-              Proposed end date
-              <input
-                required
-                type="date"
-                value={form.proposedEndDate ?? ""}
-                onChange={(event) =>
-                  change("proposedEndDate", event.target.value)
                 }
                 className="rounded-md border border-slate-300 px-3 py-2 text-sm"
               />

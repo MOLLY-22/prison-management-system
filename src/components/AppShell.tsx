@@ -43,7 +43,7 @@ export function AppShell() {
       </Drawer>
       <Box component="main" className="corp-main">
         <Toolbar />
-        <InmateManagement canAdmit />
+        <InmateManagement canAdmit userRole="RECORDS OFFICER" section="overview" />
       </Box>
     </Box>
   );

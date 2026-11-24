@@ -270,6 +270,12 @@
   min-width: 900px;
 }
 
+.census-page .census-table {
+  width: 100%;
+  min-width: 0;
+  table-layout: fixed;
+}
+
 .census-table .MuiTableCell-head {
   border-bottom: 1px solid #d6e0e3;
   background: #f0f4f3;

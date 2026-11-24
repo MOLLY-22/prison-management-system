@@ -14,6 +14,7 @@ export type Visitor = {
     time: string;
     endTime: string;
     status: VisitorStatus;
+    visitType?: string;
     entryTimestamp?: string | null;
     exitTimestamp?: string | null;
     itemsBrought?: string;
@@ -22,6 +23,11 @@ export type Visitor = {
     loggedByName?: string;
     createdAt?: string;
     updatedAt?: string;
+    legalRepresentative?: string;
+    sickness?: string;
+    diagnosis?: string;
+    medicationsProvided?: string;
+    recommendations?: string;
 };
 
 export type InmateLookup = {
@@ -38,6 +44,14 @@ export type VisitRequest = {
     startTime: string;
     endTime: string;
     itemsBrought?: string;
+};
+export type LegalVisitRequest = {
+    inmateId: string;
+    visitDate: string;
+    startTime: string;
+    endTime: string;
+    legalCaseNumber: string;
+    legalRepresentative?: string;
 };
 
 export type VisitListParams = {
@@ -71,9 +85,15 @@ export function normalizeVisitor(payload: unknown): Visitor {
         time: start.includes("T") ? start.slice(11, 16) : start.slice(0, 5),
         endTime: end.includes("T") ? end.slice(11, 16) : end.slice(0, 5),
         status: "Scheduled",
+        visitType: String(firstValue(record, ["type", "visitType", "visit_type"], "")),
         entryTimestamp: null,
         exitTimestamp: null,
         itemsBrought: String(firstValue(record, ["itemsBrought", "items_brought"], "")),
+        legalRepresentative: String(firstValue(record, ["legalRepresentative", "legal_representative"], "")),
+        sickness: String(firstValue(record, ["sickness"], "")),
+        diagnosis: String(firstValue(record, ["diagnosis"], "")),
+        medicationsProvided: String(firstValue(record, ["medicationsProvided", "medications_provided"], "")),
+        recommendations: String(firstValue(record, ["recommendations"], "")),
         durationMinutes: Number(firstValue(record, ["durationMinutes", "duration_minutes"], 0)),
         loggedById: String(firstValue(record, ["loggedById", "logged_by_id"], "")),
         loggedByName: String(firstValue(record, ["loggedByName", "logged_by_name"], "")),
@@ -96,7 +116,7 @@ export const visitorService = {
     },
 
     async getInmateVisitHistory(inmateId: string, params?: Omit<VisitListParams, "visitId" | "inmateId" | "inmateName" | "loggedBy">): Promise<Visitor[]> {
-        const path = `/inmates/${encodeURIComponent(inmateId)}/visits`;
+        const path = `/visits/inmate/${encodeURIComponent(inmateId)}`;
         if (params?.page !== undefined) {
             const response = await api.get(path, { params });
             return collectionFrom(response.data).map(normalizeVisitor);
@@ -119,7 +139,24 @@ export const visitorService = {
         return normalizeInmates(records);
     },
     async registerVisitor(payload: VisitRequest): Promise<Visitor> {
-        const response = await api.post("/visits/family-friends", payload);
+        const response = await api.post("/visits", { ...payload, type: "FAMILY" });
+        return normalizeVisitor(itemFrom(response.data));
+    },
+    async registerLegalVisit(payload: LegalVisitRequest): Promise<Visitor> {
+        const response = await api.post("/visits", { ...payload, type: "LEGAL" });
+        return normalizeVisitor(itemFrom(response.data));
+    },
+    async registerMedicalVisit(payload: {
+        inmateId: string;
+        visitDate: string;
+        startTime: string;
+        endTime: string;
+        sickness: string;
+        diagnosis: string;
+        medicationsProvided?: string;
+        recommendations?: string;
+    }): Promise<Visitor> {
+        const response = await api.post("/visits", { ...payload, type: "HEALTH" });
         return normalizeVisitor(itemFrom(response.data));
     },
 };
