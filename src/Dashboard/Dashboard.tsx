@@ -4,15 +4,17 @@ import api from "../api/axiosClient";
 import { collectionFrom } from "../api/dataContract";
 import { InmateManagement } from "../pages/InmateManagement";
 import Visitors from "../pages/Visitors";
+import TransferManagement from "../pages/TransferManagement";
 import UserAccess from "../pages/UserAccess";
 import TransferAnalytics from "../pages/TransferAnalytics";
 import { PrisonRegistry } from "../pages/PrisonRegistry";
 import { prisonService } from "../api/prisonService";
+import { transferService } from "../api/transferService";
 import ReleaseManagement from "../pages/ReleaseManagement";
 import { getRoleProfile, normalizeRole, type Workspace } from "../auth/roleAccess";
 
 
-type View = Exclude<Workspace, "transfers"> | "profile" | "admission" | "sentences" | "transfer-analytics";
+type View = Workspace | "profile" | "admission" | "sentences" | "transfer-analytics";
 type RecordItem = Record<string, string | number | boolean | null>;
 
 const navigation: { id: View; label: string; short: string }[] = [
@@ -20,6 +22,7 @@ const navigation: { id: View; label: string; short: string }[] = [
   { id: "inmates", label: "Inmates", short: "people" },
   { id: "housing", label: "Housing & cells", short: "building" },
   { id: "visitors", label: "Visits", short: "visit" },
+  { id: "transfers", label: "Transfers", short: "arrows" },
   { id: "transfer-analytics", label: "Transfer Analytics", short: "chart" },
   { id: "release", label: "Release & discharge", short: "exit" },
   { id: "access", label: "User Management", short: "shield" },
@@ -277,6 +280,8 @@ function ModuleView({ view, onNavigate, userRole, userPrisonId }: { view: View; 
       return <UserAccess />;
     case "transfer-analytics":
       return <TransferAnalytics />;
+    case "transfers":
+      return <TransferManagement />;
     case "prisons":
       return <PrisonRegistry key="prisons" canManage={roleProfile.canManagePrisons} />;
     case "housing":
@@ -296,7 +301,44 @@ export default function Dashboard() {
       : roleProfile.workspaces.includes(item.id as Workspace),
   );
   const [view, setView] = useState<View>("overview");
+  const [incomingTransferCount, setIncomingTransferCount] = useState(0);
   const active = navigation.find((item) => item.id === view) ?? navigation[0];
+
+  useEffect(() => {
+    const prisonId = user?.prisonId;
+    if (!prisonId || !roleProfile.workspaces.includes("transfers")) {
+      setIncomingTransferCount(0);
+      return;
+    }
+    let live = true;
+    const refreshIncomingCount = () => {
+      transferService.getTransfers({ prisonId })
+        .then((records) => {
+          if (!live) return;
+          const openStatuses = new Set(["PENDING", "APPROVED", "CONFIRMED", "IN_TRANSIT"]);
+          setIncomingTransferCount(records.filter((transfer) =>
+            transfer.destinationPrisonId === prisonId && openStatuses.has(transfer.status),
+          ).length);
+        })
+        .catch(() => {
+          // Keep the last known count when a brief refresh fails.
+        });
+    };
+    refreshIncomingCount();
+    const interval = window.setInterval(refreshIncomingCount, 30_000);
+    window.addEventListener("focus", refreshIncomingCount);
+    return () => {
+      live = false;
+      window.clearInterval(interval);
+      window.removeEventListener("focus", refreshIncomingCount);
+    };
+  }, [user?.prisonId, roleProfile.workspaces]);
+
+  const incomingBadge = () => incomingTransferCount > 0 && (
+    <span aria-label={`${incomingTransferCount} incoming transfers awaiting completion`} className="ml-auto grid h-5 min-w-5 place-items-center rounded-full bg-[#db5947] px-1 text-[10px] font-bold leading-none text-white">
+      {incomingTransferCount > 99 ? "99+" : incomingTransferCount}
+    </span>
+  );
 
   useEffect(() => {
     if (!user?.prisonId) {
@@ -335,6 +377,7 @@ export default function Dashboard() {
             >
               <NavigationIcon name={item.short} />
               <span className="truncate">{item.label}</span>
+              {item.id === "transfers" && incomingBadge()}
             </button>
           ))}
           {visibleNavigation.filter((item) => item.id !== "overview").map((item) => (
@@ -396,7 +439,7 @@ export default function Dashboard() {
                 className={`whitespace-nowrap rounded-[4px] border px-3 py-2 text-xs font-bold ${view === item.id ? "border-[#087f9b] bg-[#087f9b] text-white" : "border-[#dfe6ed] bg-white text-[#526a7c]"}`}
                 key={item.id}
               >
-                {item.label}
+                {item.label}{item.id === "transfers" && incomingTransferCount > 0 ? ` (${incomingTransferCount})` : ""}
               </button>
             ))}
           </div>

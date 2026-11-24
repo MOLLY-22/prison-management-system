@@ -1,177 +1,159 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
-import { Alert, Box, Button, Stack, Typography } from "@mui/material";
-import TransferForm from "../components/TransferForm";
-import TransferHistory from "../components/TransferHistory";
-import TransferApproval from "../components/TransferApproval";
-import { inmateService } from "../api/inmateService";
 import {
-  transferService,
-  type CreateTransferRequest,
-  type TransferRecord,
-} from "../api/transferService";
-import "./transferManagement.css";
+  Alert,
+  Box,
+  Button,
+  Chip,
+  CircularProgress,
+  Paper,
+  Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Typography,
+} from "@mui/material";
+import { useAuth } from "../context/AuthContext";
+import { transferService, type TransferRecord, type TransferStatus } from "../api/transferService";
 
 function messageFrom(error: unknown) {
   if (axios.isAxiosError<{ message?: string }>(error)) {
     return error.response?.data?.message || error.message;
   }
-  return error instanceof Error ? error.message : "The transfer request failed.";
+  return error instanceof Error ? error.message : "Could not load incoming transfers.";
 }
 
+function formatDate(value: string) {
+  if (!value) return "—";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+}
+
+const statusColor: Record<TransferStatus, "default" | "info" | "success" | "warning" | "error" | "primary"> = {
+  PENDING: "warning",
+  APPROVED: "info",
+  CONFIRMED: "info",
+  IN_TRANSIT: "primary",
+  RECEIVED: "success",
+  REJECTED: "error",
+  CANCELLED: "default",
+};
+
+const openStatuses = new Set<TransferStatus>(["PENDING", "APPROVED", "CONFIRMED", "IN_TRANSIT"]);
+
 function TransferManagement() {
+  const { user } = useAuth();
   const [transfers, setTransfers] = useState<TransferRecord[]>([]);
-  const [selectedTransfer, setSelectedTransfer] = useState<TransferRecord | null>(null);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [savingId, setSavingId] = useState<string | null>(null);
   const [error, setError] = useState("");
-  const [successMessage, setSuccessMessage] = useState("");
+  const [success, setSuccess] = useState("");
 
   const loadTransfers = useCallback(async () => {
+    if (!user?.prisonId) {
+      setTransfers([]);
+      setError("This account has no assigned prison, so its incoming transfer inbox cannot be loaded.");
+      setLoading(false);
+      return;
+    }
     try {
-      setTransfers(await transferService.getTransfers());
+      const records = await transferService.getTransfers({ prisonId: user.prisonId });
+      setTransfers(records.filter((record) => record.destinationPrisonId === user.prisonId));
       setError("");
     } catch (reason: unknown) {
       setError(messageFrom(reason));
-      throw reason;
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [user?.prisonId]);
 
   useEffect(() => {
-    let active = true;
-    transferService.getTransfers()
-      .then((records) => {
-        if (!active) return;
-        setTransfers(records);
-        setError("");
-      })
-      .catch((reason: unknown) => {
-        if (active) setError(messageFrom(reason));
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
+    void loadTransfers();
+  }, [loadTransfers]);
 
-  async function createTransfer(payload: CreateTransferRequest) {
-    setSaving(true);
-    setError("");
-    setSuccessMessage("");
-    try {
-      const created = await transferService.createTransfer(payload);
-      setTransfers((current) => [created, ...current.filter((item) => item.id !== created.id)]);
-      setSuccessMessage("Transfer request created successfully.");
-    } finally {
-      setSaving(false);
-    }
-  }
+  const awaitingArrival = useMemo(
+    () => transfers.filter((transfer) => openStatuses.has(transfer.status)),
+    [transfers],
+  );
 
-  async function performAction(
-    action: () => Promise<TransferRecord>,
-    success: string,
-    refreshPlacement = false,
-  ) {
-    setSaving(true);
+  async function confirmReceipt(transfer: TransferRecord) {
+    setSavingId(transfer.id);
     setError("");
-    setSuccessMessage("");
+    setSuccess("");
     try {
-      const updatedTransfer = await action();
-      setTransfers((current) => [
-        updatedTransfer,
-        ...current.filter((item) => item.id !== updatedTransfer.id),
-      ]);
-      setSelectedTransfer(null);
-      setSuccessMessage(success);
-      try {
-        await loadTransfers();
-      } catch {
-        // The successful action is retained; loadTransfers displays the refresh error.
-      }
-      if (refreshPlacement) {
-        try {
-          const inmate = await inmateService.getInmate(updatedTransfer.inmateId);
-          const prison = inmate.prisonName || inmate.prisonId || "destination prison";
-          setSuccessMessage(
-            `${success} ${inmate.firstName} ${inmate.lastName}'s placement is now ${prison}, cell ${inmate.cellId || "not assigned"}.`,
-          );
-        } catch (reason: unknown) {
-          setError(
-            `The transfer was approved, but the inmate's placement could not be refreshed: ${messageFrom(reason)}`,
-          );
-        }
-      }
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function refreshTransfers() {
-    setError("");
-    try {
+      await transferService.receiveTransfer(transfer.id);
+      setSuccess(`${transfer.inmateName || "The inmate"} has been marked as received.`);
       await loadTransfers();
-    } catch {
-      // loadTransfers displays the API error in the page alert.
+    } catch (reason: unknown) {
+      setError(messageFrom(reason));
+    } finally {
+      setSavingId(null);
     }
   }
 
   return (
-    <Box className="transfer-workspace" sx={{ p: { xs: 2, md: 4 }, maxWidth: 1600, mx: "auto" }}>
+    <Box sx={{ p: { xs: 2, md: 4 }, maxWidth: 1500, mx: "auto" }}>
       <Stack spacing={3}>
-        <Box>
-          <Typography color="text.secondary" sx={{ mt: 1 }}>
-            Create and review transfer requests, and follow each request’s progress.
-          </Typography>
-        </Box>
+        {error && <Alert severity="error" action={<Button color="inherit" size="small" onClick={() => void loadTransfers()}>Retry</Button>}>{error}</Alert>}
+        {success && <Alert severity="success" onClose={() => setSuccess("")}>{success}</Alert>}
 
-        {error && (
-          <Alert
-            severity="error"
-            action={<Button color="inherit" size="small" onClick={() => void refreshTransfers()}>Retry</Button>}
-          >
-            {error}
-          </Alert>
-        )}
-        {successMessage && (
-          <Alert severity="success" onClose={() => setSuccessMessage("")}>
-            {successMessage}
-          </Alert>
-        )}
-
-        <TransferForm onSubmit={createTransfer} />
-
-        {loading ? (
-          <Typography role="status">Loading transfer records…</Typography>
-        ) : (
-          <TransferHistory
-            transfers={transfers}
-            onSelectTransfer={setSelectedTransfer}
-          />
-        )}
-
-        <TransferApproval
-          key={`${selectedTransfer?.id ?? ""}:${selectedTransfer?.destinationPrisonId ?? ""}:${selectedTransfer?.status ?? ""}`}
-          transfer={selectedTransfer}
-          saving={saving}
-          onApprove={(id, cellId) => performAction(
-            () => transferService.approveTransfer(id, cellId),
-            "Transfer approved and destination cell assigned.",
-            true,
+        <Paper variant="outlined" sx={{ overflow: "hidden", borderRadius: 2 }}>
+          <Box sx={{ p: 2.5, borderBottom: 1, borderColor: "divider", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 2 }}>
+            <Typography variant="h6" sx={{ fontWeight: 700 }}>Requested transfers</Typography>
+            <Chip color={awaitingArrival.length ? "warning" : "default"} label={`${awaitingArrival.length} awaiting completion`} />
+          </Box>
+          {loading ? (
+            <Box role="status" sx={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 1.5, p: 5 }}>
+              <CircularProgress size={20} />
+              <Typography color="text.secondary">Loading incoming transfers…</Typography>
+            </Box>
+          ) : (
+            <TableContainer sx={{ overflowX: "auto" }}>
+              <Table aria-label="Incoming transfers">
+                <TableHead>
+                  <TableRow sx={{ bgcolor: "#f6f9fc" }}>
+                    <TableCell>Inmate</TableCell>
+                    <TableCell>From</TableCell>
+                    <TableCell>Reason</TableCell>
+                    <TableCell>Requested on</TableCell>
+                    <TableCell>Status</TableCell>
+                    <TableCell align="right">Action</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {transfers.map((transfer) => (
+                    <TableRow hover key={transfer.id}>
+                      <TableCell sx={{ minWidth: 170, fontWeight: 650 }}>{transfer.inmateName || transfer.inmateId}</TableCell>
+                      <TableCell sx={{ minWidth: 150 }}>{transfer.sourcePrisonName || transfer.sourcePrisonId || "—"}</TableCell>
+                      <TableCell sx={{ minWidth: 190 }}>{transfer.reason || "—"}</TableCell>
+                      <TableCell sx={{ minWidth: 165 }}>{formatDate(transfer.requestedAt)}</TableCell>
+                      <TableCell><Chip size="small" label={transfer.status.replaceAll("_", " ")} color={statusColor[transfer.status]} /></TableCell>
+                      <TableCell align="right" sx={{ minWidth: 170 }}>
+                        {transfer.status === "IN_TRANSIT" ? (
+                          <Button size="small" variant="contained" disabled={savingId === transfer.id} onClick={() => void confirmReceipt(transfer)}>
+                            {savingId === transfer.id ? "Confirming…" : "Confirm receipt"}
+                          </Button>
+                        ) : transfer.status === "RECEIVED" ? (
+                          <Typography variant="caption" color="text.secondary">Received {formatDate(transfer.receivedAt || "")}</Typography>
+                        ) : (
+                          <Typography variant="caption" color="text.secondary">Awaiting movement</Typography>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {!transfers.length && (
+                    <TableRow><TableCell colSpan={6} align="center" sx={{ py: 6, color: "text.secondary" }}>
+                      No incoming transfers for this prison.
+                    </TableCell></TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </TableContainer>
           )}
-          onReject={(id) => performAction(
-            () => transferService.rejectTransfer(id),
-            "Transfer rejected.",
-          )}
-          onCancel={(id) => performAction(
-            () => transferService.cancelTransfer(id),
-            "Transfer cancelled.",
-          )}
-          onClose={() => setSelectedTransfer(null)}
-        />
+        </Paper>
       </Stack>
     </Box>
   );
