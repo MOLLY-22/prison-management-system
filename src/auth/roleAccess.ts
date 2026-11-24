@@ -3,7 +3,6 @@ export type Workspace =
   | "inmates"
   | "visitors"
   | "transfers"
-  | "duty-rosters"
   | "release"
   | "access"
   | "prisons"
@@ -19,7 +18,7 @@ export type RoleProfile = {
 };
 
 const allOperational: Workspace[] = [
-  "overview", "inmates", "visitors", "transfers", "duty-rosters", "release", "access", "prisons", "housing",
+  "overview", "inmates", "visitors", "transfers", "release", "access", "prisons", "housing",
 ];
 
 const profiles: Record<string, RoleProfile> = {
@@ -90,16 +89,16 @@ const profiles: Record<string, RoleProfile> = {
   "DUTY OFFICER": {
     label: "Facility operations",
     summary: "Coordinate daily facility activity, inmate movements, and visit operations.",
-    workspaces: ["overview", "inmates", "visitors", "transfers", "duty-rosters"],
-    primary: ["duty-rosters", "transfers", "visitors", "inmates"],
+    workspaces: ["overview", "inmates", "visitors", "transfers"],
+    primary: ["transfers", "visitors", "inmates"],
     canAdmit: false,
     canManagePrisons: false,
   },
   "OFFICER IN CHARGE": {
     label: "Facility leadership",
     summary: "Oversee facility custody operations, transfers, and release authorization.",
-    workspaces: ["overview", "inmates", "visitors", "transfers", "duty-rosters", "release", "prisons", "housing"],
-    primary: ["release", "transfers", "housing", "duty-rosters", "inmates"],
+    workspaces: ["overview", "inmates", "visitors", "transfers", "release", "prisons", "housing"],
+    primary: ["release", "transfers", "housing", "inmates"],
     canAdmit: false,
     canManagePrisons: true,
   },
@@ -128,11 +127,11 @@ export function getRoleProfile(role: string | null | undefined): RoleProfile {
     return profiles["SUPER ADMIN"];
   }
   return profiles[normalized] ?? {
-    label: "Staff workspace",
-    summary: "Your workspace is being prepared. Contact an administrator if you need a different role assignment.",
-    workspaces: ["overview"],
-    primary: [],
-    canAdmit: false,
-    canManagePrisons: false,
+    label: "Authorized officer",
+    summary: "Your role could not be matched to a staff profile. Available operational workspaces are shown below.",
+    workspaces: allOperational,
+    primary: ["inmates", "visitors", "transfers", "release", "access", "prisons"],
+    canAdmit: true,
+    canManagePrisons: true,
   };
 }

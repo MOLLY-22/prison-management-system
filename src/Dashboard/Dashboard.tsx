@@ -5,15 +5,14 @@ import { collectionFrom } from "../api/dataContract";
 import { InmateManagement } from "../pages/InmateManagement";
 import Visitors from "../pages/Visitors";
 import UserAccess from "../pages/UserAccess";
-import TransferManagement from "../pages/TransferManagement";
+import TransferAnalytics from "../pages/TransferAnalytics";
 import { PrisonRegistry } from "../pages/PrisonRegistry";
 import { prisonService } from "../api/prisonService";
 import ReleaseManagement from "../pages/ReleaseManagement";
-import DutyRosters from "../pages/DutyRosters";
 import { getRoleProfile, normalizeRole, type Workspace } from "../auth/roleAccess";
 
 
-type View = Workspace | "profile" | "admission" | "sentences";
+type View = Exclude<Workspace, "transfers"> | "profile" | "admission" | "sentences" | "transfer-analytics";
 type RecordItem = Record<string, string | number | boolean | null>;
 
 const navigation: { id: View; label: string; short: string }[] = [
@@ -21,8 +20,7 @@ const navigation: { id: View; label: string; short: string }[] = [
   { id: "inmates", label: "Inmates", short: "people" },
   { id: "housing", label: "Housing & cells", short: "building" },
   { id: "visitors", label: "Visits", short: "visit" },
-  { id: "transfers", label: "Transfers", short: "arrows" },
-  { id: "duty-rosters", label: "Duty rosters", short: "file" },
+  { id: "transfer-analytics", label: "Transfer Analytics", short: "chart" },
   { id: "release", label: "Release & discharge", short: "exit" },
   { id: "access", label: "User Management", short: "shield" },
   { id: "prisons", label: "Prison registry", short: "building" },
@@ -36,6 +34,7 @@ function NavigationIcon({ name }: { name: string }) {
     file: <><path d="M7 3.5h7l4 4V20H7z"/><path d="M14 3.5V8h4M10 12h5M10 16h5"/></>,
     visit: <><path d="M3 12s3.2-5 9-5 9 5 9 5-3.2 5-9 5-9-5-9-5Z"/><circle cx="12" cy="12" r="2.2"/></>,
     arrows: <><path d="M4 8h14m-4-4 4 4-4 4M20 16H6m4 4-4-4 4-4"/></>,
+    chart: <><path d="M4 20V4M4 20h17"/><path d="m7 15 4-4 3 2 6-7"/></>,
     exit: <><path d="M13 4h6v16h-6M10 8l4 4-4 4M14 12H3"/></>,
     shield: <><path d="m12 3 7 3v5c0 4.5-2.8 8-7 10-4.2-2-7-5.5-7-10V6z"/><path d="m9 12 2 2 4-4"/></>,
     building: <><path d="M4 20V5l8-2v17M12 8h8v12M2 20h20M7 8v.01M7 12v.01M7 16v.01M16 12v.01M16 16v.01"/></>,
@@ -46,7 +45,6 @@ function NavigationIcon({ name }: { name: string }) {
 const endpointFor: Partial<Record<View, string>> = {
   inmates: "/inmates",
   visitors: "/visits",
-  transfers: "/transfers",
   // release: "/releases",
   access: "/users",
   prisons : "/prisons"
@@ -215,14 +213,14 @@ function Overview({ onNavigate, role, navigationItems }: { onNavigate: (view: Vi
   const cardDetails: Record<string, { label: string; note: string }> = {
     inmates: { label: "Inmate records", note: profile.canAdmit ? "Custody records and new admissions" : "Assigned custody and inmate records" },
     visitors: { label: "Visit operations", note: "Appointments and gate activity" },
-    transfers: { label: "Transfers", note: "Movement requests and coordination" },
-    "duty-rosters": { label: "Duty rosters", note: "Officer shifts and published schedules" },
+    "transfer-analytics": { label: "Transfer Analytics", note: "Transfer volumes and request details" },
     release: { label: "Release & discharge", note: "Eligibility, clearance, and authorization" },
     access: { label: "User management", note: "Personnel accounts and role assignments" },
     prisons: { label: "Prison registry", note: "Facility and block information" },
     housing: { label: "Housing & cells", note: "Blocks, cells, and occupancy" },
   };
   const cards = profile.primary
+    .map((id): View => id === "transfers" ? "transfer-analytics" : id)
     .filter((id) => navigationItems.some((item) => item.id === id))
     .map((id) => ({ id, ...cardDetails[id] }));
   return (
@@ -270,17 +268,15 @@ function ModuleView({ view, onNavigate, userRole, userPrisonId }: { view: View; 
   const roleProfile = getRoleProfile(userRole);
   switch (view) {
     case "inmates": case "profile": case "admission": case "sentences":
-      return <InmateManagement canAdmit={roleProfile.canAdmit} userRole={userRole} section={view === "admission" ? "admission" : "overview"} onBack={() => onNavigate("inmates")} />;
+      return <InmateManagement canAdmit={roleProfile.canAdmit} userRole={userRole} section={view === "admission" ? "admission" : view === "sentences" ? "profile-sentences" : "overview"} onBack={() => onNavigate("inmates")} />;
     case "visitors":
       return <Visitors />;
     case "release":
       return <ReleaseManagement />;
     case "access":
       return <UserAccess />;
-    case "transfers":
-      return <TransferManagement />;
-    case "duty-rosters":
-      return <DutyRosters />;
+    case "transfer-analytics":
+      return <TransferAnalytics />;
     case "prisons":
       return <PrisonRegistry key="prisons" canManage={roleProfile.canManagePrisons} />;
     case "housing":
@@ -294,7 +290,11 @@ export default function Dashboard() {
   const { user, logout , authError} = useAuth();
   const roleProfile = getRoleProfile(user?.role);
   const [assignedPrison, setAssignedPrison] = useState<{ name: string; location: string | null } | null>(null);
-  const visibleNavigation = navigation.filter((item) => roleProfile.workspaces.includes(item.id as Workspace));
+  const visibleNavigation = navigation.filter((item) =>
+    item.id === "transfer-analytics"
+      ? roleProfile.workspaces.includes("transfers")
+      : roleProfile.workspaces.includes(item.id as Workspace),
+  );
   const [view, setView] = useState<View>("overview");
   const active = navigation.find((item) => item.id === view) ?? navigation[0];
 

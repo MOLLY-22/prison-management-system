@@ -1,4 +1,7 @@
 import api from "./axiosClient";
+import { resolveCellAvailability } from "../utils/cellAvailability";
+
+export type StationGender = "MALE" | "FEMALE";
 
 
 export type Cell = {
@@ -8,24 +11,35 @@ export type Block = {
   id: string; name: string; cells: Cell[]
 }
 export type PrisonSummary = {
-  id: string; name: string; location: string | null; active: boolean
+  id: string; name: string; location: string | null; active: boolean; gender: StationGender | null
 }
 export type PrisonDetail = PrisonSummary & { blocks: Block[] }
 export type CellInput = { cellNumber: number; capacity: number }
 export type BlockInput = { name: string; cells: CellInput[] }
-export type PrisonInput = { name: string; location?: string; blocks: BlockInput[] }
+export type PrisonInput = { name: string; location?: string; gender: StationGender; blocks: BlockInput[] }
 export type PrisonPage = { records: PrisonSummary[]; totalPages: number; totalElements: number }
 export type ActiveFilter = 'all' | 'active' | 'inactive'
 
 export const PAGE_SIZE = 20
 
 type Page<T> = { content: T[]; page: number; size: number; totalElements: number; totalPages: number }
-type ApiCell = { id: string; cellNumber?: number; capacity?: number; currentOccupancy?: number; availableSpaces?: number }
+type ApiCell = { id: string; cellNumber?: number; cell_number?: number; capacity?: number; currentOccupancy?: number; current_occupancy?: number; availableSpaces?: number; available_spaces?: number }
 type ApiBlock = { id: string; name: string; cells?: ApiCell[] }
-type ApiPrison = { id: string; name: string; location?: string | null; active?: boolean; blocks?: ApiBlock[] }
+type ApiPrison = { id: string; name: string; location?: string | null; active?: boolean; gender?: string | null; stationGender?: string | null; station_gender?: string | null; blocks?: ApiBlock[] }
 
 
-const toSummary = (raw: ApiPrison): PrisonSummary => ({ id: raw.id, name: raw.name, location: raw.location ?? null, active: raw.active ?? true })
+const normalizeGender = (value?: string | null): StationGender | null => {
+  const gender = value?.trim().toUpperCase();
+  return gender === "MALE" || gender === "FEMALE" ? gender : null;
+};
+
+const toSummary = (raw: ApiPrison): PrisonSummary => ({
+  id: raw.id,
+  name: raw.name,
+  location: raw.location ?? null,
+  active: raw.active ?? true,
+  gender: normalizeGender(raw.gender ?? raw.stationGender ?? raw.station_gender),
+});
 
 const toDetail = (raw: ApiPrison): PrisonDetail => ({
   ...toSummary(raw),
@@ -34,8 +48,9 @@ const toDetail = (raw: ApiPrison): PrisonDetail => ({
     name: block.name,
     cells: (block.cells ?? []).map((cell) => {
       const capacity = cell.capacity ?? 0
-      const occupied = cell.currentOccupancy ?? 0
-      return { id: cell.id, cellNumber: cell.cellNumber ?? 0, capacity, currentOccupancy: occupied, availableSpaces: cell.availableSpaces ?? Math.max(capacity - occupied, 0) }
+      const occupied = cell.currentOccupancy ?? cell.current_occupancy ?? 0
+      const reportedAvailable = cell.availableSpaces ?? cell.available_spaces
+      return { id: cell.id, cellNumber: cell.cellNumber ?? cell.cell_number ?? 0, capacity, currentOccupancy: occupied, availableSpaces: resolveCellAvailability(capacity, occupied, reportedAvailable) }
     }),
   })),
 })
@@ -63,7 +78,7 @@ export const prisonService = {
     await api.post('/prisons', payload)
   },
 
-  updatePrison: async (id: string, payload: { name: string; location?: string }) => {
+  updatePrison: async (id: string, payload: { name: string; location?: string; gender: StationGender }) => {
     await api.patch(`/prisons/${id}`, payload)
   },
 

@@ -104,7 +104,7 @@ function normalizeUser(payload: unknown): User {
         : asBoolean(firstValue(record, ["active", "isActive", "is_active"], true), true);
     const prisonName = String(firstValue(
         record,
-        ["prisonName", "prison_name"],
+        ["prisonName", "prison_name", "facilityName", "facility_name"],
         typeof facility === "string" ? facility : firstValue(prison, ["name"], ""),
     ));
 
@@ -117,7 +117,11 @@ function normalizeUser(payload: unknown): User {
         username,
         badgeId,
         facility: prisonName,
-        prisonId: firstValue(record, ["prisonId", "prison_id"], null) as string | null,
+        prisonId: firstValue(
+            record,
+            ["prisonId", "prison_id", "facilityId", "facility_id"],
+            firstValue(prison, ["id", "prisonId", "prison_id"], null),
+        ) as string | null,
         prisonName,
         createdAt: firstValue(record, ["createdAt", "created_at"], undefined) as string | undefined,
         updatedAt: firstValue(record, ["updatedAt", "updated_at"], undefined) as string | undefined,

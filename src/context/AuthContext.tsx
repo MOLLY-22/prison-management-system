@@ -74,6 +74,20 @@ function readStoredUser(): AuthUser | null {
     }
 }
 
+function readCurrentUser(): AuthUser | null {
+    const storedUser = readStoredUser();
+    const token = readStoredToken();
+    const tokenUser = token ? authService.userFromToken(token) : null;
+    if (!storedUser) return tokenUser;
+    if (!tokenUser) return storedUser;
+    return {
+        ...storedUser,
+        role: tokenUser.role,
+        prisonId: tokenUser.prisonId ?? storedUser.prisonId,
+        prisonName: tokenUser.prisonName ?? storedUser.prisonName,
+    };
+}
+
 function clearStoredSession() {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
@@ -89,7 +103,7 @@ function storeUser(storage: Storage, user: AuthUser) {
 
 export function AuthProvider({ children }: PropsWithChildren) {
     const [token, setToken] = useState(readStoredToken);
-    const [user, setUser] = useState(readStoredUser);
+    const [user, setUser] = useState(readCurrentUser);
     const [loading, setLoading] = useState(false);
     const [isInitializing, setIsInitializing] = useState(() => Boolean(readStoredToken()));
     const [authError, setAuthError] = useState("");

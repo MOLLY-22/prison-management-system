@@ -1,9 +1,9 @@
 import axios from "axios";
 
 const api = axios.create({
-    // Use Vite's same-origin proxy in development so the browser doesn't need
-    // direct access to the backend host. Deployments can provide their API URL.
-    baseURL: import.meta.env.VITE_API_URL || "/api/v1",
+    baseURL: import.meta.env.DEV
+        ? "/api/v1"
+        : import.meta.env.VITE_API_BASE_URL || "/api/v1",
     timeout: 10000,
     headers: {
         Accept: "application/json",
