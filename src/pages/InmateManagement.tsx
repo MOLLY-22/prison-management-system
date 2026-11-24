@@ -213,7 +213,10 @@ export function InmateManagement({ canAdmit, userRole, section, onBack }: Props)
     if (!pendingSentence) return;
     setRetryingSentence(true);
     try {
-      await api.post("/sentences", pendingSentence.payload);
+      const payload = { ...pendingSentence.payload };
+      // Life and undetermined sentences have no fixed end date in the API contract.
+      if (payload.sentenceType !== "FIXED_TERM") delete payload.endDate;
+      await api.post("/sentences", payload);
       setNotice(`Sentence recorded for ${pendingSentence.inmate}.`);
       setPendingSentence(null);
     } catch (error) {
@@ -242,6 +245,14 @@ export function InmateManagement({ canAdmit, userRole, section, onBack }: Props)
     ].filter(([, value]) => !value).map(([field]) => field);
     if (missingFields.length) {
       setAdmissionError(`Complete the following required fields: ${missingFields.join(", ")}.`);
+      return;
+    }
+    const invalidEmailField = [
+      ["next of kin email", admission.nextOfKinEmail],
+      ["inmate contact email", admission.contactEmail],
+    ].find(([, value]) => value && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim()));
+    if (invalidEmailField) {
+      setAdmissionError(`Enter a valid ${invalidEmailField[0]} address, or leave it blank.`);
       return;
     }
     const offenceText = [admission.offense === "Other" ? admission.offenseOther.trim() : admission.offense.trim(), admission.crimeDescription.trim()].filter(Boolean).join(" — ");
@@ -281,12 +292,44 @@ export function InmateManagement({ canAdmit, userRole, section, onBack }: Props)
     setAdmissionError(null);
     setNotice(null);
     try {
-      const created = admissionPhotos.length
-        ? await inmateService.createInmateWithPhoto(request, admissionPhotos)
-        : await inmateService.createInmate(request);
-      let sentenceWarning = "";
+      let created: ApiInmate;
+      let photoWarning = "";
+      if (admissionPhotos.length) {
+        try {
+          created = await inmateService.createInmateWithPhoto(request, admissionPhotos);
+        } catch (photoError) {
+          const message = axios.isAxiosError(photoError) && photoError.response?.data && typeof photoError.response.data === "object" && "message" in photoError.response.data
+            ? String(photoError.response.data.message)
+            : "";
+          if (!message.toLowerCase().includes("photo storage") || !message.toLowerCase().includes("unavailable")) throw photoError;
+
+          // Multipart admission can fail after the inmate row was saved. Check the census
+          // before retrying without photos so an uncertain response cannot create a duplicate.
+          let existing: Inmate[];
+          try {
+            existing = await inmateService.getInmates({ size: 100 });
+          } catch {
+            throw new Error("Photo storage is unavailable and the save result could not be checked. Check the inmate directory before retrying.");
+          }
+          const matchingInmate = existing.find((item) =>
+            item.firstName.trim().toLocaleLowerCase() === request.firstName.toLocaleLowerCase() &&
+            item.lastName.trim().toLocaleLowerCase() === request.lastName.toLocaleLowerCase() &&
+            item.dateOfBirth === request.dateOfBirth && item.admissionDate === request.admissionDate,
+          );
+          if (matchingInmate) {
+            created = matchingInmate;
+            photoWarning = " The inmate was saved, but photo storage is unavailable, so the photo was not saved.";
+          } else {
+            created = await inmateService.createInmate(request);
+            photoWarning = " The inmate was saved without the selected photo because photo storage is unavailable.";
+          }
+        }
+      } else {
+        created = await inmateService.createInmate(request);
+      }
+      let sentenceWarning = photoWarning;
       if (admission.custodyType === "Sentenced" && created.id) {
-        const sentencePayload = { inmateId: created.id, offence: offenceText, sentenceType: admission.sentenceType, startDate: admission.sentenceStartDate, ...(admission.sentenceEndDate ? { endDate: admission.sentenceEndDate } : {}) };
+        const sentencePayload = { inmateId: created.id, offence: offenceText, sentenceType: admission.sentenceType, startDate: admission.sentenceStartDate, ...(admission.sentenceType === "FIXED_TERM" && admission.sentenceEndDate ? { endDate: admission.sentenceEndDate } : {}) };
         try {
           await api.post("/sentences", sentencePayload);
         } catch (error) {
@@ -342,7 +385,7 @@ export function InmateManagement({ canAdmit, userRole, section, onBack }: Props)
       setSavingAdmission(false);
     }
   };
-  if (selectedInmateId && section === "overview") return <InmateProfile inmateId={selectedInmateId} userRole={userRole} initialTab="Transfers" onBack={() => setSelectedInmateId(null)} />;
+  if (selectedInmateId && section === "overview") return <InmateProfile inmateId={selectedInmateId} userRole={userRole} initialTab="Overview" onBack={() => setSelectedInmateId(null)} />;
   if (section === "profile-sentences") return <SentenceInmatePicker records={records} loading={loading} error={censusLoadError ? notice : ""} onRetry={() => void loadInmates()} onSelect={setSelectedInmateId} />;
   return (
     <Box className="census-page">
@@ -540,7 +583,7 @@ export function InmateManagement({ canAdmit, userRole, section, onBack }: Props)
                 onChange={(event) => setAdmission({ ...admission, sentenceStartDate: event.target.value })}
                 slotProps={{ inputLabel: { shrink: true } }}
               />}
-              {admission.custodyType === "Sentenced" && <TextField
+              {admission.custodyType === "Sentenced" && admission.sentenceType === "FIXED_TERM" && <TextField
                 label="Sentence end date (optional)"
                 type="date"
                 value={admission.sentenceEndDate}
