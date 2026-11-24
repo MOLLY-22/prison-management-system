@@ -42,6 +42,8 @@ export function collectionFrom<T = unknown>(payload: unknown): T[] {
         "results",
         "visitors",
         "visits",
+        "medicalVisits",
+        "medical_visits",
         "inmates",
         "users",
         "transfers",

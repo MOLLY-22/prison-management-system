@@ -2,12 +2,13 @@ import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import api from "../api/axiosClient";
 import { collectionFrom } from "../api/dataContract";
+import VisitorAnalytics from "../pages/VisitorAnalytics";
 import { InmateManagement } from "../pages/InmateManagement";
-import Visitors from "../pages/Visitors";
 import ReleaseManagement from "../pages/ReleaseManagement";
 import UserAccess from "../pages/UserAccess";
 import TransferManagement from "../pages/TransferManagement";
 import { PrisonRegistry } from "../features/prisons/PrisonRegistry";
+import MedicalVisits from "../pages/MedicalVisits";
 
 
 type View =
@@ -20,7 +21,8 @@ type View =
   | "transfers"
   | "release"
   | "access"
-  | "prisons";
+  | "prisons"
+  | "medical";
 type RecordItem = Record<string, string | number | boolean | null>;
 
 const navigation: { id: View; label: string; short: string }[] = [
@@ -34,6 +36,7 @@ const navigation: { id: View; label: string; short: string }[] = [
   { id: "release", label: "Release & discharge", short: "exit" },
   { id: "access", label: "User Management", short: "shield" },
   { id: "prisons", label: "Prison registry", short: "building" },
+  { id: "medical", label: "Medical history", short: "medical" },
 ];
 
 function NavigationIcon({ name }: { name: string }) {
@@ -47,6 +50,7 @@ function NavigationIcon({ name }: { name: string }) {
     exit: <><path d="M13 4h6v16h-6M10 8l4 4-4 4M14 12H3"/></>,
     shield: <><path d="m12 3 7 3v5c0 4.5-2.8 8-7 10-4.2-2-7-5.5-7-10V6z"/><path d="m9 12 2 2 4-4"/></>,
     building: <><path d="M4 20V5l8-2v17M12 8h8v12M2 20h20M7 8v.01M7 12v.01M7 16v.01M16 12v.01M16 16v.01"/></>,
+    medical: <><path d="M12 3v18M3 12h18"/><circle cx="12" cy="12" r="9"/></>,
   };
   return <svg aria-hidden="true" className="size-[18px] shrink-0" viewBox="0 0 24 24" {...common}>{icons[name] ?? icons.file}</svg>;
 }
@@ -287,7 +291,7 @@ function ModuleView({ view, onNavigate }: { view: View; onNavigate: (view: View)
     case "inmates": case "profile": case "admission": case "sentences":
       return <InmateManagement canAdmit userRole="RECORDS OFFICER" section={view === "inmates" ? "overview" : view === "profile" ? "profile" : view === "admission" ? "admission" : "profile-sentences"} onBack={() => onNavigate(view === "admission" ? "inmates" : view)} />;
     case "visitors":
-      return <Visitors />;
+      return <VisitorAnalytics />;
     case "release":
       return <ReleaseManagement />;
     case "access":
@@ -296,15 +300,23 @@ function ModuleView({ view, onNavigate }: { view: View; onNavigate: (view: View)
       return <TransferManagement />;
     case "prisons":
       return <PrisonRegistry canManage />;
+    case "medical":
+      return <MedicalVisits />;
     case "overview":
       return null;
   }
 }
 
 export default function Dashboard() {
-  const { user, logout , authError} = useAuth();
+  const { user, logout, authError, isAuthenticated } = useAuth();
   const visibleNavigation = navigation;
-  const [view, setView] = useState<View>("overview");
+  const [view, setView] = useState<View>(() =>
+    import.meta.env.DEV &&
+    ["localhost", "127.0.0.1"].includes(window.location.hostname) &&
+    new URLSearchParams(window.location.search).get("preview") === "visitors"
+      ? "visitors"
+      : "overview",
+  );
   const [inmatesOpen, setInmatesOpen] = useState(true);
   const inmateViews: View[] = ["inmates", "profile", "admission", "sentences", "transfers", "visitors"];
   const active = navigation.find((item) => item.id === view) ?? navigation[0];
@@ -363,7 +375,7 @@ export default function Dashboard() {
           <div className="flex items-center gap-3 rounded-lg px-2 py-2">
             <span className="grid size-9 shrink-0 place-items-center rounded-full bg-[#26364e] text-xs font-bold text-[#d9e7f5]">{(user?.name ?? "A").slice(0, 1).toUpperCase()}</span>
             <div className="min-w-0 flex-1"><p className="truncate text-xs font-semibold text-white">{user?.name ?? "Administrator"}</p><p className="truncate text-[10px] text-slate-400">{user?.role ?? "Prototype"}</p></div>
-            {user && <button onClick={() => void logout()} className="rounded-md px-2 py-1.5 text-[11px] font-medium text-slate-400 hover:bg-white/10 hover:text-white">Sign out</button>}
+            {isAuthenticated && <button onClick={() => void logout()} className="rounded-md px-2 py-1.5 text-[11px] font-medium text-slate-400 hover:bg-white/10 hover:text-white">Sign out</button>}
           </div>
         </div>
       </aside>
@@ -383,7 +395,7 @@ export default function Dashboard() {
                 {user?.role ?? "Authorized officer"}
               </p>
             </div>
-            {user && <button
+            {isAuthenticated && <button
               onClick={() => void logout()}
               className="rounded-[4px] border border-[#d5dee7] bg-white px-3 py-2 text-[11px] font-extrabold text-[#587087] transition hover:border-[#7fa9c3] hover:text-[#1d5f86]"
             >

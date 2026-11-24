@@ -82,7 +82,6 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
     
     const login = async (credentials: LoginCredentials): Promise<AuthResponse> => {
-        console.log("Logging in with credentials:", credentials);
         setLoading(true);
         setAuthError("");
 

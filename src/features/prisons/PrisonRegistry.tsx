@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Alert, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, MenuItem, Paper, Select, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Typography } from '@mui/material'
-import { PAGE_SIZE, addBlock, createPrison, errorMessage, fetchPrison, fetchPrisons, updateBlock, updatePrison, type ActiveFilter, type Block, type BlockInput, type CellInput, type PrisonDetail, type PrisonInput, type PrisonSummary } from './api'
+import { PAGE_SIZE, addBlock, createPrison, errorMessage, fetchPrison, fetchPrisons, updateBlock, updatePrison, type ActiveFilter, type Block, type BlockInput, type CellInput, type PrisonDetail, type PrisonInput, type PrisonSummary, type StationGender } from './api'
 import '../../pages/admissionDialog.css'
 import './prisonRegistry.css'
 
@@ -51,6 +51,7 @@ function CellRows({ cells, onChange, takenNumbers = [] }: { cells: CellDraft[]; 
 
 function CreatePrisonDialog({ onClose, onSubmit }: { onClose: () => void; onSubmit: (payload: PrisonInput) => Promise<void> }) {
   const [name, setName] = useState(''); const [location, setLocation] = useState('')
+  const [gender, setGender] = useState<StationGender>('MALE')
   const [blocks, setBlocks] = useState<BlockDraft[]>([newBlock('A')])
   const [error, setError] = useState<string | null>(null); const [busy, setBusy] = useState(false)
   const setBlock = (index: number, block: BlockDraft) => setBlocks((current) => current.map((item, i) => (i === index ? block : item)))
@@ -70,15 +71,15 @@ function CreatePrisonDialog({ onClose, onSubmit }: { onClose: () => void; onSubm
     }
     setBusy(true); setError(null)
     try {
-      await onSubmit({ name: name.trim(), ...(location.trim() ? { location: location.trim() } : {}), blocks: blocks.map((block) => ({ name: block.name.trim(), cells: toCells(block.cells) })) })
+      await onSubmit({ name: name.trim(), ...(location.trim() ? { location: location.trim() } : {}), gender, blocks: blocks.map((block) => ({ name: block.name.trim(), cells: toCells(block.cells) })) })
     } catch (failure) { setError(errorMessage(failure, 'Failed to register the prison.')); setBusy(false) }
   }
 
   return <Dialog className="admission-dialog" open onClose={busy ? undefined : onClose} fullWidth maxWidth="md">
-    <DialogTitle className="admission-dialog-title"><Box><Typography component="h2">Register prison</Typography><Typography>Create the prison with its first blocks and cells.</Typography></Box><span>Required fields *</span></DialogTitle>
+    <DialogTitle className="admission-dialog-title"><Box><Typography component="h2">Register station</Typography><Typography>Create the station with its first blocks and cells.</Typography></Box><span>Required fields *</span></DialogTitle>
     <DialogContent className="admission-dialog-content">
       {error && <Alert severity="error">{error}</Alert>}
-      <Box component="fieldset" className="admission-section"><legend>Prison</legend><Box className="admission-fields"><TextField required label="Prison name" value={name} onChange={(event) => setName(event.target.value)} /><TextField label="Location" value={location} onChange={(event) => setLocation(event.target.value)} /></Box></Box>
+      <Box component="fieldset" className="admission-section"><legend>Station</legend><Box className="admission-fields"><TextField required label="Station name" value={name} onChange={(event) => setName(event.target.value)} /><TextField label="Location" value={location} onChange={(event) => setLocation(event.target.value)} /><TextField select required label="Station category" value={gender} onChange={(event) => setGender(event.target.value as StationGender)}><MenuItem value="MALE">Male</MenuItem><MenuItem value="FEMALE">Female</MenuItem></TextField></Box></Box>
       <Box component="fieldset" className="admission-section"><legend>Blocks &amp; cells</legend>
         <Box className="block-editors">
           {blocks.map((block, index) => <Box className="block-editor" key={index}>
@@ -89,24 +90,25 @@ function CreatePrisonDialog({ onClose, onSubmit }: { onClose: () => void; onSubm
         </Box>
       </Box>
     </DialogContent>
-    <DialogActions className="admission-dialog-actions"><Button onClick={onClose} disabled={busy}>Cancel</Button><Button variant="contained" onClick={submit} disabled={busy}>Register prison</Button></DialogActions>
+    <DialogActions className="admission-dialog-actions"><Button onClick={onClose} disabled={busy}>Cancel</Button><Button variant="contained" onClick={submit} disabled={busy}>Register station</Button></DialogActions>
   </Dialog>
 }
 
-function EditPrisonDialog({ prison, onClose, onSubmit }: { prison: PrisonDetail; onClose: () => void; onSubmit: (payload: { name: string; location?: string }) => Promise<void> }) {
+function EditPrisonDialog({ prison, onClose, onSubmit }: { prison: PrisonDetail; onClose: () => void; onSubmit: (payload: { name: string; location?: string; gender: StationGender }) => Promise<void> }) {
   const [name, setName] = useState(prison.name); const [location, setLocation] = useState(prison.location ?? '')
+  const [gender, setGender] = useState<StationGender>(prison.gender)
   const [error, setError] = useState<string | null>(null); const [busy, setBusy] = useState(false)
   const submit = async () => {
     if (!name.trim()) return setError('Enter the prison name.')
     if (name.trim().length > 160) return setError('The prison name can be at most 160 characters.')
     if (location.trim().length > 255) return setError('The location can be at most 255 characters.')
     setBusy(true); setError(null)
-    try { await onSubmit({ name: name.trim(), ...(location.trim() ? { location: location.trim() } : {}) }) } catch (failure) { setError(errorMessage(failure, 'Failed to update the prison.')); setBusy(false) }
+    try { await onSubmit({ name: name.trim(), ...(location.trim() ? { location: location.trim() } : {}), gender }) } catch (failure) { setError(errorMessage(failure, 'Failed to update the station.')); setBusy(false) }
   }
   return <Dialog className="admission-dialog" open onClose={busy ? undefined : onClose} fullWidth maxWidth="sm">
-    <DialogTitle className="admission-dialog-title"><Box><Typography component="h2">Edit prison</Typography><Typography>Blocks and cells are managed separately.</Typography></Box><span>Required fields *</span></DialogTitle>
+    <DialogTitle className="admission-dialog-title"><Box><Typography component="h2">Edit station</Typography><Typography>Blocks and cells are managed separately.</Typography></Box><span>Required fields *</span></DialogTitle>
     <DialogContent className="admission-dialog-content">{error && <Alert severity="error">{error}</Alert>}
-      <Box component="fieldset" className="admission-section"><legend>Details</legend><Box className="admission-fields"><TextField required label="Prison name" value={name} onChange={(event) => setName(event.target.value)} /><TextField label="Location" value={location} onChange={(event) => setLocation(event.target.value)} /></Box></Box>
+      <Box component="fieldset" className="admission-section"><legend>Details</legend><Box className="admission-fields"><TextField required label="Station name" value={name} onChange={(event) => setName(event.target.value)} /><TextField label="Location" value={location} onChange={(event) => setLocation(event.target.value)} /><TextField select required label="Station category" value={gender} onChange={(event) => setGender(event.target.value as StationGender)}><MenuItem value="MALE">Male</MenuItem><MenuItem value="FEMALE">Female</MenuItem></TextField></Box></Box>
     </DialogContent>
     <DialogActions className="admission-dialog-actions"><Button onClick={onClose} disabled={busy}>Cancel</Button><Button variant="contained" onClick={submit} disabled={busy}>Save changes</Button></DialogActions>
   </Dialog>
@@ -179,7 +181,7 @@ export function PrisonRegistry({ canManage }: Props) {
   const backToList = () => { setSelectedId(null); setPrison(null); setError(null); reloadList() }
 
   const handleCreate = async (payload: PrisonInput) => { await createPrison(payload); setModal(null); setNotice(`${payload.name} has been registered.`); setPageIndex(0); reloadList() }
-  const handleEditPrison = async (payload: { name: string; location?: string }) => { if (!prison) return; await updatePrison(prison.id, payload); setModal(null); setNotice('Prison details updated.'); reloadDetail() }
+  const handleEditPrison = async (payload: { name: string; location?: string; gender: StationGender }) => { if (!prison) return; await updatePrison(prison.id, payload); setModal(null); setNotice('Station details updated.'); reloadDetail() }
   const handleAddBlock = async (input: { name: string; cells: CellInput[] }) => { if (!prison) return; await addBlock(prison.id, input as BlockInput); setModal(null); setNotice(`Block ${input.name} has been added.`); reloadDetail() }
   const handleEditBlock = async (blockId: string, input: { name: string; cells: CellInput[] }) => {
     if (!prison) return
@@ -203,9 +205,9 @@ export function PrisonRegistry({ canManage }: Props) {
     return <Box className="census-page">
       {banners}
       <Button className="back-button" onClick={backToList}>← Back to prison registry</Button>
-      <Box className="portal-heading"><Typography className="crumb">Operations / Prison registry</Typography>
-        <Box className="portal-title-row"><Box><Typography component="h1">{prison.name}</Typography><Typography>{prison.location || 'No location recorded'}</Typography></Box>
-          {canManage && <Stack direction="row" gap={1}><Button className="workflow-button" onClick={() => setModal({ kind: 'add-block' })}>Add block</Button><Button className="export-button" onClick={() => setModal({ kind: 'edit-prison' })}>Edit prison</Button></Stack>}
+      <Box className="portal-heading"><Typography className="crumb">Operations / Station registry</Typography>
+        <Box className="portal-title-row"><Box><Typography component="h1">{prison.name}</Typography><Typography>{prison.gender === 'FEMALE' ? 'Female' : 'Male'} station · {prison.location || 'No location recorded'}</Typography></Box>
+          {canManage && <Stack direction="row" spacing={1}><Button className="workflow-button" onClick={() => setModal({ kind: 'add-block' })}>Add block</Button><Button className="export-button" onClick={() => setModal({ kind: 'edit-prison' })}>Edit station</Button></Stack>}
         </Box>
       </Box>
       <Box className="census-metrics prison-metrics"><Metric label="Blocks" value={String(prison.blocks.length)} note="In this prison" /><Metric label="Cells" value={String(cells.length)} note="Across all blocks" /><Metric label="Capacity" value={String(capacity)} note="Total beds" /><Metric label="Occupied" value={String(occupied)} note={`${Math.max(capacity - occupied, 0)} spaces available`} /></Box>
@@ -224,9 +226,9 @@ export function PrisonRegistry({ canManage }: Props) {
 
   const listView = () => <Box className="census-page">
     {banners}
-    <Box className="portal-heading"><Typography className="crumb">Operations / Prison registry</Typography>
-      <Box className="portal-title-row"><Box><Typography component="h1">Prison registry</Typography><Typography>Register prisons and manage their blocks and cells.</Typography></Box>
-        {canManage && <Stack direction="row" gap={1}><Button className="workflow-button" onClick={() => setModal({ kind: 'create' })}>Register prison</Button></Stack>}
+    <Box className="portal-heading"><Typography className="crumb">Operations / Station registry</Typography>
+      <Box className="portal-title-row"><Box><Typography component="h1">Station registry</Typography><Typography>Configure station category and manage blocks, cells, and capacity.</Typography></Box>
+        {canManage && <Stack direction="row" spacing={1}><Button className="workflow-button" onClick={() => setModal({ kind: 'create' })}>Register station</Button></Stack>}
       </Box>
     </Box>
     <Box className="census-metrics"><Metric label="Registered prisons" value={total.toLocaleString()} note="Matching the current filters" /></Box>
@@ -237,8 +239,8 @@ export function PrisonRegistry({ canManage }: Props) {
     </Paper>
     <Paper className="directory" elevation={0}>
       <Box className="directory-title"><Box><Typography component="h2">Prison directory</Typography><Typography>{total} prison{total === 1 ? '' : 's'} found</Typography></Box></Box>
-      <TableContainer><Table className="census-table"><TableHead><TableRow><TableCell>Name</TableCell><TableCell>Location</TableCell><TableCell>Status</TableCell><TableCell>Actions</TableCell></TableRow></TableHead>
-        <TableBody>{records.map((record) => <TableRow key={record.id}><TableCell className="full-name">{record.name}</TableCell><TableCell>{record.location || '—'}</TableCell><TableCell><Chip className={`custody ${record.active ? 'active-sentence' : ''}`} label={`• ${record.active ? 'Active' : 'Inactive'}`} /></TableCell><TableCell><Button size="small" onClick={() => openPrison(record.id)}>View layout</Button></TableCell></TableRow>)}</TableBody></Table></TableContainer>
+      <TableContainer><Table className="census-table"><TableHead><TableRow><TableCell>Name</TableCell><TableCell>Category</TableCell><TableCell>Location</TableCell><TableCell>Status</TableCell><TableCell>Actions</TableCell></TableRow></TableHead>
+        <TableBody>{records.map((record) => <TableRow key={record.id}><TableCell className="full-name">{record.name}</TableCell><TableCell>{record.gender === 'FEMALE' ? 'Female' : 'Male'}</TableCell><TableCell>{record.location || '—'}</TableCell><TableCell><Chip className={`custody ${record.active ? 'active-sentence' : ''}`} label={`• ${record.active ? 'Active' : 'Inactive'}`} /></TableCell><TableCell><Button size="small" onClick={() => openPrison(record.id)}>View layout</Button></TableCell></TableRow>)}</TableBody></Table></TableContainer>
       <Box className="pagination"><span className="pagination-summary">{total === 0 ? 'No records' : <>Showing <strong>{from}–{to}</strong> of <strong>{total.toLocaleString()}</strong> records</>}</span><Box className="pagination-controls"><Button className="pagination-button" disabled={pageIndex === 0} onClick={() => setPageIndex((current) => current - 1)}>← Previous</Button><span className="pagination-page">Page <strong>{pageIndex + 1}</strong> of {totalPages}</span><Button className="pagination-button" disabled={pageIndex + 1 >= totalPages} onClick={() => setPageIndex((current) => current + 1)}>Next →</Button></Box></Box>
     </Paper>
   </Box>

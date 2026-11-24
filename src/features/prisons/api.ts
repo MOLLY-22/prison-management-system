@@ -3,11 +3,13 @@ import http from '../../api/axiosClient'
 
 export type Cell = { id: string; cellNumber: number; capacity: number; currentOccupancy: number; availableSpaces: number }
 export type Block = { id: string; name: string; cells: Cell[] }
-export type PrisonSummary = { id: string; name: string; location: string | null; active: boolean }
+export type StationGender = 'MALE' | 'FEMALE'
+export type PrisonSummary = { id: string; name: string; location: string | null; active: boolean; gender: StationGender }
 export type PrisonDetail = PrisonSummary & { blocks: Block[] }
 export type CellInput = { cellNumber: number; capacity: number }
 export type BlockInput = { name: string; cells: CellInput[] }
-export type PrisonInput = { name: string; location?: string; blocks: BlockInput[] }
+export type PrisonInput = { name: string; location?: string; gender: StationGender; blocks: BlockInput[] }
+export type PrisonUpdateInput = { name: string; location?: string; gender: StationGender }
 export type PrisonPage = { records: PrisonSummary[]; totalPages: number; totalElements: number }
 export type ActiveFilter = 'all' | 'active' | 'inactive'
 
@@ -16,7 +18,7 @@ export const PAGE_SIZE = 20
 type Page<T> = { content: T[]; page: number; size: number; totalElements: number; totalPages: number }
 type ApiCell = { id: string; cellNumber?: number; capacity?: number; currentOccupancy?: number; availableSpaces?: number }
 type ApiBlock = { id: string; name: string; cells?: ApiCell[] }
-type ApiPrison = { id: string; name: string; location?: string | null; active?: boolean; blocks?: ApiBlock[] }
+type ApiPrison = { id: string; name: string; location?: string | null; active?: boolean; gender?: string; genderCategory?: string; gender_category?: string; blocks?: ApiBlock[] }
 
 export const errorMessage = (error: unknown, fallback: string) => {
   if (axios.isAxiosError(error)) {
@@ -28,7 +30,9 @@ export const errorMessage = (error: unknown, fallback: string) => {
   return fallback
 }
 
-const toSummary = (raw: ApiPrison): PrisonSummary => ({ id: raw.id, name: raw.name, location: raw.location ?? null, active: raw.active ?? true })
+const toSummary = (raw: ApiPrison): PrisonSummary => ({ id: raw.id, name: raw.name, location: raw.location ?? null, active: raw.active ?? true, gender: normalizeStationGender(raw.gender ?? raw.genderCategory ?? raw.gender_category) })
+
+const normalizeStationGender = (value: string | undefined): StationGender => value?.toUpperCase().startsWith('F') ? 'FEMALE' : 'MALE'
 
 const toDetail = (raw: ApiPrison): PrisonDetail => ({
   ...toSummary(raw),
@@ -60,7 +64,7 @@ export async function createPrison(payload: PrisonInput) {
   await http.post('/prisons', payload)
 }
 
-export async function updatePrison(id: string, payload: { name: string; location?: string }) {
+export async function updatePrison(id: string, payload: PrisonUpdateInput) {
   await http.patch(`/prisons/${id}`, payload)
 }
 

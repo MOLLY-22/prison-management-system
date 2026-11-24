@@ -24,6 +24,7 @@ export type Prison = {
     name: string;
     location: string;
     active: boolean;
+    gender: "MALE" | "FEMALE";
     blocks: PrisonBlock[];
 };
 
@@ -40,12 +41,14 @@ export type PrisonBlockInput = {
 export type CreatePrisonRequest = {
     name: string;
     location?: string;
+    gender: "MALE" | "FEMALE";
     blocks: PrisonBlockInput[];
 };
 
 export type UpdatePrisonRequest = {
     name: string;
     location?: string;
+    gender?: "MALE" | "FEMALE";
 };
 
 export type PrisonListParams = {
@@ -113,6 +116,7 @@ function normalizePrison(payload: unknown): Prison {
         name: String(firstValue(record, ["name"], "")),
         location: String(firstValue(record, ["location"], "")),
         active: asBoolean(firstValue(record, ["active"], true), true),
+        gender: String(firstValue(record, ["gender", "genderCategory", "gender_category"], "MALE")).toUpperCase().startsWith("F") ? "FEMALE" : "MALE",
         blocks: collectionFrom(record.blocks ?? []).map((block) => normalizeBlock(block, id)),
     };
 }
