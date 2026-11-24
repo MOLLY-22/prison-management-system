@@ -1,14 +1,17 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import type { PropsWithChildren } from "react";
+import type { UserRole, Permission } from "../config/rbas";
+import { hasPermission, hasAnyPermission } from "../config/rbas";
 
 import { authService } from "../api/authService";
 
 export type AuthUser = {
     id: string;
     name: string;
-    email: string;
-    role: string;
+    username?: string;
+    email?: string;
+    role: UserRole;
     prisonId?: string | null;
     prisonName?: string | null;
 };
@@ -32,6 +35,8 @@ export type AuthContextValue = {
     loading: boolean;
     isInitializing: boolean;
     authError: string;
+    can: (permission: Permission) => boolean;
+    canAny: (permissions: Permission[]) => boolean;
     login: (credentials: LoginCredentials) => Promise<AuthResponse>;
     me: () => Promise<void>;
     logout: () => Promise<void>;
@@ -93,6 +98,16 @@ export function AuthProvider({ children }: PropsWithChildren) {
     const [user, setUser] = useState(readStoredUser);
     const [loading, setLoading] = useState(false);
     const [authError, setAuthError] = useState("");
+
+    useEffect(() => {
+        const handleSessionExpired = () => {
+            setToken(null);
+            setUser(null);
+            setAuthError("Your session expired. Sign in again to continue.");
+        };
+        window.addEventListener("pms:session-expired", handleSessionExpired);
+        return () => window.removeEventListener("pms:session-expired", handleSessionExpired);
+    }, []);
 
     
     const login = async (credentials: LoginCredentials): Promise<AuthResponse> => {
@@ -164,6 +179,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
         }
     };
 
+    const can = (permission: Permission) => hasPermission(user?.role, permission);
+    const canAny = (permissions: Permission[]) => hasAnyPermission(user?.role, permissions);
+
     return (
         <AuthContext.Provider
             value={{
@@ -175,6 +193,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
                 authError,
                 login,
                 logout,
+                can,
+                canAny,
                 me,
             }}
         >

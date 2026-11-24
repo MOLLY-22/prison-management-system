@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { userService, type User } from "../api/userService";
+import { useAuth } from "../context/AuthContext";
 import AddUserForm from "../components/addUserForm";
 import "./userAccess.css";
 
@@ -16,6 +17,8 @@ function messageFrom(error: unknown, fallback: string) {
 }
 
 export default function UserAccess() {
+    const { can } = useAuth();
+    const canManageUsers = can("users:manage");
     const [users, setUsers] = useState<User[]>([]);
     const [search, setSearch] = useState("");
     const [statusFilter, setStatusFilter] = useState<"all" | "Active" | "Inactive">("all");
@@ -108,9 +111,9 @@ export default function UserAccess() {
                         <h2>Personnel Detail </h2>
                         <p>Manage security clearances and active role allocations</p>
                     </div>
-                    <button className="access-primary" type="button" onClick={() => { setEditingUser(null); setShowForm(true); }}>
+                    {canManageUsers && <button className="access-primary" type="button" onClick={() => { setEditingUser(null); setShowForm(true); }}>
                         <span aria-hidden="true">+</span> Add User
-                    </button>
+                    </button>}
                 </div>
 
                 {error && <p className="access-alert" role="alert">{error}</p>}
@@ -144,10 +147,10 @@ export default function UserAccess() {
                                     <td>{user.role || "—"}</td>
                                     <td className="muted">{user.facility || user.prisonName || user.prisonId || "—"}</td>
                                     <td><span className={`status-pill ${user.status === "Active" ? "is-active" : "is-inactive"}`}><i aria-hidden="true" />{user.status}</span></td>
-                                    <td><div className="row-actions">
+                                    <td>{canManageUsers ? <div className="row-actions">
                                         <button type="button" onClick={() => openEdit(user)} aria-label={`Edit ${user.name}`}>Edit</button>
                                         <button type="button" onClick={() => void toggleStatus(user)} disabled={savingId === user.id}>{user.status === "Active" ? "Disable" : "Enable"}</button>
-                                    </div></td>
+                                    </div> : "—"}</td>
                                 </tr>
                             ))}
                         </tbody>

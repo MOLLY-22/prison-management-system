@@ -11,6 +11,7 @@ import {
   type TransferRecord,
 } from "../api/transferService";
 import "./transferManagement.css";
+import { useAuth } from "../context/AuthContext";
 
 function messageFrom(error: unknown) {
   if (axios.isAxiosError<{ message?: string }>(error)) {
@@ -20,6 +21,9 @@ function messageFrom(error: unknown) {
 }
 
 function TransferManagement() {
+  const { can } = useAuth();
+  const canCreate = can("transfers:create");
+  const canUpdateStatus = can("transfers:updateStatus");
   const [transfers, setTransfers] = useState<TransferRecord[]>([]);
   const [selectedTransfer, setSelectedTransfer] = useState<TransferRecord | null>(null);
   const [loading, setLoading] = useState(true);
@@ -142,7 +146,7 @@ function TransferManagement() {
           </Alert>
         )}
 
-        <TransferForm onSubmit={createTransfer} />
+        {canCreate && <TransferForm onSubmit={createTransfer} />}
 
         {loading ? (
           <Typography role="status">Loading transfer records…</Typography>
@@ -153,7 +157,7 @@ function TransferManagement() {
           />
         )}
 
-        <TransferApproval
+        {canUpdateStatus && <TransferApproval
           key={`${selectedTransfer?.id ?? ""}:${selectedTransfer?.destinationPrisonId ?? ""}:${selectedTransfer?.status ?? ""}`}
           transfer={selectedTransfer}
           saving={saving}
@@ -171,7 +175,7 @@ function TransferManagement() {
             "Transfer cancelled.",
           )}
           onClose={() => setSelectedTransfer(null)}
-        />
+        />}
       </Stack>
     </Box>
   );

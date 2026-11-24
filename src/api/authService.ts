@@ -1,6 +1,7 @@
 import { asRecord, firstValue, itemFrom } from "./dataContract";
 import api from "./axiosClient";
 import type { AuthUser } from "../context/AuthContext";
+import { normalizeRole } from "../config/rbas";
 
 function authUserFrom(payload: unknown): AuthUser | undefined {
     const record = asRecord(itemFrom(payload));
@@ -18,9 +19,9 @@ function authUserFrom(payload: unknown): AuthUser | undefined {
         id: String(id),
         name: String(name),
         email: String(email),
-        role: String(
-            firstValue(record, ["role", "userRole", "user_role"], "Authorized officer"),
-        ),
+        role: normalizeRole(
+            String(firstValue(record, ["role", "userRole", "user_role"], "")),
+        ) ?? "Records Officer",
         ...(record.prisonId || record.prison_id
             ? { prisonId: String(record.prisonId ?? record.prison_id) }
             : {}),

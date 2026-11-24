@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import axios from "axios";
+import { useAuth } from "../context/AuthContext";
 import "./visitorManagement.css";
 import {
   visitorService,
@@ -35,6 +36,8 @@ function getErrorMessage(error: unknown, fallback: string) {
 }
 
 export default function Visitors() {
+  const { can } = useAuth();
+  const canCreateFamilyVisit = can("visits:create:family");
   const [visitors, setVisitors] = useState<Visitor[]>([]);
   const [inmates, setInmates] = useState<InmateLookup[]>([]);
   const [form, setForm] = useState<FormState>(emptyForm);
@@ -43,7 +46,7 @@ export default function Visitors() {
   );
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(true);
-  const [loadingInmates, setLoadingInmates] = useState(true);
+  const [loadingInmates, setLoadingInmates] = useState(canCreateFamilyVisit);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -57,6 +60,9 @@ export default function Visitors() {
   }, []);
 
   useEffect(() => {
+    if (!canCreateFamilyVisit) {
+      return;
+    }
     visitorService
       .getInmates()
       .then(setInmates)
@@ -64,7 +70,7 @@ export default function Visitors() {
         setNotice(getErrorMessage(error, "Could not load inmate records.")),
       )
       .finally(() => setLoadingInmates(false));
-  }, []);
+  }, [canCreateFamilyVisit]);
 
   const filteredVisitors = visitors;
   const scheduledVisits = visitors.filter(
@@ -140,7 +146,7 @@ export default function Visitors() {
         <div>
           <p className="eyebrow">FACILITY OPERATIONS / VISITORS</p>
           <h1>Visitor Management</h1>
-          
+
         </div>
       </header>
 
@@ -184,7 +190,7 @@ export default function Visitors() {
         </article>
       </section>
 
-      <div className=" my-10">
+      {canCreateFamilyVisit && <div className=" my-10">
         <section className="dashboard-section visitor-registration">
           <div className="visitor-section-heading">
             <div>
@@ -309,7 +315,7 @@ export default function Visitors() {
                     </div>
                 )}
             </section> */}
-      </div>
+      </div>}
       <section
         className="dashboard-section visitor-log-table"
         aria-labelledby="visitor-log-title"
