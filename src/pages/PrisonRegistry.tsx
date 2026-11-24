@@ -31,6 +31,7 @@ import {
   type PrisonDetail,
   type PrisonInput,
   type PrisonSummary,
+  type StationGender,
 } from "../api/prisonService";
 import "./admissionDialog.css";
 import "./prisonRegistry.css";
@@ -136,7 +137,7 @@ function CellRows({
           />
           <TextField
             size="small"
-            label="Capacity"
+            label="Maximum capacity"
             type="number"
             value={cell.capacity}
             onChange={(event) =>
@@ -171,6 +172,7 @@ function CreatePrisonDialog({
 }) {
   const [name, setName] = useState("");
   const [location, setLocation] = useState("");
+  const [gender, setGender] = useState<StationGender | "">("");
   const [blocks, setBlocks] = useState<BlockDraft[]>([newBlock("A")]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -185,6 +187,7 @@ function CreatePrisonDialog({
       return setError("The prison name can be at most 160 characters.");
     if (location.trim().length > 255)
       return setError("The location can be at most 255 characters.");
+    if (!gender) return setError("Choose whether this station is for men or women.");
     if (blocks.length === 0) return setError("Add at least one block.");
     const names = new Set<string>();
     for (const [index, block] of blocks.entries()) {
@@ -202,6 +205,7 @@ function CreatePrisonDialog({
     try {
       await onSubmit({
         name: name.trim(),
+        gender,
         ...(location.trim() ? { location: location.trim() } : {}),
         blocks: blocks.map((block) => ({
           name: block.name.trim(),
@@ -247,6 +251,11 @@ function CreatePrisonDialog({
               value={location}
               onChange={(event) => setLocation(event.target.value)}
             />
+            <TextField select required label="Station gender" value={gender} onChange={(event) => setGender(event.target.value as StationGender)}>
+              <MenuItem value="" disabled>Choose station gender</MenuItem>
+              <MenuItem value="MALE">Male</MenuItem>
+              <MenuItem value="FEMALE">Female</MenuItem>
+            </TextField>
           </Box>
         </Box>
         <Box component="fieldset" className="admission-section">
@@ -312,10 +321,11 @@ function EditPrisonDialog({
 }: {
   prison: PrisonDetail;
   onClose: () => void;
-  onSubmit: (payload: { name: string; location?: string }) => Promise<void>;
+  onSubmit: (payload: { name: string; location?: string; gender: StationGender }) => Promise<void>;
 }) {
   const [name, setName] = useState(prison.name);
   const [location, setLocation] = useState(prison.location ?? "");
+  const [gender, setGender] = useState<StationGender | "">(prison.gender ?? "");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const submit = async () => {
@@ -324,11 +334,13 @@ function EditPrisonDialog({
       return setError("The prison name can be at most 160 characters.");
     if (location.trim().length > 255)
       return setError("The location can be at most 255 characters.");
+    if (!gender) return setError("Choose whether this station is for men or women.");
     setBusy(true);
     setError(null);
     try {
       await onSubmit({
         name: name.trim(),
+        gender,
         ...(location.trim() ? { location: location.trim() } : {}),
       });
     } catch (failure) {
@@ -367,6 +379,11 @@ function EditPrisonDialog({
               value={location}
               onChange={(event) => setLocation(event.target.value)}
             />
+            <TextField select required label="Station gender" value={gender} onChange={(event) => setGender(event.target.value as StationGender)}>
+              <MenuItem value="" disabled>Choose station gender</MenuItem>
+              <MenuItem value="MALE">Male</MenuItem>
+              <MenuItem value="FEMALE">Female</MenuItem>
+            </TextField>
           </Box>
         </Box>
       </DialogContent>
@@ -590,6 +607,7 @@ export function PrisonRegistry({ canManage }: Props) {
   const handleEditPrison = async (payload: {
     name: string;
     location?: string;
+    gender: StationGender;
   }) => {
     if (!prison) return;
     await prisonService.updatePrison(prison.id, payload);
@@ -664,6 +682,7 @@ export function PrisonRegistry({ canManage }: Props) {
       (sum, cell) => sum + cell.currentOccupancy,
       0,
     );
+    const available = cells.reduce((sum, cell) => sum + cell.availableSpaces, 0);
     return (
       <Box className="census-page">
         {banners}
@@ -678,7 +697,7 @@ export function PrisonRegistry({ canManage }: Props) {
             <Box>
               <Typography component="h1">{prison.name}</Typography>
               <Typography>
-                {prison.location || "No location recorded"}
+                {[prison.gender === "MALE" ? "Male station" : prison.gender === "FEMALE" ? "Female station" : "Station gender not set", prison.location].filter(Boolean).join(" · ")}
               </Typography>
             </Box>
             {canManage && (
@@ -714,7 +733,7 @@ export function PrisonRegistry({ canManage }: Props) {
           <Metric
             label="Occupied"
             value={String(occupied)}
-            note={`${Math.max(capacity - occupied, 0)} spaces available`}
+            note={`${available} spaces available`}
           />
         </Box>
         {prison.blocks.length === 0 && (
@@ -733,6 +752,7 @@ export function PrisonRegistry({ canManage }: Props) {
             (sum, cell) => sum + cell.currentOccupancy,
             0,
           );
+          const blockAvailable = block.cells.reduce((sum, cell) => sum + cell.availableSpaces, 0);
           return (
             <Paper
               className="directory block-card"
@@ -746,6 +766,9 @@ export function PrisonRegistry({ canManage }: Props) {
                     {block.cells.length} cell
                     {block.cells.length === 1 ? "" : "s"} · {blockOccupied} of{" "}
                     {blockCapacity} occupied
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {blockAvailable} spaces available
                   </Typography>
                 </Box>
                 {canManage && (
@@ -762,7 +785,7 @@ export function PrisonRegistry({ canManage }: Props) {
                   <TableHead>
                     <TableRow>
                       <TableCell>Cell</TableCell>
-                      <TableCell>Capacity</TableCell>
+                      <TableCell>Maximum capacity</TableCell>
                       <TableCell>Occupied</TableCell>
                       <TableCell>Available</TableCell>
                     </TableRow>
@@ -868,6 +891,7 @@ export function PrisonRegistry({ canManage }: Props) {
             <TableHead>
               <TableRow>
                 <TableCell>Name</TableCell>
+                <TableCell>Station gender</TableCell>
                 <TableCell>Location</TableCell>
                 <TableCell>Status</TableCell>
                 <TableCell>Actions</TableCell>
@@ -877,6 +901,7 @@ export function PrisonRegistry({ canManage }: Props) {
               {records.map((record) => (
                 <TableRow key={record.id}>
                   <TableCell className="full-name">{record.name}</TableCell>
+                  <TableCell>{record.gender === "MALE" ? "Male" : record.gender === "FEMALE" ? "Female" : "Not set"}</TableCell>
                   <TableCell>{record.location || "—"}</TableCell>
                   <TableCell>
                     <Chip

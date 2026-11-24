@@ -117,7 +117,7 @@ function TransferApproval({
                   </MenuItem>
                   {cells.map((cell) => (
                     <MenuItem key={cell.id} value={cell.id}>
-                      {cell.blockName} · {cell.name} · {cell.availableSpaces} spaces
+                      {cell.blockName} · {cell.name} · {cell.currentOccupancy}/{cell.capacity} occupied · {cell.availableSpaces} available
                     </MenuItem>
                   ))}
                 </TextField>
