@@ -7,19 +7,11 @@ import Visitors from "../pages/Visitors";
 import UserAccess from "../pages/UserAccess";
 import TransferManagement from "../pages/TransferManagement";
 import { PrisonRegistry } from "../pages/PrisonRegistry";
+import ReleaseManagement from "../pages/ReleaseManagement";
+import { getRoleProfile, type Workspace } from "../auth/roleAccess";
 
 
-type View =
-  | "overview"
-  | "inmates"
-  | "profile"
-  | "admission"
-  | "sentences"
-  | "visitors"
-  | "transfers"
-  | "release"
-  | "access"
-  | "prisons";
+type View = Workspace | "profile" | "admission" | "sentences";
 type RecordItem = Record<string, string | number | boolean | null>;
 
 const navigation: { id: View; label: string; short: string }[] = [
@@ -27,7 +19,7 @@ const navigation: { id: View; label: string; short: string }[] = [
   { id: "inmates", label: "Inmates", short: "people" },
   { id: "visitors", label: "Visits", short: "visit" },
   { id: "transfers", label: "Transfers", short: "arrows" },
-  // { id: "release", label: "Release & discharge", short: "exit" },
+  { id: "release", label: "Release & discharge", short: "exit" },
   { id: "access", label: "User Management", short: "shield" },
   { id: "prisons", label: "Prison registry", short: "building" },
 ];
@@ -214,51 +206,35 @@ function DataView({ view }: { view: View }) {
 
 void DataView;
 
-function Overview({ onNavigate }: { onNavigate: (view: View) => void }) {
-  const cards: { label: string; id: View; note: string }[] = [
-    {
-      label: "Inmate Management",
-      id: "inmates",
-      note: "Records and custody status",
-    },
-    {
-      label: "Visitor Management",
-      id: "visitors",
-      note: "Appointments and gate events",
-    },
-    {
-      label: "Transfer Management",
-      id: "transfers",
-      note: "Movement requests and approvals",
-    },
-    // {
-    //   label: "Release Management",
-    //   id: "release",
-    //   note: "Eligibility and discharge",
-    // },
-    {
-      label: "Prison Registry",
-      id: "prisons",
-      note: "Prison and Block allocation",
-    },
-  ];
+function Overview({ onNavigate, role, navigationItems }: { onNavigate: (view: View) => void; role: string; navigationItems: typeof navigation }) {
+  const profile = getRoleProfile(role);
+  const cardDetails: Record<string, { label: string; note: string }> = {
+    inmates: { label: "Inmate records", note: profile.canAdmit ? "Custody records and new admissions" : "Assigned custody and inmate records" },
+    visitors: { label: "Visit operations", note: "Appointments and gate activity" },
+    transfers: { label: "Transfers", note: "Movement requests and coordination" },
+    release: { label: "Release & discharge", note: "Eligibility, clearance, and authorization" },
+    access: { label: "User management", note: "Personnel accounts and role assignments" },
+    prisons: { label: "Prison registry", note: "Facility and block information" },
+  };
+  const cards = profile.primary
+    .filter((id) => navigationItems.some((item) => item.id === id))
+    .map((id) => ({ id, ...cardDetails[id] }));
   return (
     <>
       <section className="mb-6 flex flex-wrap items-end justify-between gap-5">
         <div>
           <p className="text-[11px] font-extrabold uppercase tracking-[0.16em] text-[#2876a8]">
-            Facility command center
+            {profile.label}
           </p>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-[#526579]">
-            Review the operational workspaces used to manage custody, movement,
-            visits, release, and staff access.
+            {profile.summary}
           </p>
         </div>
         <span className="border-l-2 border-[#c58a36] pl-3 text-xs font-bold uppercase tracking-[0.12em] text-[#748696]">
           Secure operations
         </span>
       </section>
-      <section className="grid gap-4 sm:grid-cols-2">
+      {cards.length > 0 ? <section className="grid gap-4 sm:grid-cols-2">
         {cards.map((card) => (
           <button
             onClick={() => onNavigate(card.id)}
@@ -278,26 +254,27 @@ function Overview({ onNavigate }: { onNavigate: (view: View) => void }) {
             </span>
           </button>
         ))}
-      </section>
+      </section> : <section className="rounded-2xl border border-[#d9e2ec] bg-white p-6 text-sm text-[#526579]">Your role does not currently have an operational workspace assigned. Contact your system administrator to review your role.</section>}
       
     </>
   );
 }
 
 function ModuleView({ view, onNavigate, userRole }: { view: View; onNavigate: (view: View) => void; userRole: string }) {
+  const roleProfile = getRoleProfile(userRole);
   switch (view) {
     case "inmates": case "profile": case "admission": case "sentences":
-      return <InmateManagement canAdmit userRole={userRole} section={view === "admission" ? "admission" : "overview"} onBack={() => onNavigate("inmates")} />;
+      return <InmateManagement canAdmit={roleProfile.canAdmit} userRole={userRole} section={view === "admission" ? "admission" : "overview"} onBack={() => onNavigate("inmates")} />;
     case "visitors":
       return <Visitors />;
-    // case "release":
-    //   return <ReleaseManagement />;
+    case "release":
+      return <ReleaseManagement />;
     case "access":
       return <UserAccess />;
     case "transfers":
       return <TransferManagement />;
     case "prisons":
-      return <PrisonRegistry canManage />;
+      return <PrisonRegistry canManage={roleProfile.canManagePrisons} />;
     case "overview":
       return null;
   }
@@ -305,7 +282,8 @@ function ModuleView({ view, onNavigate, userRole }: { view: View; onNavigate: (v
 
 export default function Dashboard() {
   const { user, logout , authError} = useAuth();
-  const visibleNavigation = navigation;
+  const roleProfile = getRoleProfile(user?.role);
+  const visibleNavigation = navigation.filter((item) => roleProfile.workspaces.includes(item.id as Workspace));
   const [view, setView] = useState<View>("overview");
   const active = navigation.find((item) => item.id === view) ?? navigation[0];
   return (
@@ -391,7 +369,7 @@ export default function Dashboard() {
               </button>
             ))}
           </div>
-          {view === "overview" ? <Overview onNavigate={setView} /> : <ModuleView view={view} onNavigate={setView} userRole={user?.role ?? "RECORDS OFFICER"} />}
+          {view === "overview" ? <Overview onNavigate={setView} role={user?.role ?? ""} navigationItems={visibleNavigation} /> : <ModuleView view={view} onNavigate={setView} userRole={user?.role ?? ""} />}
         </div>
       </main>
     </div>
