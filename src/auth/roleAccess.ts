@@ -3,10 +3,10 @@ export type Workspace =
   | "inmates"
   | "visitors"
   | "transfers"
-  | "duty-rosters"
   | "release"
   | "access"
-  | "prisons";
+  | "prisons"
+  | "housing";
 
 export type RoleProfile = {
   label: string;
@@ -17,19 +17,22 @@ export type RoleProfile = {
   canManagePrisons: boolean;
 };
 
+const allOperational: Workspace[] = [
+  "overview", "inmates", "visitors", "transfers", "release", "access", "prisons", "housing",
+];
 const profiles: Record<string, RoleProfile> = {
   "SUPER ADMIN": {
     label: "System administrator",
     summary: "Manage personnel access, facility configuration, and system wide custody operations.",
-    workspaces: ["overview", "inmates", "visitors", "transfers", "access", "prisons", "duty-rosters"],
-    primary: ["access", "prisons", "inmates"],
+    workspaces: allOperational,
+    primary: ["access", "prisons", "housing", "inmates"],
     canAdmit: false,
     canManagePrisons: true,
   },
   "RECORDS OFFICER": {
     label: "Custody records",
     summary: "Maintain inmate records, admissions, sentence details, transfers, and release preparation.",
-    workspaces: ["overview", "inmates", "visitors", "transfers", "release", "prisons"],
+    workspaces: ["overview", "inmates", "transfers", "release", "housing"],
     primary: ["inmates", "transfers", "release"],
     canAdmit: true,
     canManagePrisons: false,
@@ -101,24 +104,16 @@ const profiles: Record<string, RoleProfile> = {
   "DUTY OFFICER": {
     label: "Facility operations",
     summary: "Coordinate daily facility activity, inmate movements, and visit operations.",
-    workspaces: ["overview", "duty-rosters"],
-    primary: ["duty-rosters"],
-    canAdmit: false,
-    canManagePrisons: false,
-  },
-  "PROGRAM FACILITATOR": {
-    label: "Rehabilitation programs",
-    summary: "Manage rehabilitation programs, enrollment, and attendance.",
-    workspaces: ["overview"],
-    primary: [],
+    workspaces: ["overview", "inmates", "visitors", "transfers"],
+    primary: ["transfers", "visitors", "inmates"],
     canAdmit: false,
     canManagePrisons: false,
   },
   "OFFICER IN CHARGE": {
     label: "Facility leadership",
     summary: "Oversee facility custody operations, transfers, and release authorization.",
-    workspaces: ["overview", "inmates", "visitors", "transfers", "duty-rosters", "release", "prisons"],
-    primary: ["release", "transfers", "duty-rosters", "inmates"],
+    workspaces: ["overview", "inmates", "visitors", "transfers", "release", "prisons", "housing"],
+    primary: ["release", "transfers", "housing", "inmates"],
     canAdmit: false,
     canManagePrisons: true,
   },
@@ -147,11 +142,11 @@ export function getRoleProfile(role: string | null | undefined): RoleProfile {
     return profiles["SUPER ADMIN"];
   }
   return profiles[normalized] ?? {
-    label: "Staff workspace",
-    summary: "Your workspace is being prepared. Contact an administrator if you need a different role assignment.",
-    workspaces: ["overview"],
-    primary: [],
-    canAdmit: false,
-    canManagePrisons: false,
+    label: "Authorized officer",
+    summary: "Your role could not be matched to a staff profile. Available operational workspaces are shown below.",
+    workspaces: allOperational,
+    primary: ["inmates", "visitors", "transfers", "release", "access", "prisons"],
+    canAdmit: true,
+    canManagePrisons: true,
   };
 }

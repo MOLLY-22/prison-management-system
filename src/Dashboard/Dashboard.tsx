@@ -5,24 +5,26 @@ import { collectionFrom } from "../api/dataContract";
 import { InmateManagement } from "../pages/InmateManagement";
 import Visitors from "../pages/Visitors";
 import UserAccess from "../pages/UserAccess";
-import TransferManagement from "../pages/TransferManagement";
+import TransferAnalytics from "../pages/TransferAnalytics";
 import { PrisonRegistry } from "../pages/PrisonRegistry";
+import { prisonService } from "../api/prisonService";
 import ReleaseManagement from "../pages/ReleaseManagement";
-import DutyRosters from "../pages/DutyRosters";
-import { getRoleProfile, type Workspace } from "../auth/roleAccess";
+import { getRoleProfile, normalizeRole, type Workspace } from "../auth/roleAccess";
 
-type View = Workspace | "profile" | "admission" | "sentences";
+
+
+type View = Exclude<Workspace, "transfers"> | "profile" | "admission" | "sentences" | "transfer-analytics";
 type RecordItem = Record<string, string | number | boolean | null>;
 
 const navigation: { id: View; label: string; short: string }[] = [
   { id: "overview", label: "Dashboard", short: "grid" },
   { id: "inmates", label: "Inmates", short: "people" },
+  { id: "housing", label: "Blocks & cells", short: "building" },
   { id: "visitors", label: "Visits", short: "visit" },
-  { id: "transfers", label: "Transfers", short: "arrows" },
-  { id: "release", label: "Release & discharge", short: "exit" },
-  { id: "access", label: "User Management", short: "shield" },
-  { id: "prisons", label: "Prison registry", short: "building" },
-  { id: "duty-rosters", label: "Duty rosters", short: "calendar" },
+  { id: "transfer-analytics", label: "Transfers", short: "chart" },
+  { id: "release", label: "Releases", short: "exit" },
+  { id: "access", label: "Users", short: "shield" },
+  { id: "prisons", label: "Prisons", short: "building" },
 ];
 
 function NavigationIcon({ name }: { name: string }) {
@@ -104,7 +106,6 @@ function NavigationIcon({ name }: { name: string }) {
 const endpointFor: Partial<Record<View, string>> = {
   inmates: "/inmates",
   visitors: "/visits",
-  transfers: "/transfers",
   access: "/users",
   prisons: "/prisons",
 };
@@ -278,38 +279,16 @@ function Overview({
 }) {
   const profile = getRoleProfile(role);
   const cardDetails: Record<string, { label: string; note: string }> = {
-    inmates: {
-      label: "Inmate records",
-      note: profile.canAdmit
-        ? "Custody records and new admissions"
-        : "Assigned custody and inmate records",
-    },
-    visitors: {
-      label: "Visit operations",
-      note: "Appointments and gate activity",
-    },
-    transfers: {
-      label: "Transfers",
-      note: "Movement requests and coordination",
-    },
-    release: {
-      label: "Release & discharge",
-      note: "Eligibility, clearance, and authorization",
-    },
-    access: {
-      label: "User management",
-      note: "Personnel accounts and role assignments",
-    },
-    prisons: {
-      label: "Prison registry",
-      note: "Facility and block information",
-    },
-    "duty-rosters": {
-      label: "Duty rosters",
-      note: "Draft, publish, and manage duty coverage",
-    },
+    inmates: { label: "Inmate records", note: profile.canAdmit ? "Custody records and new admissions" : "Assigned custody and inmate records" },
+    visitors: { label: "Visit operations", note: "Appointments and gate activity" },
+    "transfer-analytics": { label: "Transfer Analytics", note: "Transfer volumes and request details" },
+    release: { label: "Release & discharge", note: "Eligibility, clearance, and authorization" },
+    access: { label: "User management", note: "Personnel accounts and role assignments" },
+    prisons: { label: "Prison registry", note: "Facility and block information" },
+    housing: { label: "Housing & cells", note: "Blocks, cells, and occupancy" },
   };
   const cards = profile.primary
+    .map((id): View => id === "transfers" ? "transfer-analytics" : id)
     .filter((id) => navigationItems.some((item) => item.id === id))
     .map((id) => ({ id, ...cardDetails[id] }));
   return (
@@ -359,41 +338,23 @@ function Overview({
   );
 }
 
-function ModuleView({
-  view,
-  onNavigate,
-  userRole,
-}: {
-  view: View;
-  onNavigate: (view: View) => void;
-  userRole: string;
-}) {
+function ModuleView({ view, onNavigate, userRole, userPrisonId }: { view: View; onNavigate: (view: View) => void; userRole: string; userPrisonId?: string }) {
   const roleProfile = getRoleProfile(userRole);
   switch (view) {
-    case "inmates":
-    case "profile":
-    case "admission":
-    case "sentences":
-      return (
-        <InmateManagement
-          canAdmit={roleProfile.canAdmit}
-          userRole={userRole}
-          section={view === "admission" ? "admission" : "overview"}
-          onBack={() => onNavigate("inmates")}
-        />
-      );
+    case "inmates": case "profile": case "admission": case "sentences":
+      return <InmateManagement canAdmit={roleProfile.canAdmit} userRole={userRole} section={view === "admission" ? "admission" : "overview"} onBack={() => onNavigate("inmates")} />;
     case "visitors":
       return <Visitors />;
     case "release":
       return <ReleaseManagement />;
     case "access":
       return <UserAccess />;
-    case "transfers":
-      return <TransferManagement />;
+    case "transfer-analytics":
+      return <TransferAnalytics />;
     case "prisons":
-      return <PrisonRegistry canManage={roleProfile.canManagePrisons} />;
-    case "duty-rosters":
-      return <DutyRosters />;
+      return <PrisonRegistry key="prisons" canManage={roleProfile.canManagePrisons} />;
+    case "housing":
+      return <PrisonRegistry key="housing" canManage={roleProfile.canManagePrisons} mode="housing" assignedPrisonId={userPrisonId ?? ""} assignedPrisonRequired={["OFFICER IN CHARGE", "RECORDS OFFICER"].includes(normalizeRole(userRole))} />;
     case "overview":
       return null;
   }
@@ -402,21 +363,40 @@ function ModuleView({
 export default function Dashboard() {
   const { user, logout, authError } = useAuth();
   const roleProfile = getRoleProfile(user?.role);
+  const [assignedPrison, setAssignedPrison] = useState<{ name: string; location: string | null } | null>(null);
   const visibleNavigation = navigation.filter((item) =>
-    roleProfile.workspaces.includes(item.id as Workspace),
+    item.id === "transfer-analytics"
+      ? roleProfile.workspaces.includes("transfers")
+      : roleProfile.workspaces.includes(item.id as Workspace),
   );
   const [view, setView] = useState<View>("overview");
   const active = navigation.find((item) => item.id === view) ?? navigation[0];
+
+  useEffect(() => {
+    if (!user?.prisonId) {
+      setAssignedPrison(null);
+      return;
+    }
+    let live = true;
+    prisonService.getPrison(user.prisonId)
+      .then((prison) => {
+        if (live) setAssignedPrison({ name: prison.name, location: prison.location });
+      })
+      .catch(() => {
+        if (live) setAssignedPrison(null);
+      });
+    return () => { live = false; };
+  }, [user?.prisonId]);
+
   return (
     <div className="min-h-screen bg-[#f5f7fa] font-['DM_Sans',_'Segoe_UI',sans-serif] text-[#182638]">
       <aside className="fixed inset-y-0 left-0 z-20 hidden w-[264px] flex-col border-r border-white/[0.06] bg-[#101a2d] text-white lg:flex">
         <div className="flex h-[76px] items-center gap-3 border-b border-white/[0.08] px-4">
-          <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-[#0e8c94] text-sm font-extrabold tracking-wide text-white">
-            MP
-          </span>
-          <p className="truncate text-[13px] font-semibold text-white">
-            Malawi Prison Management
-          </p>
+          <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-[#0e8c94] text-sm font-extrabold tracking-wide text-white">MP</span>
+          <div className="min-w-0">
+            <p className="truncate text-[13px] font-semibold text-white" style={{ color: "#ffffff" }}>{assignedPrison?.name ?? "Malawi Prison Management"}</p>
+            {assignedPrison?.location && <p className="truncate text-[10px] text-slate-400" style={{ color: "#cbd5e1" }}>{assignedPrison.location}</p>}
+          </div>
         </div>
         <nav
           className="flex-1 space-y-1 overflow-y-auto px-3 py-5"
@@ -522,19 +502,7 @@ export default function Dashboard() {
               </button>
             ))}
           </div>
-          {view === "overview" ? (
-            <Overview
-              onNavigate={setView}
-              role={user?.role ?? ""}
-              navigationItems={visibleNavigation}
-            />
-          ) : (
-            <ModuleView
-              view={view}
-              onNavigate={setView}
-              userRole={user?.role ?? ""}
-            />
-          )}
+          {view === "overview" ? <Overview onNavigate={setView} role={user?.role ?? ""} navigationItems={visibleNavigation} /> : <div className="module-host"><ModuleView view={view} onNavigate={setView} userRole={user?.role ?? ""} userPrisonId={user?.prisonId ?? undefined} /></div>}
         </div>
       </main>
     </div>

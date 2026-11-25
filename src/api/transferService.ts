@@ -53,6 +53,11 @@ export const transferService = {
         return records.map(normalizeTransfer);
     },
 
+    async getTransfer(id: string): Promise<TransferRecord> {
+        const response = await api.get(`/transfers/${encodeURIComponent(id)}`);
+        return normalizeTransfer(itemFrom(response.data));
+    },
+
     async createTransfer(payload: CreateTransferRequest): Promise<TransferRecord> {
         const response = await api.post("/transfers", payload);
         return normalizeTransfer(itemFrom(response.data));
@@ -83,20 +88,41 @@ function normalizeTransfer(payload: unknown): TransferRecord {
     const inmate = asRecord(record.inmate);
     const sourcePrison = asRecord(firstValue(record, ["sourcePrison", "originPrison", "fromPrison"], {}));
     const destinationPrison = asRecord(firstValue(record, ["destinationPrison", "toPrison"], {}));
+    const firstName = String(firstValue(inmate, ["firstName", "givenName"], ""));
+    const lastName = String(firstValue(inmate, ["lastName", "surname", "familyName"], ""));
+    const inmateName = String(firstValue(
+        inmate,
+        ["fullName", "name", "inmateName"],
+        firstValue(record, ["inmateName", "inmate_name"], [firstName, lastName].filter(Boolean).join(" ")),
+    ));
+    const requestedBy = asRecord(firstValue(record, ["requestedBy"], null));
+    const approvedBy = asRecord(firstValue(record, ["approvedBy"], null));
+    const rawStatus = String(firstValue(record, ["status", "transferStatus", "transfer_status"], "PENDING"))
+        .trim()
+        .toUpperCase()
+        .replace(/[\s-]+/g, "_");
+    const status: TransferStatus = (
+        ["PENDING", "APPROVED", "REJECTED", "IN_TRANSIT", "RECEIVED", "CANCELLED"] as const
+    ).includes(rawStatus as TransferStatus)
+        ? rawStatus as TransferStatus
+        : "PENDING";
+
     return {
         id,
-        inmateId: String(firstValue(inmate, ["id", "inmateId"], firstValue(record, ["inmateId", "inmate_id"], ""))),
-        inmateName: String(firstValue(inmate, ["fullName", "name"], [firstValue(inmate, ["firstName"], ""), firstValue(inmate, ["lastName"], "")].filter(Boolean).join(" "))),
-        inmateNumber: String(firstValue(inmate, ["inmateNumber", "number", "fileNumber"], firstValue(record, ["inmateNumber", "inmate_number"], ""))),
+        inmateId: String(firstValue(inmate, ["id", "inmateId", "inmate_id"], firstValue(record, ["inmateId", "inmate_id"], ""))),
+        inmateName,
+        inmateNumber: String(firstValue(inmate, ["inmateNumber", "inmate_number", "number", "fileNumber"], firstValue(record, ["inmateNumber", "inmate_number"], ""))),
         sourcePrisonId: String(firstValue(sourcePrison, ["id", "prisonId"], firstValue(record, ["sourcePrisonId", "source_prison_id", "originPrisonId"], ""))),
-        sourcePrisonName: String(firstValue(sourcePrison, ["name"], firstValue(record, ["sourcePrisonName", "source_prison_name", "originPrisonName"], ""))),
+        sourcePrisonName: String(firstValue(sourcePrison, ["name", "prisonName"], firstValue(record, ["sourcePrisonName", "source_prison_name", "originPrisonName"], ""))),
         destinationPrisonId: String(firstValue(destinationPrison, ["id", "prisonId"], firstValue(record, ["destinationPrisonId", "destination_prison_id"], ""))),
-        destinationPrisonName: String(firstValue(destinationPrison, ["name"], firstValue(record, ["destinationPrisonName", "destination_prison_name"], ""))),
+        destinationPrisonName: String(firstValue(destinationPrison, ["name", "prisonName"], firstValue(record, ["destinationPrisonName", "destination_prison_name"], ""))),
         reason: String(firstValue(record, ["reason"], "")),
-        status: String(firstValue(record, ["status"], "PENDING")).toUpperCase() as TransferStatus,
-        requestedBy: String(firstValue(record, ["requestedByUsername", "requestedBy", "requested_by"], "")),
-        approvedBy: firstValue(record, ["approvedByUsername", "approvedBy", "approved_by"], null) as string | null,
-        requestedAt: String(firstValue(record, ["requestedAt", "requested_at", "createdAt"], "")),
-        decidedAt: firstValue(record, ["decidedAt", "decided_at", "approvedAt"], null) as string | null,
+        status,
+        requestedBy: String(firstValue(requestedBy, ["username", "name"], firstValue(record, ["requestedByUsername", "requested_by"], ""))),
+        approvedBy: approvedBy.id || approvedBy.username || approvedBy.name
+            ? String(firstValue(approvedBy, ["username", "name"], firstValue(record, ["approvedByUsername", "approved_by"], null)))
+            : firstValue(record, ["approvedByUsername", "approved_by"], null) as string | null,
+        requestedAt: String(firstValue(record, ["requestedAt", "requested_at", "requestedDate", "createdAt", "created_at"], "")),
+        decidedAt: firstValue(record, ["decidedAt", "decided_at", "approvedAt", "approved_at"], null) as string | null,
     };
 }
