@@ -2,7 +2,7 @@ import { useState } from "react";
 import type { ChangeEvent, FormEvent, ReactNode } from "react";
 import axios from "axios";
 import { useLocation, useNavigate } from "react-router-dom";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../context/AuthContext.tsx";
 import "./loginForm.css";
 
 

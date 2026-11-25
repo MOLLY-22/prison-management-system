@@ -78,13 +78,15 @@ type AddUserFormProps = {
 
 const roles: UserRole[] = [
     "Super Admin",
+    "Commissioner",
     "Records Officer",
+    "Transfer Officer",
     "Disciplinary Officer",
     "Case Officer",
     "Visitor Officer",
-    "Rehabilitation Officer",
     "Instructor",
     "Medical Officer",
+    "Program Facilitator",
     "Duty Officer",
 ];
 

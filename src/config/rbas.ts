@@ -50,10 +50,8 @@ export type Permission =
 export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'Super Admin': [
         'prisons:read', 'prisons:manage',
-        'users:list', 'users:manage', 'visits:read',
-        'visits:create:family', 'visits:create:legal', 'visits:create:health',
-        'transfers:create',
-        'rosters:manage',
+        'users:list', 'users:manage',
+        'inmates:read', 'visits:read',
     ],
     'Commissioner': [
         'prisons:read',
@@ -99,16 +97,20 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
         'programs:read', 'programs:manage', 'programs:enroll', 'attendance:record',
     ],
     'Duty Officer': [
-        'rosters:manage',
+        // The supplied role matrix assigns no permissions to Duty Officer.
     ],
 };
 
-// Helper to normalize backend role strings safely (handles "SUPER_ADMIN" or "Super Admin")
-export function normalizeRole(rawRole: string | undefined): UserRole | null {
+export function normalizeRole(rawRole: string | null | undefined): UserRole | null {
     if (!rawRole) return null;
-    const normalized = rawRole.replace(/_/g, ' ').toLowerCase();
+    const normalized = rawRole
+        .trim()
+        .replace(/^ROLE_/i, '')
+        .replace(/[_-]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .toLowerCase();
     const match = (Object.keys(ROLE_PERMISSIONS) as UserRole[]).find(
-        (role) => role.toLowerCase() === normalized
+        (role) => role.toLowerCase() === normalized,
     );
     return match ?? null;
 }

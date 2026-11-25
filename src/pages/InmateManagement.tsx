@@ -1,6 +1,6 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import api from "../api/axiosClient";
 import {
@@ -26,6 +26,7 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
+import { useAuth } from "../context/AuthContext.tsx";
 import "./admissionDialog.css";
 import "./inmateManagement.css";
 import InmateProfile from "./InmateProfile";
@@ -45,7 +46,7 @@ type Inmate = {
   prisonId: string;
 };
 type Section = "overview" | "profile" | "admission";
-type Props = { canAdmit: boolean; userRole: string; section: Section; onBack?: () => void };
+type Props = { section: Section; onBack?: () => void };
 type AdmissionForm = {
   firstName: string;
   lastName: string;
@@ -137,13 +138,16 @@ function toDirectoryRecord(inmate: ApiInmate): Inmate {
   };
 }
 
-export function InmateManagement({ canAdmit, userRole, section, onBack }: Props) {
+export function InmateManagement({ section, onBack }: Props) {
+  const { can } = useAuth();
+  const canReadInmates = can("inmates:read");
+  const canAdmit = can("inmates:manage");
   const [search, setSearch] = useState("");
   const [custodyType, setCustodyType] = useState("All");
   const [records, setRecords] = useState<Inmate[]>([]);
   const [loading, setLoading] = useState(true);
   const [censusLoadError, setCensusLoadError] = useState(false);
-  const [admissionOpen, setAdmissionOpen] = useState(section === "admission");
+  const [admissionOpen, setAdmissionOpen] = useState(section === "admission" && canAdmit);
   const [admission, setAdmission] = useState<AdmissionForm>(emptyAdmission);
   const [savingAdmission, setSavingAdmission] = useState(false);
   const [admissionPhotos, setAdmissionPhotos] = useState<File[]>([]);
@@ -157,15 +161,20 @@ export function InmateManagement({ canAdmit, userRole, section, onBack }: Props)
   const [retryingSentence, setRetryingSentence] = useState(false);
 
   useEffect(() => {
-    setAdmissionOpen(section === "admission");
+    setAdmissionOpen(section === "admission" && canAdmit);
     setAdmissionError(null);
     setSelectedInmateId(null);
-  }, [section]);
+  }, [section, canAdmit]);
 
-  const loadInmates = async () => {
+  const loadInmates = useCallback(async () => {
     setLoading(true);
     setCensusLoadError(false);
     setNotice(null);
+    if (!canReadInmates) {
+      setRecords([]);
+      setLoading(false);
+      return;
+    }
     try {
       // The API caps page size at 100; let the service follow its pagination metadata.
       const data = await inmateService.getInmates({ size: 100 });
@@ -186,8 +195,8 @@ export function InmateManagement({ canAdmit, userRole, section, onBack }: Props)
     } finally {
       setLoading(false);
     }
-  };
-  useEffect(() => { void loadInmates(); }, []);
+  }, [canReadInmates]);
+  useEffect(() => { void loadInmates(); }, [loadInmates]);
   useEffect(() => {
     if (!admissionOpen) return;
 
@@ -197,7 +206,7 @@ export function InmateManagement({ canAdmit, userRole, section, onBack }: Props)
       .then(setCells)
       .catch((error) => { setCells([]); setCellLoadError(error instanceof Error ? error.message : "Could not load cells."); })
       .finally(() => setLoadingCells(false));
-  }, [admissionOpen, userRole]);
+  }, [admissionOpen]);
   const filtered = useMemo(
     () =>
       records.filter((record) => {
@@ -217,6 +226,7 @@ export function InmateManagement({ canAdmit, userRole, section, onBack }: Props)
     else setAdmissionOpen(false);
   };
   const retrySentence = async () => {
+    if (!canAdmit) return;
     if (!pendingSentence) return;
     setRetryingSentence(true);
     try {
@@ -236,6 +246,10 @@ export function InmateManagement({ canAdmit, userRole, section, onBack }: Props)
     }
   };
   const saveAdmission = async () => {
+    if (!canAdmit) {
+      setAdmissionError("Your role does not have permission to enroll inmates.");
+      return;
+    }
     const missingFields = [
       ["first name", admission.firstName.trim()],
       ["last name", admission.lastName.trim()],
@@ -398,7 +412,21 @@ export function InmateManagement({ canAdmit, userRole, section, onBack }: Props)
       setSavingAdmission(false);
     }
   };
-  if (selectedInmateId && ["overview", "profile"].includes(section)) return <InmateProfile inmateId={selectedInmateId} userRole={userRole} initialTab="Overview" onBack={() => setSelectedInmateId(null)} />;
+  if (section === "admission" && !canAdmit) {
+    return (
+      <Alert severity="warning">
+        Your role does not have permission to enroll inmates.
+      </Alert>
+    );
+  }
+  if (!canReadInmates) {
+    return (
+      <Alert severity="warning">
+        Your role does not have permission to view inmate records.
+      </Alert>
+    );
+  }
+  if (selectedInmateId && ["overview", "profile"].includes(section)) return <InmateProfile inmateId={selectedInmateId} initialTab="Overview" onBack={() => setSelectedInmateId(null)} />;
   return (
     <Box className="census-page">
       {!admissionOpen && <>

@@ -1,6 +1,6 @@
 import { asRecord, firstValue, itemFrom } from "./dataContract";
 import api from "./axiosClient";
-import type { AuthUser } from "../context/AuthContext";
+import type { AuthUser } from "../context/AuthContext.tsx";
 import { normalizeRole } from "../config/rbas";
 
 function authUserFrom(payload: unknown): AuthUser | undefined {
@@ -21,7 +21,7 @@ function authUserFrom(payload: unknown): AuthUser | undefined {
         email: String(email),
         role: normalizeRole(
             String(firstValue(record, ["role", "userRole", "user_role"], "")),
-        ) ?? "Records Officer",
+        ),
         ...(record.prisonId || record.prison_id
             ? { prisonId: String(record.prisonId ?? record.prison_id) }
             : {}),
@@ -93,11 +93,12 @@ function userFromProfile(value: unknown, fallback: AuthUser): AuthUser {
     const profile = Object.keys(nested).length ? nested : root;
     const prisonValue = firstValue(profile, ["prison", "facility"], {});
     const prison = asRecord(prisonValue);
+    const profileRole = roleFrom(profile);
     return {
         id: String(firstValue(profile, ["id", "userId", "user_id", "sub", "uid"], fallback.id)),
         name: String(firstValue(profile, ["fullName", "full_name", "name", "username", "userName"], fallback.name)),
         email: String(firstValue(profile, ["email", "userEmail", "user_email", "mail"], fallback.email)),
-        role: normalizeRole(roleFrom(profile)) || fallback.role,
+        role: profileRole ? normalizeRole(profileRole) : fallback.role,
         prisonId: firstValue(profile, ["prisonId", "prison_id", "facilityId", "facility_id"], firstValue(prison, ["id", "prisonId", "prison_id"], fallback.prisonId ?? null)) as string | null,
         prisonName: firstValue(profile, ["prisonName", "prison_name", "facilityName", "facility_name"], typeof prisonValue === "string" ? prisonValue : firstValue(prison, ["name", "prisonName", "prison_name"], fallback.prisonName ?? null)) as string | null,
     };
@@ -153,7 +154,7 @@ export const authService = {
                     id: userId,
                     name: userName,
                     email: String(email),
-                    role: normalizeRole(role) ?? "Records Officer",
+                    role: normalizeRole(role),
                     prisonId: firstValue(
                         record,
                         ["prisonId", "prison_id", "facilityId", "facility_id"],

@@ -6,7 +6,7 @@ import {
   Routes,
   useLocation,
 } from "react-router-dom";
-import { useAuth, AuthProvider } from "./context/AuthContext";
+import { useAuth, AuthProvider } from "./context/AuthContext.tsx";
 import Dashboard from "./Dashboard/Dashboard";
 import LoginForm from "./pages/LoginForm";
 

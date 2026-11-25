@@ -6,6 +6,7 @@ import {
   TablePagination, TableRow, TextField, Typography,
 } from "@mui/material";
 import { transferService, type TransferRecord } from "../api/transferService";
+import { useAuth } from "../context/AuthContext.tsx";
 
 type Period = "day" | "week" | "month" | "year";
 type Bucket = { key: string; label: string; start: Date; end: Date; count: number };
@@ -73,6 +74,8 @@ function formatRange(bucket: Bucket, period: Period) {
 }
 
 export default function TransferAnalytics() {
+  const { can } = useAuth();
+  const canReadTransfers = can("transfers:read");
   const [transfers, setTransfers] = useState<TransferRecord[]>([]);
   const [period, setPeriod] = useState<Period>("month");
   const [selectedKey, setSelectedKey] = useState("");
@@ -83,11 +86,12 @@ export default function TransferAnalytics() {
   const [error, setError] = useState("");
 
   const loadTransfers = useCallback(async (isActive: () => boolean = () => true) => {
-    setLoading(true);
-    setError("");
     try {
       const records = await transferService.getTransfers();
-      if (isActive()) setTransfers(records);
+      if (isActive()) {
+        setTransfers(records);
+        setError("");
+      }
     } catch (reason: unknown) {
       if (isActive()) {
         setError(
@@ -101,10 +105,11 @@ export default function TransferAnalytics() {
     }
   }, []);
   useEffect(() => {
+    if (!canReadTransfers) return;
     let active = true;
     void loadTransfers(() => active);
     return () => { active = false; };
-  }, [loadTransfers]);
+  }, [canReadTransfers, loadTransfers]);
 
   const buckets = useMemo(() => buildBuckets(transfers, period), [transfers, period]);
   const selected = buckets.find((bucket) => bucket.key === selectedKey) ?? buckets[buckets.length - 1];
@@ -127,6 +132,20 @@ export default function TransferAnalytics() {
     setPage(0);
   }
 
+  function refreshTransfers() {
+    setLoading(true);
+    setError("");
+    void loadTransfers();
+  }
+
+  if (!canReadTransfers) {
+    return (
+      <Alert severity="warning">
+        Your role does not have permission to view transfer analytics.
+      </Alert>
+    );
+  }
+
   return <Box className="module-workspace" sx={{ maxWidth: 1500, mx: "auto" }}>
     <Stack spacing={3}>
       <Stack direction={{ xs: "column", sm: "row" }} spacing={2} sx={{ justifyContent: "space-between", alignItems: { xs: "stretch", sm: "end" } }}>
@@ -137,7 +156,7 @@ export default function TransferAnalytics() {
           </Select>
         </FormControl>
       </Stack>
-      {error && <Alert severity="error" action={<Button color="inherit" size="small" onClick={() => void loadTransfers()}>Retry</Button>}>{error}</Alert>}
+      {error && <Alert severity="error" action={<Button color="inherit" size="small" onClick={refreshTransfers}>Retry</Button>}>{error}</Alert>}
 
       <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "repeat(3, 1fr)" }, gap: 2 }}>
         {[

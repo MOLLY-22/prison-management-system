@@ -675,6 +675,9 @@ export function PrisonRegistry({
   };
 
   const handleCreate = async (payload: PrisonInput) => {
+    if (!canManage) {
+      throw new Error("Your role does not have permission to manage prisons.");
+    }
     const matches = (await prisonService.getPrisons(0, payload.name, "all", 100)).records;
     const key = (value: string | null | undefined) => (value ?? "").trim().toLocaleLowerCase();
     const samePrison = (candidate: PrisonSummary) =>
@@ -711,6 +714,9 @@ export function PrisonRegistry({
     location?: string;
     gender: StationGender;
   }) => {
+    if (!canManage) {
+      throw new Error("Your role does not have permission to manage prisons.");
+    }
     if (!prison) return;
     await prisonService.updatePrison(prison.id, payload);
     setModal(null);
@@ -721,6 +727,9 @@ export function PrisonRegistry({
     name: string;
     cells: CellInput[];
   }) => {
+    if (!canManage) {
+      throw new Error("Your role does not have permission to manage prison blocks.");
+    }
     if (!prison) return;
     await prisonService.addBlock(prison.id, input as BlockInput);
     setModal(null);
@@ -731,6 +740,9 @@ export function PrisonRegistry({
     blockId: string,
     input: { name: string; cells: CellInput[] },
   ) => {
+    if (!canManage) {
+      throw new Error("Your role does not have permission to manage prison blocks.");
+    }
     if (!prison) return;
     await prisonService.updateBlock(prison.id, blockId, {
       name: input.name,
@@ -1159,20 +1171,20 @@ export function PrisonRegistry({
       {housingMode && assignedPrisonRequired && !assignedPrisonId
         ? missingAssignedPrisonView()
         : selectedId ? detailView() : listView()}
-      {modal?.kind === "create" && (
+      {canManage && modal?.kind === "create" && (
         <CreatePrisonDialog
           onClose={() => { setModal(null); reloadList(); }}
           onSubmit={handleCreate}
         />
       )}
-      {prison && modal?.kind === "edit-prison" && (
+      {canManage && prison && modal?.kind === "edit-prison" && (
         <EditPrisonDialog
           prison={prison}
           onClose={() => setModal(null)}
           onSubmit={handleEditPrison}
         />
       )}
-      {prison && modal?.kind === "add-block" && (
+      {canManage && prison && modal?.kind === "add-block" && (
         <BlockDialog
           key="add"
           otherNames={prison.blocks.map((block) => block.name)}
@@ -1180,7 +1192,7 @@ export function PrisonRegistry({
           onSubmit={handleAddBlock}
         />
       )}
-      {prison && modal?.kind === "edit-block" && (
+      {canManage && prison && modal?.kind === "edit-block" && (
         <BlockDialog
           key={modal.block.id}
           block={modal.block}

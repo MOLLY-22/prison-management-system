@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { userService, type User } from "../api/userService";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../context/AuthContext.tsx";
 import AddUserForm from "../components/addUserForm";
 import "./userAccess.css";
 
@@ -18,6 +18,7 @@ function messageFrom(error: unknown, fallback: string) {
 
 export default function UserAccess() {
     const { can } = useAuth();
+    const canListUsers = can("users:list");
     const canManageUsers = can("users:manage");
     const [users, setUsers] = useState<User[]>([]);
     const [search, setSearch] = useState("");
@@ -29,6 +30,7 @@ export default function UserAccess() {
     const [editingUser, setEditingUser] = useState<User | null>(null);
 
     useEffect(() => {
+        if (!canListUsers) return;
         let cancelled = false;
 
         void userService.getUsers()
@@ -52,7 +54,7 @@ export default function UserAccess() {
         return () => {
             cancelled = true;
         };
-    }, []);
+    }, [canListUsers]);
 
     const filteredUsers = useMemo(() => {
         const query = search.trim().toLowerCase();
@@ -63,6 +65,7 @@ export default function UserAccess() {
     }, [search, statusFilter, users]);
 
     const toggleStatus = async (user: User) => {
+        if (!canManageUsers) return;
         setSavingId(user.id);
         setError("");
         try {
@@ -76,6 +79,7 @@ export default function UserAccess() {
     };
 
     const openEdit = (user: User) => {
+        if (!canManageUsers) return;
         setEditingUser(user);
         setShowForm(true);
     };
@@ -88,9 +92,17 @@ export default function UserAccess() {
     const activeCount = users.filter((user) => user.status === "Active").length;
     const inactiveCount = users.filter((user) => user.status !== "Active").length;
 
+    if (!canListUsers) {
+        return (
+            <p className="access-alert" role="alert">
+                Your role does not have permission to view personnel records.
+            </p>
+        );
+    }
+
     return (
         <div className="access-page">
-            {showForm && (
+            {showForm && canManageUsers && (
                 <AddUserForm
                     key={editingUser?.id ?? "new-user"}
                     userToEdit={editingUser}

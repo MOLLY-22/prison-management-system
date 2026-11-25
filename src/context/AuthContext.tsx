@@ -2,7 +2,7 @@
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import type { PropsWithChildren } from "react";
 import type { UserRole, Permission } from "../config/rbas";
-import { hasPermission, hasAnyPermission } from "../config/rbas";
+import { hasPermission, hasAnyPermission, normalizeRole } from "../config/rbas";
 
 import { authService } from "../api/authService";
 
@@ -11,7 +11,7 @@ export type AuthUser = {
     name: string;
     username?: string;
     email?: string;
-    role: UserRole;
+    role: UserRole | null;
     prisonId?: string | null;
     prisonName?: string | null;
 };
@@ -70,11 +70,11 @@ function readStoredUser(): AuthUser | null {
             typeof user.id !== "string" ||
             typeof user.name !== "string" ||
             typeof user.email !== "string" ||
-            typeof user.role !== "string"
+            (user.role !== null && typeof user.role !== "string")
         ) {
             return null;
         }
-        return user as AuthUser;
+        return { ...user, role: normalizeRole(user.role) } as AuthUser;
     } catch {
         return null;
     }
@@ -85,7 +85,8 @@ function readCurrentUser(): AuthUser | null {
     const token = readStoredToken();
     const tokenUser = token ? authService.userFromToken(token) : null;
     if (!storedUser) return tokenUser;
-    if (!tokenUser) return storedUser;
+    if (!token) return null;
+    if (!tokenUser) return { ...storedUser, role: null };
     return {
         ...storedUser,
         role: tokenUser.role,
@@ -111,16 +112,15 @@ export function AuthProvider({ children }: PropsWithChildren) {
     const [token, setToken] = useState(readStoredToken);
     const [user, setUser] = useState(readCurrentUser);
     const [loading, setLoading] = useState(false);
-    const [isInitializing, setIsInitializing] = useState(() => Boolean(readStoredToken()));
+    const [isInitializing, setIsInitializing] = useState(
+        () => Boolean(readStoredToken() && readStoredUser()),
+    );
     const [authError, setAuthError] = useState("");
 
     useEffect(() => {
         const storedToken = readStoredToken();
         const storedUser = readStoredUser();
-        if (!storedToken || !storedUser) {
-            setIsInitializing(false);
-            return;
-        }
+        if (!storedToken || !storedUser) return;
         let live = true;
         authService.currentUser(storedToken, storedUser)
             .then((profile) => {
@@ -218,8 +218,14 @@ export function AuthProvider({ children }: PropsWithChildren) {
         }
     };
 
-    const can = (permission: Permission) => hasPermission(user?.role, permission);
-    const canAny = (permissions: Permission[]) => hasAnyPermission(user?.role, permissions);
+    const can = useCallback(
+        (permission: Permission) => hasPermission(user?.role, permission),
+        [user?.role],
+    );
+    const canAny = useCallback(
+        (permissions: Permission[]) => hasAnyPermission(user?.role, permissions),
+        [user?.role],
+    );
 
     return (
         <AuthContext.Provider

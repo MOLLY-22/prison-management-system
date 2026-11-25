@@ -20,6 +20,7 @@ import DischargeEventRecording from "../components/DischargeEventRecording";
 import ReleaseEligibilityQueueDashboard from "../components/ReleaseEligibilityQueueDashboard";
 import TableData from "../components/TableData";
 import type { TableDataColumn } from "../components/TableData";
+import { useAuth } from "../context/AuthContext.tsx";
 import {
   releaseDischargeService,
   type InmateRecord,
@@ -89,6 +90,9 @@ function eligibilityLabel(inmate: InmateRecord) {
 }
 
 export default function ReleaseManagement() {
+  const { can } = useAuth();
+  const canReadInmates = can("inmates:read");
+  const canManageInmates = can("inmates:manage");
   const [inmates, setInmates] = useState<InmateRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -99,15 +103,17 @@ export default function ReleaseManagement() {
   const [eventDialogOpen, setEventDialogOpen] = useState(false);
 
   const fetchInmates = useCallback(async () => {
+    if (!canReadInmates) return [];
     console.log("Fetching inmate records from API...");
     const records = await releaseDischargeService.getAllInmates();
     if (!Array.isArray(records)) {
       throw new TypeError("The inmate API returned an unexpected response.");
     }
     return records;
-  }, []);
+  }, [canReadInmates]);
 
   useEffect(() => {
+    if (!canReadInmates) return;
     let active = true;
     fetchInmates()
       .then((records) => {
@@ -128,9 +134,10 @@ export default function ReleaseManagement() {
     return () => {
       active = false;
     };
-  }, [fetchInmates]);
+  }, [canReadInmates, fetchInmates]);
 
   const refreshInmates = async () => {
+    if (!canReadInmates) return;
     setLoading(true);
     setLoadError("");
     try {
@@ -219,6 +226,14 @@ export default function ReleaseManagement() {
     },
   ];
 
+  if (!canReadInmates) {
+    return (
+      <Alert severity="warning">
+        Your role does not have permission to view inmate release records.
+      </Alert>
+    );
+  }
+
   return (
     <Box className="module-workspace release-workspace">
       <Stack spacing={1}>
@@ -238,13 +253,15 @@ export default function ReleaseManagement() {
               >
                 {loading ? "Refreshing…" : "Refresh inmates"}
               </Button>
-              <Button
-                variant="contained"
-                onClick={() => setEventDialogOpen(true)}
-                disabled={inmates.length === 0}
-              >
-                Record discharge event
-              </Button>
+              {canManageInmates && (
+                <Button
+                  variant="contained"
+                  onClick={() => setEventDialogOpen(true)}
+                  disabled={inmates.length === 0}
+                >
+                  Record discharge event
+                </Button>
+              )}
             </Stack>
           </Box>
         </Box>
@@ -351,6 +368,7 @@ export default function ReleaseManagement() {
                   key={selectedInmateId}
                   inmateId={selectedInmateId}
                   inmateName={inmateName(selectedInmate)}
+                  canManage={canManageInmates}
                 />
               </Stack>
             )}
@@ -360,7 +378,7 @@ export default function ReleaseManagement() {
           </DialogActions>
         </Dialog>
 
-        <Dialog
+        {canManageInmates && <Dialog
           open={eventDialogOpen}
           onClose={() => setEventDialogOpen(false)}
           fullWidth
@@ -382,7 +400,7 @@ export default function ReleaseManagement() {
           <DialogActions>
             <Button onClick={() => setEventDialogOpen(false)}>Close</Button>
           </DialogActions>
-        </Dialog>
+        </Dialog>}
       </Stack>
     </Box>
   );

@@ -1,17 +1,8 @@
 import api from "./axiosClient";
 import { asBoolean, asRecord, collectionFrom, firstValue, itemFrom, requiredIdentifier } from "./dataContract";
+import type { UserRole } from "../config/rbas";
 
-
-export type UserRole =
-    | "Super Admin"
-    | "Records Officer"
-    | "Disciplinary Officer"
-    | "Case Officer"
-    | "Visitor Officer"
-    | "Rehabilitation Officer"
-    | "Instructor"
-    | "Medical Officer"
-    | "Duty Officer";
+export type { UserRole } from "../config/rbas";
 
 export interface User {
     id: string;

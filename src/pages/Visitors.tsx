@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import axios from "axios";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../context/AuthContext.tsx";
 import "./visitorManagement.css";
 import {
   visitorService,
@@ -37,6 +37,7 @@ function getErrorMessage(error: unknown, fallback: string) {
 
 export default function Visitors() {
   const { can } = useAuth();
+  const canReadVisits = can("visits:read");
   const canCreateFamilyVisit = can("visits:create:family");
   const [visitors, setVisitors] = useState<Visitor[]>([]);
   const [inmates, setInmates] = useState<InmateLookup[]>([]);
@@ -50,6 +51,7 @@ export default function Visitors() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
+    if (!canReadVisits) return;
     visitorService
       .getVisitors()
       .then(setVisitors)
@@ -57,7 +59,7 @@ export default function Visitors() {
         setNotice(getErrorMessage(error, "Could not load visitor records.")),
       )
       .finally(() => setLoading(false));
-  }, []);
+  }, [canReadVisits]);
 
   useEffect(() => {
     if (!canCreateFamilyVisit) {
@@ -90,6 +92,7 @@ export default function Visitors() {
 
   async function registerVisitor(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!canCreateFamilyVisit) return;
     const visitorName = form.name.trim();
     if (!visitorName) {
       setNotice("Enter the visitor full name.");
@@ -108,6 +111,14 @@ export default function Visitors() {
     if (form.endTime <= form.startTime) {
       setNotice("The end time must be later than the start time.");
       return;
+    }
+
+    if (!canReadVisits) {
+      return (
+        <p className="pending-note" role="alert">
+          Your role does not have permission to view visit records.
+        </p>
+      );
     }
 
     setSaving(true);

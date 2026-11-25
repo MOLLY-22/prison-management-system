@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { useAuth } from "../context/AuthContext.tsx";
+import type { Permission } from "../config/rbas";
 import api from "../api/axiosClient";
 import { collectionFrom, asRecord, fetchAllPages, itemFrom } from "../api/dataContract";
 import { sentenceService } from "../api/sentenceService";
@@ -6,7 +8,6 @@ import { visitorService } from "../api/visitorService";
 import { transferService } from "../api/transferService";
 import { prisonService, type PrisonSummary } from "../api/prisonService";
 import { inmateService, type Cell } from "../api/inmateService";
-import { normalizeRole } from "../auth/roleAccess";
 
 type Row = Record<string, unknown>;
 type Tab =
@@ -30,7 +31,6 @@ type FormKind =
   | "attendance";
 type Props = {
   inmateId: string;
-  userRole?: string;
   initialTab?: Tab;
   onBack: () => void;
 };
@@ -83,38 +83,43 @@ const errorMessage = (reason: unknown) => {
 
 export default function InmateProfile({
   inmateId,
-  userRole = "",
   initialTab = "Overview",
   onBack,
 }: Props) {
-  const role = normalizeRole(userRole);
-  const canLogConduct = [
-    "RECORDS OFFICER",
-    "DISCIPLINARY OFFICER",
-  ].includes(role);
-  const canManagePrograms = ["PROGRAM FACILITATOR"].includes(role);
-  const canRecordAttendance = ["INSTRUCTOR", "PROGRAM FACILITATOR"].includes(
-    role,
+  const { can, canAny } = useAuth();
+  const canReadInmates = can("inmates:read");
+  const canReadPhoto = can("inmates:photo:read");
+  const canLogConduct = can("incidents:create");
+  const canManagePrograms = can("programs:enroll");
+  const canRecordAttendance = can("attendance:record");
+  const canInitiateTransfer = can("transfers:create");
+  const canRecordFamilyVisit = can("visits:create:family");
+  const canRecordLegalVisit = can("visits:create:legal");
+  const canRecordVisit = canAny(["visits:create:family", "visits:create:legal"]);
+  const canRecordMedical = can("visits:create:health");
+  const canAllocateCell = can("cells:allocate");
+  const allowedVisitTypes = [
+    ...(canRecordFamilyVisit ? ["FAMILY" as const] : []),
+    ...(canRecordLegalVisit ? ["LEGAL" as const] : []),
+  ];
+  const tabPermissions: [Tab, Permission[]][] = [
+    ["Sentences", ["sentences:manage"]],
+    ["Transfers", ["transfers:read"]],
+    ["Visits", ["visits:read"]],
+    ["Medical", ["visits:read"]],
+    ["Cell allocations", ["cells:read"]],
+    ["Conduct", ["incidents:read"]],
+    ["Rehabilitation", ["programs:read"]],
+  ];
+  const visibleTabs: Tab[] = [
+    "Overview",
+    ...tabPermissions
+      .filter(([, permissions]) => canAny(permissions))
+      .map(([name]) => name),
+  ];
+  const [tab, setTab] = useState<Tab>(
+    visibleTabs.includes(initialTab) ? initialTab : "Overview",
   );
-  const tabsByRole: Record<string, Tab[]> = {
-    "SUPER ADMIN": ["Sentences", "Transfers", "Visits", "Medical", "Cell allocations", "Conduct", "Rehabilitation"],
-    "RECORDS OFFICER": ["Sentences", "Transfers", "Visits", "Cell allocations"],
-    "CASE OFFICER": ["Sentences", "Transfers"],
-    "VISITOR OFFICER": ["Visits"],
-    "DUTY OFFICER": ["Transfers", "Visits"],
-    "PRISON OFFICER": ["Transfers", "Visits", "Cell allocations", "Conduct"],
-    "OFFICER IN CHARGE": ["Sentences", "Transfers", "Visits", "Conduct"],
-    "DISCIPLINARY OFFICER": ["Conduct"],
-    "MEDICAL OFFICER": ["Medical"],
-    "REHABILITATION OFFICER": ["Rehabilitation", "Conduct"],
-    "INSTRUCTOR": ["Rehabilitation"],
-  };
-  const visibleTabs: Tab[] = ["Overview", ...(tabsByRole[role] ?? [])];
-  const canInitiateTransfer = ["SUPER ADMIN", "COMMISSIONER", "RECORDS OFFICER", "TRANSFER OFFICER", "DISCIPLINARY OFFICER", "CASE OFFICER", "MEDICAL OFFICER"].includes(role);
-  const canRecordVisit = ["SUPER ADMIN", "RECORDS OFFICER", "VISITOR OFFICER", "CASE OFFICER", "MEDICAL OFFICER"].includes(role);
-  const canRecordMedical = ["SUPER ADMIN", "RECORDS OFFICER", "MEDICAL OFFICER"].includes(role);
-  const canAllocateCell = ["RECORDS OFFICER"].includes(role);
-  const [tab, setTab] = useState<Tab>(initialTab);
   const [record, setRecord] = useState<Row>({});
   const [sentences, setSentences] = useState<Row[]>([]);
   const [transferRows, setTransferRows] = useState<Row[]>([]);
@@ -139,6 +144,11 @@ export default function InmateProfile({
   useEffect(() => {
     let active = true;
     const load = async () => {
+      if (!canReadInmates) {
+        setError("Your role does not have permission to view inmate records.");
+        setLoading(false);
+        return;
+      }
       if (active) {
         setError("");
         setNotice("");
@@ -148,9 +158,10 @@ export default function InmateProfile({
         const inmateResponse = await api.get(
           `/inmates/${encodeURIComponent(inmateId)}`,
         );
-        if (active) setRecord(asRecord(itemFrom(inmateResponse.data)));
+        const inmateRecord = asRecord(itemFrom(inmateResponse.data));
+        if (active) setRecord(inmateRecord);
 
-        if (tab === "Transfers") {
+        if (tab === "Transfers" && canReadPhoto) {
           try {
             const image = await api.get(
               `/inmates/${encodeURIComponent(inmateId)}/photo`,
@@ -162,7 +173,7 @@ export default function InmateProfile({
           }
         }
 
-        if (tab === "Overview") {
+        if (tab === "Overview" && canReadPhoto) {
           try {
             const image = await api.get(
               `/inmates/${encodeURIComponent(inmateId)}/photo`,
@@ -201,10 +212,10 @@ export default function InmateProfile({
           const visits = await visitorService.getInmateVisitHistory(inmateId);
           if (active) setMedicalRows(visits.filter((visit) => visit.visitType === "HEALTH").map((visit) => ({ ...visit, visitDate: visit.date })));
         } else if (tab === "Cell allocations") {
-          const cellId = String(field(record, "cellId") ?? "");
+          const cellId = String(field(inmateRecord, "cellId") ?? "");
           const [cellResult, cellsResult] = await Promise.all([
             cellId ? api.get(`/cells/${encodeURIComponent(cellId)}`).then(({ data }) => asRecord(itemFrom(data))) : Promise.resolve({}),
-            inmateService.getCells({ prisonId: String(field(record, "prisonId") ?? "") || undefined }),
+            inmateService.getCells({ prisonId: String(field(inmateRecord, "prisonId") ?? "") || undefined }),
           ]);
           if (active) {
             setCellRecord(cellResult);
@@ -242,7 +253,7 @@ export default function InmateProfile({
     return () => {
       active = false;
     };
-  }, [tab, inmateId, revision]);
+  }, [tab, inmateId, revision, canReadInmates, canReadPhoto]);
 
   useEffect(
     () => () => {
@@ -256,18 +267,42 @@ export default function InmateProfile({
       .filter(Boolean)
       .join(" ") || "Inmate profile";
   const openForm = (kind: FormKind, sentenceId?: string) => {
+    const allowed =
+      kind === "sentence" || kind === "remission"
+        ? can("sentences:manage")
+        : kind === "transfer"
+          ? can("transfers:create")
+          : kind === "visit"
+            ? canRecordVisit
+            : kind === "medical"
+              ? canRecordMedical
+              : kind === "cell"
+                ? canAllocateCell
+                : kind === "incident"
+                  ? canLogConduct
+                  : kind === "enrollment"
+                    ? canManagePrograms
+                    : canRecordAttendance;
+    if (!allowed) {
+      setError("Your role does not have permission to perform this action.");
+      return;
+    }
     setError("");
     setForm({
       kind,
       ...(sentenceId ? { sentenceId } : {}),
       ...(kind === "attendance" ? { attendanceStatus: "present" } : {}),
-      ...(kind === "visit" ? { visitType: "FAMILY", visitDate: new Date().toISOString().slice(0, 10) } : {}),
+      ...(kind === "visit" ? { visitType: allowedVisitTypes[0] ?? "FAMILY", visitDate: new Date().toISOString().slice(0, 10) } : {}),
       ...(kind === "medical" ? { visitDate: new Date().toISOString().slice(0, 10) } : {}),
     });
     setFormKind(kind);
   };
 
   const saveProfile = async () => {
+    if (!can("inmates:manage")) {
+      setError("Your role does not have permission to edit inmate records.");
+      return;
+    }
     const keys = ["firstName", "lastName", "dateOfBirth", "admissionDate"];
     const payload = Object.fromEntries(
       keys
@@ -290,6 +325,26 @@ export default function InmateProfile({
   const saveSentenceAction = async () => {
     setError("");
     setNotice("");
+    const allowed =
+      formKind === "sentence" || formKind === "remission"
+        ? can("sentences:manage")
+        : formKind === "transfer"
+          ? can("transfers:create")
+          : formKind === "visit"
+            ? can(form.visitType === "LEGAL" ? "visits:create:legal" : "visits:create:family")
+            : formKind === "medical"
+              ? can("visits:create:health")
+              : formKind === "cell"
+                ? can("cells:allocate")
+                : formKind === "incident"
+                  ? can("incidents:create")
+                  : formKind === "enrollment"
+                    ? can("programs:enroll")
+                    : formKind === "attendance" && can("attendance:record");
+    if (!formKind || !allowed) {
+      setError("Your role does not have permission to perform this action.");
+      return;
+    }
     const offenceText = [
       form.offenceCategory === "Other"
         ? form.offenceOther?.trim()
@@ -469,6 +524,14 @@ export default function InmateProfile({
     }
   };
 
+  if (!canReadInmates) {
+    return (
+      <section role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900">
+        Your role does not have permission to view inmate records.
+      </section>
+    );
+  }
+
   return (
     <section className="mx-auto max-w-[1440px] space-y-5">
       <button
@@ -551,7 +614,7 @@ export default function InmateProfile({
             <h2 className="text-lg font-semibold text-slate-800">
               Personal and custody details
             </h2>
-            {role === "RECORDS OFFICER" &&
+            {can("inmates:manage") &&
               !editing && (
                 <button
                   onClick={() => {
@@ -647,7 +710,7 @@ export default function InmateProfile({
             <h2 className="text-lg font-semibold text-slate-800">
               Sentence records
             </h2>
-            {["RECORDS OFFICER", "PRISON OFFICER"].includes(role) && (
+            {can("sentences:manage") && (
               <button
                 onClick={() => openForm("sentence")}
                 className="rounded-lg bg-[#123c55] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#1e607a]"
@@ -709,7 +772,7 @@ export default function InmateProfile({
                   <div className="flex flex-wrap items-center justify-between gap-3 border-y border-slate-100 bg-slate-50/70 px-5 py-3">
                     <span className="text-xs font-semibold text-slate-600">Sentence actions</span>
                     <div className="flex flex-wrap gap-2">
-                      {["RECORDS OFFICER", "PRISON OFFICER"].includes(role) && <button onClick={() => openForm("remission", id)} className="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">Add remission</button>}
+                      {can("sentences:manage") && <button onClick={() => openForm("remission", id)} className="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">Add remission</button>}
                     </div>
                   </div>
                   <div className="grid gap-3 p-4 md:grid-cols-2">
@@ -735,7 +798,7 @@ export default function InmateProfile({
             <h2 className="text-lg font-semibold text-slate-800">Visit history</h2>
             {canRecordVisit && <button onClick={() => openForm("visit")} className="rounded-lg bg-[#123c55] px-3.5 py-2 text-xs font-semibold text-white">Record visit</button>}
           </div>
-          {formKind === "visit" && <ProfileActionForm kind="visit" form={form} programs={[]} onChange={setForm} onCancel={() => setFormKind(null)} onSave={() => void saveSentenceAction()} />}
+          {formKind === "visit" && <ProfileActionForm kind="visit" form={form} programs={[]} allowedVisitTypes={allowedVisitTypes} onChange={setForm} onCancel={() => setFormKind(null)} onSave={() => void saveSentenceAction()} />}
           <HistoryList title="Visit history" rows={visitRows} fields={[["Date", "visitDate"], ["Type", "visitType"], ["Visitor", "name"], ["Start", "time"], ["End", "endTime"], ["Items brought", "itemsBrought"], ["Legal representative", "legalRepresentative"]]} />
         </section>
       ) : tab === "Medical" ? (
@@ -1061,6 +1124,7 @@ function ProfileActionForm({
   kind,
   form,
   programs,
+  allowedVisitTypes = ["FAMILY", "LEGAL"],
   prisons = [],
   cells = [],
   currentPrisonId = "",
@@ -1071,6 +1135,7 @@ function ProfileActionForm({
   kind: FormKind;
   form: Record<string, string>;
   programs: Row[];
+  allowedVisitTypes?: ("FAMILY" | "LEGAL")[];
   prisons?: PrisonSummary[];
   cells?: Cell[];
   currentPrisonId?: string;
@@ -1114,7 +1179,7 @@ function ProfileActionForm({
         </>}
         {kind === "visit" && <>
           <label className="grid gap-1 text-xs font-medium text-slate-600">Visit type
-            <select value={form.visitType ?? "FAMILY"} onChange={(event) => change("visitType", event.target.value)} className="rounded-md border border-slate-300 px-3 py-2 text-sm"><option value="FAMILY">Family or friends</option><option value="LEGAL">Legal representative</option></select>
+            <select value={form.visitType ?? allowedVisitTypes[0] ?? "FAMILY"} onChange={(event) => change("visitType", event.target.value)} className="rounded-md border border-slate-300 px-3 py-2 text-sm">{allowedVisitTypes.map((type) => <option key={type} value={type}>{type === "FAMILY" ? "Family or friends" : "Legal representative"}</option>)}</select>
           </label>
           {form.visitType === "LEGAL" ? <>
             <label className="grid gap-1 text-xs font-medium text-slate-600">Legal case number<input required maxLength={255} value={form.legalCaseNumber ?? ""} onChange={(event) => change("legalCaseNumber", event.target.value)} className="rounded-md border border-slate-300 px-3 py-2 text-sm" /></label>

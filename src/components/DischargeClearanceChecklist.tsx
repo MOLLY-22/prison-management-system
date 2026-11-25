@@ -39,11 +39,13 @@ const defaultChecklist: ClearanceChecklistItem[] = [
 type DischargeClearanceListProps = {
   inmateId: string;
   inmateName: string;
+  canManage: boolean;
 };
 
 export default function DischargeClearanceList({
   inmateId,
   inmateName,
+  canManage,
 }: DischargeClearanceListProps) {
   const [checklist, setChecklist] = useState<ClearanceChecklistItem[]>([]);
   const [savedChecklist, setSavedChecklist] = useState<ClearanceChecklistItem[]>([]);
@@ -94,6 +96,7 @@ export default function DischargeClearanceList({
   ) || checklist.length !== savedChecklist.length;
 
   function toggleItem(id) {
+    if (!canManage) return;
     setChecklist((current) =>
       current.map((item) =>
         item.id === id
@@ -106,7 +109,7 @@ export default function DischargeClearanceList({
   }
 
   async function saveProgress() {
-    if (!inmateId || saving) return;
+    if (!canManage || !inmateId || saving) return;
     setSaveError('');
     setSaveMessage('');
     setSaving(true);
@@ -236,6 +239,7 @@ export default function DischargeClearanceList({
                 type="checkbox"
                 checked={item.completed}
                 onChange={() => toggleItem(item.id)}
+                disabled={!canManage}
                 className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer accent-[#246BA8]"
                 aria-label={`Mark ${item.title} as completed`}
               />
@@ -300,17 +304,19 @@ export default function DischargeClearanceList({
               : 'No unsaved changes.'}
           </p>
 
-          <button
-            type="button"
-            onClick={saveProgress}
-            disabled={loading || saving || !hasUnsavedChanges}
-            className="inline-flex items-center justify-center gap-2 rounded-md bg-[#17324D] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#244968] disabled:cursor-not-allowed disabled:bg-[#CBD5E1] disabled:text-[#64748B]"
-          >
-            <span className="material-symbols-outlined text-[18px]">
-              save
-            </span>
-            {saving ? 'Saving…' : 'Save checklist'}
-          </button>
+          {canManage && (
+            <button
+              type="button"
+              onClick={saveProgress}
+              disabled={loading || saving || !hasUnsavedChanges}
+              className="inline-flex items-center justify-center gap-2 rounded-md bg-[#17324D] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#244968] disabled:cursor-not-allowed disabled:bg-[#CBD5E1] disabled:text-[#64748B]"
+            >
+              <span className="material-symbols-outlined text-[18px]">
+                save
+              </span>
+              {saving ? 'Saving…' : 'Save checklist'}
+            </button>
+          )}
         </div>
       </div>
     </section>

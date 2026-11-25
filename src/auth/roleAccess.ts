@@ -1,8 +1,11 @@
+import { normalizeRole as normalizeRBACRole } from "../config/rbas";
+
 export type Workspace =
   | "overview"
   | "inmates"
   | "visitors"
   | "transfers"
+  | "transfer-analytics"
   | "release"
   | "access"
   | "prisons"
@@ -13,140 +16,87 @@ export type RoleProfile = {
   summary: string;
   workspaces: Workspace[];
   primary: Workspace[];
-  canAdmit: boolean;
-  canManagePrisons: boolean;
 };
 
-const allOperational: Workspace[] = [
-  "overview", "inmates", "visitors", "transfers", "release", "access", "prisons", "housing",
-];
 const profiles: Record<string, RoleProfile> = {
   "SUPER ADMIN": {
     label: "System administrator",
-    summary: "Manage personnel access, facility configuration, and system wide custody operations.",
-    workspaces: allOperational,
-    primary: ["access", "prisons", "housing", "inmates"],
-    canAdmit: false,
-    canManagePrisons: true,
+    summary: "Manage personnel and prison registry actions, with read-only access to inmate and visit records.",
+    workspaces: ["overview", "prisons", "access", "inmates", "visitors"],
+    primary: ["access", "prisons"],
   },
   "RECORDS OFFICER": {
     label: "Custody records",
     summary: "Maintain inmate records, admissions, sentence details, transfers, and release preparation.",
-    workspaces: ["overview", "inmates", "transfers", "release", "housing"],
+    workspaces: ["overview", "prisons", "inmates", "transfers", "transfer-analytics", "release", "housing", "visitors"],
     primary: ["inmates", "transfers", "release"],
-    canAdmit: true,
-    canManagePrisons: false,
   },
   "COMMISSIONER": {
     label: "Commissioner",
     summary: "Oversee prisons, custody records, personnel, and transfer coordination.",
-    workspaces: ["overview", "prisons", "inmates", "access", "transfers"],
+    workspaces: ["overview", "prisons", "inmates", "access", "transfers", "transfer-analytics"],
     primary: ["prisons", "inmates", "transfers"],
-    canAdmit: false,
-    canManagePrisons: false,
   },
   "TRANSFER OFFICER": {
     label: "Transfer operations",
     summary: "Coordinate inmate transfers and facility movement across the system.",
-    workspaces: ["overview", "prisons", "inmates", "transfers"],
+    workspaces: ["overview", "prisons", "inmates", "transfers", "transfer-analytics"],
     primary: ["transfers", "inmates"],
-    canAdmit: false,
-    canManagePrisons: false,
   },
   "DISCIPLINARY OFFICER": {
     label: "Conduct and discipline",
-    summary: "Review inmate profiles and record or follow up on conduct incidents.",
+    summary: "Review conduct records and submit transfer requests when required.",
     workspaces: ["overview", "transfers"],
     primary: ["transfers"],
-    canAdmit: false,
-    canManagePrisons: false,
   },
   "CASE OFFICER": {
     label: "Case management",
-    summary: "Track inmate cases, sentence information, transfers, and release eligibility.",
+    summary: "Review visit records, create legal visits, and submit transfer requests.",
     workspaces: ["overview", "visitors", "transfers"],
     primary: ["visitors", "transfers"],
-    canAdmit: false,
-    canManagePrisons: false,
   },
   "VISITOR OFFICER": {
     label: "Visits desk",
     summary: "Coordinate visitor appointments and review visit activity.",
     workspaces: ["overview", "visitors"],
     primary: ["visitors"],
-    canAdmit: false,
-    canManagePrisons: false,
-  },
-  "REHABILITATION OFFICER": {
-    label: "Rehabilitation services",
-    summary: "Review inmate profiles and support rehabilitation program participation.",
-    workspaces: ["overview", "inmates"],
-    primary: ["inmates"],
-    canAdmit: false,
-    canManagePrisons: false,
   },
   "INSTRUCTOR": {
     label: "Programs and instruction",
-    summary: "Review assigned inmate profiles and record program attendance.",
+    summary: "Record attendance for rehabilitation programs.",
     workspaces: ["overview"],
     primary: [],
-    canAdmit: false,
-    canManagePrisons: false,
+  },
+  "PROGRAM FACILITATOR": {
+    label: "Program facilitation",
+    summary: "Manage program enrollment and record rehabilitation attendance.",
+    workspaces: ["overview"],
+    primary: [],
   },
   "MEDICAL OFFICER": {
     label: "Health services",
-    summary: "Review inmate records relevant to health services and care coordination.",
+    summary: "Review visit records, create health visits, and submit transfer requests.",
     workspaces: ["overview", "visitors", "transfers"],
-    primary: ["visitors"],
-    canAdmit: false,
-    canManagePrisons: false,
+    primary: ["visitors", "transfers"],
   },
   "DUTY OFFICER": {
-    label: "Facility operations",
-    summary: "Coordinate daily facility activity, inmate movements, and visit operations.",
-    workspaces: ["overview", "inmates", "visitors", "transfers"],
-    primary: ["transfers", "visitors", "inmates"],
-    canAdmit: false,
-    canManagePrisons: false,
-  },
-  "OFFICER IN CHARGE": {
-    label: "Facility leadership",
-    summary: "Oversee facility custody operations, transfers, and release authorization.",
-    workspaces: ["overview", "inmates", "visitors", "transfers", "release", "prisons", "housing"],
-    primary: ["release", "transfers", "housing", "inmates"],
-    canAdmit: false,
-    canManagePrisons: true,
-  },
-  "PRISON OFFICER": {
-    label: "Custody operations",
-    summary: "Review inmate custody records and coordinate daily movement and visits.",
-    workspaces: ["overview", "inmates", "visitors", "transfers"],
-    primary: ["inmates", "transfers", "visitors"],
-    canAdmit: false,
-    canManagePrisons: false,
+    label: "Duty Officer",
+    summary: "No operational permissions are assigned to this role.",
+    workspaces: ["overview"],
+    primary: [],
   },
 };
 
 export function normalizeRole(role: string | null | undefined) {
-  return (role ?? "")
-    .trim()
-    .replace(/^ROLE_/i, "")
-    .replace(/[_-]+/g, " ")
-    .replace(/\s+/g, " ")
-    .toUpperCase();
+  return normalizeRBACRole(role)?.toUpperCase() ?? "";
 }
 
 export function getRoleProfile(role: string | null | undefined): RoleProfile {
   const normalized = normalizeRole(role);
-  if (["ADMIN", "ADMINISTRATOR", "SYSTEM ADMIN", "SYSTEM ADMINISTRATOR"].includes(normalized)) {
-    return profiles["SUPER ADMIN"];
-  }
   return profiles[normalized] ?? {
-    label: "Authorized officer",
-    summary: "Your role could not be matched to a staff profile. Available operational workspaces are shown below.",
-    workspaces: allOperational,
-    primary: ["inmates", "visitors", "transfers", "release", "access", "prisons"],
-    canAdmit: true,
-    canManagePrisons: true,
+    label: "Unrecognized role",
+    summary: "No operational workspace is available until your role is assigned and recognized.",
+    workspaces: ["overview"],
+    primary: [],
   };
 }

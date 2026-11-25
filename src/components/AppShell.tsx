@@ -44,8 +44,6 @@ export function AppShell() {
       <Box component="main" className="corp-main">
         <Toolbar />
         <InmateManagement
-          canAdmit
-          userRole="RECORDS OFFICER"
           section="overview"
         />
       </Box>

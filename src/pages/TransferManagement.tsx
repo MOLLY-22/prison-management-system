@@ -10,7 +10,7 @@ import {
   type CreateTransferRequest,
   type TransferRecord,
 } from "../api/transferService";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../context/AuthContext.tsx";
 
 function messageFrom(error: unknown) {
   if (axios.isAxiosError<{ message?: string }>(error)) {
@@ -21,6 +21,7 @@ function messageFrom(error: unknown) {
 
 function TransferManagement() {
   const { can } = useAuth();
+  const canReadTransfers = can("transfers:read");
   const canCreate = can("transfers:create");
   const canUpdateStatus = can("transfers:updateStatus");
   const [transfers, setTransfers] = useState<TransferRecord[]>([]);
@@ -42,10 +43,14 @@ function TransferManagement() {
   }, []);
 
   useEffect(() => {
+    if (!canReadTransfers) return;
     void loadTransfers();
-  }, [loadTransfers]);
+  }, [canReadTransfers, loadTransfers]);
 
   async function createTransfer(payload: CreateTransferRequest) {
+    if (!canCreate) {
+      throw new Error("Your role does not have permission to create transfer requests.");
+    }
     setSaving(true);
     setError("");
     setSuccessMessage("");
@@ -66,6 +71,10 @@ function TransferManagement() {
     success: string,
     refreshPlacement = false,
   ) {
+    if (!canUpdateStatus) {
+      setError("Your role does not have permission to update transfer status.");
+      return;
+    }
     setSaving(true);
     setError("");
     setSuccessMessage("");
@@ -97,21 +106,32 @@ function TransferManagement() {
   }
 
   async function refreshTransfers() {
+    if (!canReadTransfers) return;
     setLoading(true);
     await loadTransfers();
+  }
+
+  if (!canReadTransfers && !canCreate) {
+    return (
+      <Alert severity="warning">
+        Your role does not have permission to access transfer operations.
+      </Alert>
+    );
   }
 
   return (
     <Box sx={{ p: { xs: 2, md: 4 }, maxWidth: 1600, mx: "auto" }}>
       <Stack spacing={3}>
         <Typography color="text.secondary">
-          Create and review transfer requests, and follow each request&apos;s progress.
+          {canReadTransfers
+            ? "Create and review transfer requests, and follow each request's progress."
+            : "Create transfer requests for review by an authorized transfer officer."}
         </Typography>
 
         {error && (
           <Alert
             severity="error"
-            action={<Button color="inherit" size="small" onClick={() => void refreshTransfers()}>Retry</Button>}
+            action={canReadTransfers ? <Button color="inherit" size="small" onClick={() => void refreshTransfers()}>Retry</Button> : undefined}
           >
             {error}
           </Alert>
@@ -124,14 +144,14 @@ function TransferManagement() {
 
         {canCreate && <TransferForm onSubmit={createTransfer} />}
 
-        {loading ? (
+        {canReadTransfers && (loading ? (
           <Typography role="status">Loading transfer records…</Typography>
         ) : (
           <TransferHistory
             transfers={transfers}
             onSelectTransfer={setSelectedTransfer}
           />
-        )}
+        ))}
 
         {canUpdateStatus && (
           <TransferApproval

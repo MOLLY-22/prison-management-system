@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../context/AuthContext.tsx";
 import api from "../api/axiosClient";
 import { collectionFrom } from "../api/dataContract";
 import { InmateManagement } from "../pages/InmateManagement";
@@ -10,12 +10,19 @@ import TransferAnalytics from "../pages/TransferAnalytics";
 import { PrisonRegistry } from "../pages/PrisonRegistry";
 import { prisonService } from "../api/prisonService";
 import { transferService } from "../api/transferService";
-import ReleaseManagement from "../pages/ReleaseManagement";
-import { getRoleProfile, normalizeRole, type Workspace } from "../auth/roleAccess";
+import {
+  getRoleProfile,
+  normalizeRole,
+  type Workspace,
+} from "../auth/roleAccess";
+import type { Permission } from "../config/rbas";
 
-
-
-type View = Workspace | "profile" | "admission" | "sentences" | "transfer-analytics";
+type View =
+  | Workspace
+  | "profile"
+  | "admission"
+  | "sentences"
+  | "transfer-analytics";
 type RecordItem = Record<string, string | number | boolean | null>;
 
 const navigation: { id: View; label: string; short: string }[] = [
@@ -23,11 +30,40 @@ const navigation: { id: View; label: string; short: string }[] = [
   { id: "inmates", label: "Inmates", short: "people" },
   { id: "housing", label: "Blocks & cells", short: "building" },
   { id: "visitors", label: "Visits", short: "visit" },
-  { id: "transfer-analytics", label: "Transfers", short: "chart" },
-  { id: "release", label: "Releases", short: "exit" },
+  { id: "transfers", label: "Transfers", short: "arrows" },
+  { id: "transfers", label: "Transfers", short: "chart" },
   { id: "access", label: "Users", short: "shield" },
   { id: "prisons", label: "Prisons", short: "building" },
 ];
+
+const viewPermissions: Partial<Record<View, Permission>> = {
+  inmates: "inmates:read",
+  profile: "inmates:read",
+  sentences: "sentences:manage",
+  visitors: "visits:read",
+  transfers: "transfers:read",
+  access: "users:list",
+  prisons: "prisons:read",
+  housing: "cells:read",
+};
+
+function canOpenView(
+  view: View,
+  workspaces: Workspace[],
+  can: (permission: Permission) => boolean,
+) {
+  if (view === "admission")
+    return workspaces.includes("inmates") && can("inmates:manage");
+  if (view === "transfers") {
+    return (
+      workspaces.includes("transfers") &&
+      (can("transfers:read") || can("transfers:create"))
+    );
+  }
+  if (!workspaces.includes(view as Workspace)) return false;
+  const permission = viewPermissions[view];
+  return !permission || can(permission);
+}
 
 function NavigationIcon({ name }: { name: string }) {
   const common = {
@@ -274,23 +310,45 @@ function Overview({
   onNavigate,
   role,
   navigationItems,
+  can,
 }: {
   onNavigate: (view: View) => void;
-  role: string;
+  role: string | null;
   navigationItems: typeof navigation;
+  can: (permission: Permission) => boolean;
 }) {
   const profile = getRoleProfile(role);
   const cardDetails: Record<string, { label: string; note: string }> = {
-    inmates: { label: "Inmate records", note: profile.canAdmit ? "Custody records and new admissions" : "Assigned custody and inmate records" },
-    visitors: { label: "Visit operations", note: "Appointments and gate activity" },
-    "transfer-analytics": { label: "Transfer Analytics", note: "Transfer volumes and request details" },
-    release: { label: "Release & discharge", note: "Eligibility, clearance, and authorization" },
-    access: { label: "User management", note: "Personnel accounts and role assignments" },
-    prisons: { label: "Prison registry", note: "Facility and block information" },
+    inmates: {
+      label: "Inmates",
+      note: can("inmates:manage")
+        ? "Custody records and new admissions"
+        : "Read-only custody and inmate records",
+    },
+    visitors: {
+      label: "Visis",
+      note: "Appointments and gate activity",
+    },
+    transfers: {
+      label: "Transfers",
+      note: "Create and review transfer requests",
+    },
+    "transfer-analytics": {
+      label: "Transfers",
+      note: "Transfer volumes and request details",
+    },
+    access: {
+      label: "Users",
+      note: "Personnel accounts and role assignments",
+    },
+    prisons: {
+      label: "Prisons",
+      note: "Facility and block information",
+    },
     housing: { label: "Housing & cells", note: "Blocks, cells, and occupancy" },
   };
   const cards = profile.primary
-    .map((id): View => id === "transfers" ? "transfer-analytics" : id)
+    .map((id): View => id)
     .filter((id) => navigationItems.some((item) => item.id === id))
     .map((id) => ({ id, ...cardDetails[id] }));
   return (
@@ -340,15 +398,44 @@ function Overview({
   );
 }
 
-function ModuleView({ view, onNavigate, userRole, userPrisonId }: { view: View; onNavigate: (view: View) => void; userRole: string; userPrisonId?: string }) {
-  const roleProfile = getRoleProfile(userRole);
+function ModuleView({
+  view,
+  onNavigate,
+  userRole,
+  userPrisonId,
+  can,
+  workspaces,
+}: {
+  view: View;
+  onNavigate: (view: View) => void;
+  userRole: string | null;
+  userPrisonId?: string;
+  workspaces: Workspace[];
+  can: (permission: Permission) => boolean;
+}) {
+  if (!canOpenView(view, workspaces, can)) {
+    return (
+      <section
+        role="alert"
+        className="rounded-xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900"
+      >
+        Your role does not have permission to open this workspace.
+      </section>
+    );
+  }
   switch (view) {
-    case "inmates": case "profile": case "admission": case "sentences":
-      return <InmateManagement canAdmit={roleProfile.canAdmit} userRole={userRole} section={view === "admission" ? "admission" : "overview"} onBack={() => onNavigate("inmates")} />;
+    case "inmates":
+    case "profile":
+    case "admission":
+    case "sentences":
+      return (
+        <InmateManagement
+          section={view === "admission" ? "admission" : "overview"}
+          onBack={() => onNavigate("inmates")}
+        />
+      );
     case "visitors":
       return <Visitors />;
-    case "release":
-      return <ReleaseManagement />;
     case "access":
       return <UserAccess />;
     case "transfer-analytics":
@@ -356,42 +443,69 @@ function ModuleView({ view, onNavigate, userRole, userPrisonId }: { view: View; 
     case "transfers":
       return <TransferManagement />;
     case "prisons":
-      return <PrisonRegistry key="prisons" canManage={roleProfile.canManagePrisons} />;
+      return <PrisonRegistry key="prisons" canManage={can("prisons:manage")} />;
     case "housing":
-      return <PrisonRegistry key="housing" canManage={roleProfile.canManagePrisons} mode="housing" assignedPrisonId={userPrisonId ?? ""} assignedPrisonRequired={["OFFICER IN CHARGE", "RECORDS OFFICER"].includes(normalizeRole(userRole))} />;
+      return (
+        <PrisonRegistry
+          key="housing"
+          canManage={can("prisons:manage")}
+          mode="housing"
+          assignedPrisonId={userPrisonId ?? ""}
+          assignedPrisonRequired={normalizeRole(userRole) === "RECORDS OFFICER"}
+        />
+      );
     case "overview":
       return null;
   }
 }
 
 export default function Dashboard() {
-  const { user, logout, authError } = useAuth();
+  const { user, logout, authError, can } = useAuth();
   const roleProfile = getRoleProfile(user?.role);
-  const [assignedPrison, setAssignedPrison] = useState<{ name: string; location: string | null } | null>(null);
+  const canReadTransfers = can("transfers:read");
+  const canReadPrisons = can("prisons:read");
+  const [assignedPrison, setAssignedPrison] = useState<{
+    id: string;
+    name: string;
+    location: string | null;
+  } | null>(null);
   const visibleNavigation = navigation.filter((item) =>
-    item.id === "transfer-analytics"
-      ? roleProfile.workspaces.includes("transfers")
-      : roleProfile.workspaces.includes(item.id as Workspace),
+    canOpenView(item.id, roleProfile.workspaces, can),
   );
   const [view, setView] = useState<View>("overview");
-  const [incomingTransferCount, setIncomingTransferCount] = useState(0);
+  const [incomingTransfer, setIncomingTransfer] = useState<{
+    prisonId: string;
+    count: number;
+  } | null>(null);
+  const incomingTransferCount =
+    canReadTransfers && user?.prisonId === incomingTransfer?.prisonId
+      ? incomingTransfer.count
+      : 0;
   const active = navigation.find((item) => item.id === view) ?? navigation[0];
 
   useEffect(() => {
     const prisonId = user?.prisonId;
-    if (!prisonId || !roleProfile.workspaces.includes("transfers")) {
-      setIncomingTransferCount(0);
-      return;
-    }
+    if (!prisonId || !canReadTransfers) return;
     let live = true;
     const refreshIncomingCount = () => {
-      transferService.getTransfers({ prisonId })
+      transferService
+        .getTransfers({ prisonId })
         .then((records) => {
           if (!live) return;
-          const openStatuses = new Set(["PENDING", "APPROVED", "CONFIRMED", "IN_TRANSIT"]);
-          setIncomingTransferCount(records.filter((transfer) =>
-            transfer.destinationPrisonId === prisonId && openStatuses.has(transfer.status),
-          ).length);
+          const openStatuses = new Set([
+            "PENDING",
+            "APPROVED",
+            "CONFIRMED",
+            "IN_TRANSIT",
+          ]);
+          setIncomingTransfer({
+            prisonId,
+            count: records.filter(
+              (transfer) =>
+                transfer.destinationPrisonId === prisonId &&
+                openStatuses.has(transfer.status),
+            ).length,
+          });
         })
         .catch(() => {
           // Keep the last known count when a brief refresh fails.
@@ -405,65 +519,106 @@ export default function Dashboard() {
       window.clearInterval(interval);
       window.removeEventListener("focus", refreshIncomingCount);
     };
-  }, [user?.prisonId, roleProfile.workspaces]);
+  }, [user?.prisonId, canReadTransfers]);
 
-  const incomingBadge = () => incomingTransferCount > 0 && (
-    <span aria-label={`${incomingTransferCount} incoming transfers awaiting completion`} className="ml-auto grid h-5 min-w-5 place-items-center rounded-full bg-[#db5947] px-1 text-[10px] font-bold leading-none text-white">
-      {incomingTransferCount > 99 ? "99+" : incomingTransferCount}
-    </span>
-  );
+  const incomingBadge = () =>
+    incomingTransferCount > 0 && (
+      <span
+        aria-label={`${incomingTransferCount} incoming transfers awaiting completion`}
+        className="ml-auto grid h-5 min-w-5 place-items-center rounded-full bg-[#db5947] px-1 text-[10px] font-bold leading-none text-white"
+      >
+        {incomingTransferCount > 99 ? "99+" : incomingTransferCount}
+      </span>
+    );
 
   useEffect(() => {
-    if (!user?.prisonId) {
-      setAssignedPrison(null);
-      return;
-    }
+    const prisonId = user?.prisonId;
+    if (!prisonId || !canReadPrisons) return;
     let live = true;
-    prisonService.getPrison(user.prisonId)
+    prisonService
+      .getPrison(prisonId)
       .then((prison) => {
-        if (live) setAssignedPrison({ name: prison.name, location: prison.location });
+        if (live)
+          setAssignedPrison({
+            id: prisonId,
+            name: prison.name,
+            location: prison.location,
+          });
       })
       .catch(() => {
         if (live) setAssignedPrison(null);
       });
-    return () => { live = false; };
-  }, [user?.prisonId]);
+    return () => {
+      live = false;
+    };
+  }, [user?.prisonId, canReadPrisons]);
 
   return (
     <div className="min-h-screen bg-[#f5f7fa] font-['DM_Sans',_'Segoe_UI',sans-serif] text-[#182638]">
       <aside className="fixed inset-y-0 left-0 z-20 hidden w-[264px] flex-col border-r border-white/[0.06] bg-[#101a2d] text-white lg:flex">
         <div className="flex h-[76px] items-center gap-3 border-b border-white/[0.08] px-4">
-          <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-[#0e8c94] text-sm font-extrabold tracking-wide text-white">MP</span>
+          <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-[#0e8c94] text-sm font-extrabold tracking-wide text-white">
+            MP
+          </span>
           <div className="min-w-0">
-            <p className="truncate text-[13px] font-semibold text-white" style={{ color: "#ffffff" }}>{assignedPrison?.name ?? "Malawi Prison Management"}</p>
-            {assignedPrison?.location && <p className="truncate text-[10px] text-slate-400" style={{ color: "#cbd5e1" }}>{assignedPrison.location}</p>}
+            <p
+              className="truncate text-[13px] font-semibold text-white"
+              style={{ color: "#ffffff" }}
+            >
+              {canReadPrisons &&
+              assignedPrison &&
+              user?.prisonId === assignedPrison.id
+                ? assignedPrison.name
+                : "Malawi Prison Management"}
+            </p>
+            {canReadPrisons &&
+              assignedPrison &&
+              user?.prisonId === assignedPrison.id &&
+              assignedPrison.location && (
+              <p
+                className="truncate text-[10px] text-slate-400"
+                style={{ color: "#cbd5e1" }}
+              >
+                {assignedPrison.location}
+              </p>
+            )}
           </div>
         </div>
-        <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-5" aria-label="Primary navigation">
-          <p className="mb-3 px-3 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Operational modules</p>
-          {visibleNavigation.filter((item) => item.id === "overview").map((item) => (
-            <button
-              aria-current={view === item.id ? "page" : undefined}
-              className={`relative flex min-h-10 w-full items-center gap-3 rounded-lg px-3 text-left text-[13px] transition-colors ${view === item.id ? "bg-[#16435a] font-semibold text-white before:absolute before:left-0 before:h-7 before:w-[3px] before:rounded-r before:bg-[#36c6bf]" : "text-slate-300 hover:bg-white/[0.06] hover:text-white"}`}
-              key={item.id}
-              onClick={() => setView(item.id)}
-            >
-              <NavigationIcon name={item.short} />
-              <span className="truncate">{item.label}</span>
-              {item.id === "transfers" && incomingBadge()}
-            </button>
-          ))}
-          {visibleNavigation.filter((item) => item.id !== "overview").map((item) => (
-            <button
-              aria-current={view === item.id ? "page" : undefined}
-              className={`relative flex min-h-10 w-full items-center gap-3 rounded-lg px-3 text-left text-[13px] transition-colors ${view === item.id ? "bg-[#16435a] font-semibold text-white before:absolute before:left-0 before:h-7 before:w-[3px] before:rounded-r before:bg-[#36c6bf]" : "text-slate-300 hover:bg-white/[0.06] hover:text-white"}`}
-              key={item.id}
-              onClick={() => setView(item.id)}
-            >
-              <NavigationIcon name={item.short} />
-              <span className="truncate">{item.label}</span>
-            </button>
-          ))}
+        <nav
+          className="flex-1 space-y-1 overflow-y-auto px-3 py-5"
+          aria-label="Primary navigation"
+        >
+          <p className="mb-3 px-3 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">
+            Operational modules
+          </p>
+          {visibleNavigation
+            .filter((item) => item.id === "overview")
+            .map((item) => (
+              <button
+                aria-current={view === item.id ? "page" : undefined}
+                className={`relative flex min-h-10 w-full items-center gap-3 rounded-lg px-3 text-left text-[13px] transition-colors ${view === item.id ? "bg-[#16435a] font-semibold text-white before:absolute before:left-0 before:h-7 before:w-[3px] before:rounded-r before:bg-[#36c6bf]" : "text-slate-300 hover:bg-white/[0.06] hover:text-white"}`}
+                key={item.id}
+                onClick={() => setView(item.id)}
+              >
+                <NavigationIcon name={item.short} />
+                <span className="truncate">{item.label}</span>
+                {item.id === "transfers" && incomingBadge()}
+              </button>
+            ))}
+          {visibleNavigation
+            .filter((item) => item.id !== "overview")
+            .map((item) => (
+              <button
+                aria-current={view === item.id ? "page" : undefined}
+                className={`relative flex min-h-10 w-full items-center gap-3 rounded-lg px-3 text-left text-[13px] transition-colors ${view === item.id ? "bg-[#16435a] font-semibold text-white before:absolute before:left-0 before:h-7 before:w-[3px] before:rounded-r before:bg-[#36c6bf]" : "text-slate-300 hover:bg-white/[0.06] hover:text-white"}`}
+                key={item.id}
+                onClick={() => setView(item.id)}
+              >
+                <NavigationIcon name={item.short} />
+                <span className="truncate">{item.label}</span>
+                {item.id === "transfers" && incomingBadge()}
+              </button>
+            ))}
         </nav>
         <div className="border-t border-white/[0.08] p-3">
           <div className="flex items-center gap-3 rounded-lg px-2 py-2">
@@ -531,11 +686,32 @@ export default function Dashboard() {
                 className={`whitespace-nowrap rounded-[4px] border px-3 py-2 text-xs font-bold ${view === item.id ? "border-[#087f9b] bg-[#087f9b] text-white" : "border-[#dfe6ed] bg-white text-[#526a7c]"}`}
                 key={item.id}
               >
-                {item.label}{item.id === "transfers" && incomingTransferCount > 0 ? ` (${incomingTransferCount})` : ""}
+                {item.label}
+                {item.id === "transfers" && incomingTransferCount > 0
+                  ? ` (${incomingTransferCount})`
+                  : ""}
               </button>
             ))}
           </div>
-          {view === "overview" ? <Overview onNavigate={setView} role={user?.role ?? ""} navigationItems={visibleNavigation} /> : <div className="module-host"><ModuleView view={view} onNavigate={setView} userRole={user?.role ?? ""} userPrisonId={user?.prisonId ?? undefined} /></div>}
+          {view === "overview" ? (
+            <Overview
+              onNavigate={setView}
+              role={user?.role ?? null}
+              navigationItems={visibleNavigation}
+              can={can}
+            />
+          ) : (
+            <div className="module-host">
+              <ModuleView
+                view={view}
+                onNavigate={setView}
+                userRole={user?.role ?? null}
+                userPrisonId={user?.prisonId ?? undefined}
+                can={can}
+                workspaces={roleProfile.workspaces}
+              />
+            </div>
+          )}
         </div>
       </main>
     </div>
