@@ -50,8 +50,7 @@ export type Permission =
 export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'Super Admin': [
         'prisons:read', 'prisons:manage',
-        'users:list', 'users:manage',
-        'inmates:read', 'visits:read',
+        'users:list', 'users:manage', 'visits:read',
         'visits:create:family', 'visits:create:legal', 'visits:create:health',
         'transfers:create',
         'rosters:manage',

@@ -10,7 +10,6 @@ import {
   type CreateTransferRequest,
   type TransferRecord,
 } from "../api/transferService";
-import "./transferManagement.css";
 import { useAuth } from "../context/AuthContext";
 
 function messageFrom(error: unknown) {
@@ -37,30 +36,14 @@ function TransferManagement() {
       setError("");
     } catch (reason: unknown) {
       setError(messageFrom(reason));
-      throw reason;
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    let active = true;
-    transferService.getTransfers()
-      .then((records) => {
-        if (!active) return;
-        setTransfers(records);
-        setError("");
-      })
-      .catch((reason: unknown) => {
-        if (active) setError(messageFrom(reason));
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
+    void loadTransfers();
+  }, [loadTransfers]);
 
   async function createTransfer(payload: CreateTransferRequest) {
     setSaving(true);
@@ -68,7 +51,10 @@ function TransferManagement() {
     setSuccessMessage("");
     try {
       const created = await transferService.createTransfer(payload);
-      setTransfers((current) => [created, ...current.filter((item) => item.id !== created.id)]);
+      setTransfers((current) => [
+        created,
+        ...current.filter((item) => item.id !== created.id),
+      ]);
       setSuccessMessage("Transfer request created successfully.");
     } finally {
       setSaving(false);
@@ -91,11 +77,7 @@ function TransferManagement() {
       ]);
       setSelectedTransfer(null);
       setSuccessMessage(success);
-      try {
-        await loadTransfers();
-      } catch {
-        // The successful action is retained; loadTransfers displays the refresh error.
-      }
+      await loadTransfers();
       if (refreshPlacement) {
         try {
           const inmate = await inmateService.getInmate(updatedTransfer.inmateId);
@@ -115,22 +97,16 @@ function TransferManagement() {
   }
 
   async function refreshTransfers() {
-    setError("");
-    try {
-      await loadTransfers();
-    } catch {
-      // loadTransfers displays the API error in the page alert.
-    }
+    setLoading(true);
+    await loadTransfers();
   }
 
   return (
-    <Box className="transfer-workspace" sx={{ p: { xs: 2, md: 4 }, maxWidth: 1600, mx: "auto" }}>
+    <Box sx={{ p: { xs: 2, md: 4 }, maxWidth: 1600, mx: "auto" }}>
       <Stack spacing={3}>
-        <Box>
-          <Typography color="text.secondary" sx={{ mt: 1 }}>
-            Create and review transfer requests, and follow each request’s progress.
-          </Typography>
-        </Box>
+        <Typography color="text.secondary">
+          Create and review transfer requests, and follow each request&apos;s progress.
+        </Typography>
 
         {error && (
           <Alert
@@ -157,25 +133,27 @@ function TransferManagement() {
           />
         )}
 
-        {canUpdateStatus && <TransferApproval
-          key={`${selectedTransfer?.id ?? ""}:${selectedTransfer?.destinationPrisonId ?? ""}:${selectedTransfer?.status ?? ""}`}
-          transfer={selectedTransfer}
-          saving={saving}
-          onApprove={(id, cellId) => performAction(
-            () => transferService.approveTransfer(id, cellId),
-            "Transfer approved and destination cell assigned.",
-            true,
-          )}
-          onReject={(id) => performAction(
-            () => transferService.rejectTransfer(id),
-            "Transfer rejected.",
-          )}
-          onCancel={(id) => performAction(
-            () => transferService.cancelTransfer(id),
-            "Transfer cancelled.",
-          )}
-          onClose={() => setSelectedTransfer(null)}
-        />}
+        {canUpdateStatus && (
+          <TransferApproval
+            key={`${selectedTransfer?.id ?? ""}:${selectedTransfer?.destinationPrisonId ?? ""}:${selectedTransfer?.status ?? ""}`}
+            transfer={selectedTransfer}
+            saving={saving}
+            onApprove={(id, cellId) => performAction(
+              () => transferService.approveTransfer(id, cellId),
+              "Transfer approved and destination cell assigned.",
+              true,
+            )}
+            onReject={(id) => performAction(
+              () => transferService.rejectTransfer(id),
+              "Transfer rejected.",
+            )}
+            onCancel={(id) => performAction(
+              () => transferService.cancelTransfer(id),
+              "Transfer cancelled.",
+            )}
+            onClose={() => setSelectedTransfer(null)}
+          />
+        )}
       </Stack>
     </Box>
   );

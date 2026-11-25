@@ -4,16 +4,18 @@ import api from "../api/axiosClient";
 import { collectionFrom } from "../api/dataContract";
 import { InmateManagement } from "../pages/InmateManagement";
 import Visitors from "../pages/Visitors";
+import TransferManagement from "../pages/TransferManagement";
 import UserAccess from "../pages/UserAccess";
 import TransferAnalytics from "../pages/TransferAnalytics";
 import { PrisonRegistry } from "../pages/PrisonRegistry";
 import { prisonService } from "../api/prisonService";
+import { transferService } from "../api/transferService";
 import ReleaseManagement from "../pages/ReleaseManagement";
 import { getRoleProfile, normalizeRole, type Workspace } from "../auth/roleAccess";
 
 
 
-type View = Exclude<Workspace, "transfers"> | "profile" | "admission" | "sentences" | "transfer-analytics";
+type View = Workspace | "profile" | "admission" | "sentences" | "transfer-analytics";
 type RecordItem = Record<string, string | number | boolean | null>;
 
 const navigation: { id: View; label: string; short: string }[] = [
@@ -351,6 +353,8 @@ function ModuleView({ view, onNavigate, userRole, userPrisonId }: { view: View; 
       return <UserAccess />;
     case "transfer-analytics":
       return <TransferAnalytics />;
+    case "transfers":
+      return <TransferManagement />;
     case "prisons":
       return <PrisonRegistry key="prisons" canManage={roleProfile.canManagePrisons} />;
     case "housing":
@@ -370,7 +374,44 @@ export default function Dashboard() {
       : roleProfile.workspaces.includes(item.id as Workspace),
   );
   const [view, setView] = useState<View>("overview");
+  const [incomingTransferCount, setIncomingTransferCount] = useState(0);
   const active = navigation.find((item) => item.id === view) ?? navigation[0];
+
+  useEffect(() => {
+    const prisonId = user?.prisonId;
+    if (!prisonId || !roleProfile.workspaces.includes("transfers")) {
+      setIncomingTransferCount(0);
+      return;
+    }
+    let live = true;
+    const refreshIncomingCount = () => {
+      transferService.getTransfers({ prisonId })
+        .then((records) => {
+          if (!live) return;
+          const openStatuses = new Set(["PENDING", "APPROVED", "CONFIRMED", "IN_TRANSIT"]);
+          setIncomingTransferCount(records.filter((transfer) =>
+            transfer.destinationPrisonId === prisonId && openStatuses.has(transfer.status),
+          ).length);
+        })
+        .catch(() => {
+          // Keep the last known count when a brief refresh fails.
+        });
+    };
+    refreshIncomingCount();
+    const interval = window.setInterval(refreshIncomingCount, 30_000);
+    window.addEventListener("focus", refreshIncomingCount);
+    return () => {
+      live = false;
+      window.clearInterval(interval);
+      window.removeEventListener("focus", refreshIncomingCount);
+    };
+  }, [user?.prisonId, roleProfile.workspaces]);
+
+  const incomingBadge = () => incomingTransferCount > 0 && (
+    <span aria-label={`${incomingTransferCount} incoming transfers awaiting completion`} className="ml-auto grid h-5 min-w-5 place-items-center rounded-full bg-[#db5947] px-1 text-[10px] font-bold leading-none text-white">
+      {incomingTransferCount > 99 ? "99+" : incomingTransferCount}
+    </span>
+  );
 
   useEffect(() => {
     if (!user?.prisonId) {
@@ -398,39 +439,31 @@ export default function Dashboard() {
             {assignedPrison?.location && <p className="truncate text-[10px] text-slate-400" style={{ color: "#cbd5e1" }}>{assignedPrison.location}</p>}
           </div>
         </div>
-        <nav
-          className="flex-1 space-y-1 overflow-y-auto px-3 py-5"
-          aria-label="Primary navigation"
-        >
-          <p className="mb-3 px-3 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">
-            Operational modules
-          </p>
-          {visibleNavigation
-            .filter((item) => item.id === "overview")
-            .map((item) => (
-              <button
-                aria-current={view === item.id ? "page" : undefined}
-                className={`relative flex min-h-10 w-full items-center gap-3 rounded-lg px-3 text-left text-[13px] transition-colors ${view === item.id ? "bg-[#16435a] font-semibold text-white before:absolute before:left-0 before:h-7 before:w-[3px] before:rounded-r before:bg-[#36c6bf]" : "text-slate-300 hover:bg-white/[0.06] hover:text-white"}`}
-                key={item.id}
-                onClick={() => setView(item.id)}
-              >
-                <NavigationIcon name={item.short} />
-                <span className="truncate">{item.label}</span>
-              </button>
-            ))}
-          {visibleNavigation
-            .filter((item) => item.id !== "overview")
-            .map((item) => (
-              <button
-                aria-current={view === item.id ? "page" : undefined}
-                className={`relative flex min-h-10 w-full items-center gap-3 rounded-lg px-3 text-left text-[13px] transition-colors ${view === item.id ? "bg-[#16435a] font-semibold text-white before:absolute before:left-0 before:h-7 before:w-[3px] before:rounded-r before:bg-[#36c6bf]" : "text-slate-300 hover:bg-white/[0.06] hover:text-white"}`}
-                key={item.id}
-                onClick={() => setView(item.id)}
-              >
-                <NavigationIcon name={item.short} />
-                <span className="truncate">{item.label}</span>
-              </button>
-            ))}
+        <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-5" aria-label="Primary navigation">
+          <p className="mb-3 px-3 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Operational modules</p>
+          {visibleNavigation.filter((item) => item.id === "overview").map((item) => (
+            <button
+              aria-current={view === item.id ? "page" : undefined}
+              className={`relative flex min-h-10 w-full items-center gap-3 rounded-lg px-3 text-left text-[13px] transition-colors ${view === item.id ? "bg-[#16435a] font-semibold text-white before:absolute before:left-0 before:h-7 before:w-[3px] before:rounded-r before:bg-[#36c6bf]" : "text-slate-300 hover:bg-white/[0.06] hover:text-white"}`}
+              key={item.id}
+              onClick={() => setView(item.id)}
+            >
+              <NavigationIcon name={item.short} />
+              <span className="truncate">{item.label}</span>
+              {item.id === "transfers" && incomingBadge()}
+            </button>
+          ))}
+          {visibleNavigation.filter((item) => item.id !== "overview").map((item) => (
+            <button
+              aria-current={view === item.id ? "page" : undefined}
+              className={`relative flex min-h-10 w-full items-center gap-3 rounded-lg px-3 text-left text-[13px] transition-colors ${view === item.id ? "bg-[#16435a] font-semibold text-white before:absolute before:left-0 before:h-7 before:w-[3px] before:rounded-r before:bg-[#36c6bf]" : "text-slate-300 hover:bg-white/[0.06] hover:text-white"}`}
+              key={item.id}
+              onClick={() => setView(item.id)}
+            >
+              <NavigationIcon name={item.short} />
+              <span className="truncate">{item.label}</span>
+            </button>
+          ))}
         </nav>
         <div className="border-t border-white/[0.08] p-3">
           <div className="flex items-center gap-3 rounded-lg px-2 py-2">
@@ -498,7 +531,7 @@ export default function Dashboard() {
                 className={`whitespace-nowrap rounded-[4px] border px-3 py-2 text-xs font-bold ${view === item.id ? "border-[#087f9b] bg-[#087f9b] text-white" : "border-[#dfe6ed] bg-white text-[#526a7c]"}`}
                 key={item.id}
               >
-                {item.label}
+                {item.label}{item.id === "transfers" && incomingTransferCount > 0 ? ` (${incomingTransferCount})` : ""}
               </button>
             ))}
           </div>

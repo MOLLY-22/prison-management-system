@@ -5,6 +5,7 @@ export type TransferStatus =
     | "PENDING"
     | "APPROVED"
     | "REJECTED"
+    | "CONFIRMED"
     | "IN_TRANSIT"
     | "RECEIVED"
     | "CANCELLED";
@@ -24,6 +25,9 @@ export type TransferRecord = {
     approvedBy: string | null;
     requestedAt: string;
     decidedAt: string | null;
+    receivedCellId: string | null;
+    receivedAt: string | null;
+    receivedBy: string | null;
 };
 
 export type CreateTransferRequest = {
@@ -60,6 +64,19 @@ export const transferService = {
 
     async createTransfer(payload: CreateTransferRequest): Promise<TransferRecord> {
         const response = await api.post("/transfers", payload);
+        return normalizeTransfer(itemFrom(response.data));
+    },
+
+    async changeStatus(id: string, status: TransferStatus, destinationPrisonId?: string): Promise<TransferRecord> {
+        const response = await api.post(`/transfers/${encodeURIComponent(id)}/status`, {
+            status,
+            ...(destinationPrisonId ? { destinationPrisonId } : {}),
+        });
+        return normalizeTransfer(itemFrom(response.data));
+    },
+
+    async receiveTransfer(id: string): Promise<TransferRecord> {
+        const response = await api.post(`/transfers/${encodeURIComponent(id)}/status`, { status: "RECEIVED" });
         return normalizeTransfer(itemFrom(response.data));
     },
 
@@ -102,10 +119,11 @@ function normalizeTransfer(payload: unknown): TransferRecord {
         .toUpperCase()
         .replace(/[\s-]+/g, "_");
     const status: TransferStatus = (
-        ["PENDING", "APPROVED", "REJECTED", "IN_TRANSIT", "RECEIVED", "CANCELLED"] as const
+        ["PENDING", "APPROVED", "REJECTED", "CONFIRMED", "IN_TRANSIT", "RECEIVED", "CANCELLED"] as const
     ).includes(rawStatus as TransferStatus)
         ? rawStatus as TransferStatus
         : "PENDING";
+    const receivedBy = asRecord(firstValue(record, ["receivedBy"], null));
 
     return {
         id,
@@ -124,5 +142,10 @@ function normalizeTransfer(payload: unknown): TransferRecord {
             : firstValue(record, ["approvedByUsername", "approved_by"], null) as string | null,
         requestedAt: String(firstValue(record, ["requestedAt", "requested_at", "requestedDate", "createdAt", "created_at"], "")),
         decidedAt: firstValue(record, ["decidedAt", "decided_at", "approvedAt", "approved_at"], null) as string | null,
+        receivedCellId: firstValue(record, ["receivedCellId", "received_cell_id"], null) as string | null,
+        receivedAt: firstValue(record, ["receivedAt", "received_at"], null) as string | null,
+        receivedBy: receivedBy.id || receivedBy.username || receivedBy.name
+            ? String(firstValue(receivedBy, ["username", "name"], firstValue(record, ["receivedByUsername", "received_by"], null)))
+            : firstValue(record, ["receivedByUsername", "received_by"], null) as string | null,
     };
 }
