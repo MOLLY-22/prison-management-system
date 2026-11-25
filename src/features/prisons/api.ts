@@ -1,5 +1,9 @@
 import axios from 'axios'
+<<<<<<< HEAD
 import http from '../../api/axiosClient'
+=======
+import { API_BASE_URL, clearSession, getToken } from '../../api/session'
+>>>>>>> origin
 
 export type Cell = { id: string; cellNumber: number; capacity: number; currentOccupancy: number; availableSpaces: number }
 export type Block = { id: string; name: string; cells: Cell[] }
@@ -18,6 +22,25 @@ type ApiCell = { id: string; cellNumber?: number; capacity?: number; currentOccu
 type ApiBlock = { id: string; name: string; cells?: ApiCell[] }
 type ApiPrison = { id: string; name: string; location?: string | null; active?: boolean; blocks?: ApiBlock[] }
 
+<<<<<<< HEAD
+=======
+const http = axios.create({ baseURL: API_BASE_URL })
+
+http.interceptors.request.use((config) => {
+  const token = getToken()
+  if (token) config.headers.Authorization = `Bearer ${token}`
+  return config
+})
+
+http.interceptors.response.use((res) => res, (error) => {
+  if (axios.isAxiosError(error) && error.response?.status === 401 && getToken()) {
+    clearSession()
+    window.location.reload()
+  }
+  return Promise.reject(error)
+})
+
+>>>>>>> origin
 export const errorMessage = (error: unknown, fallback: string) => {
   if (axios.isAxiosError(error)) {
     if (typeof error.response?.data?.message === 'string') return error.response.data.message as string
