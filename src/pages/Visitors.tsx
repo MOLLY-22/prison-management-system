@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import axios from "axios";
 import { useAuth } from "../context/AuthContext.tsx";
@@ -16,6 +16,10 @@ type FormState = {
   endTime: string;
 };
 
+type VisitorLogView = "all" | "upcoming" | "family" | "today";
+type InmateHistoryView = "all" | "family" | "legal";
+type AnalyticsPeriod = "week" | "month" | "year" | "all";
+
 const emptyForm: FormState = {
   name: "",
   date: new Date().toISOString().slice(0, 10),
@@ -26,7 +30,7 @@ const emptyForm: FormState = {
 function getErrorMessage(error: unknown, fallback: string) {
   if (axios.isAxiosError<{ message?: string }>(error)) {
     if (error.response?.status === 401) {
-      return "Your session has expired. Sign in again before managing visitors.";
+      return "Authentication is required. Sign in before managing visits.";
     }
     if (!error.response)
       return "The visits service is unreachable. Please try again.";
@@ -39,6 +43,8 @@ export default function Visitors() {
   const { can } = useAuth();
   const canReadVisits = can("visits:read");
   const canCreateFamilyVisit = can("visits:create:family");
+  const canReadInmates = can("inmates:read");
+  const canLookupInmates = canCreateFamilyVisit || canReadInmates;
   const [visitors, setVisitors] = useState<Visitor[]>([]);
   const [inmates, setInmates] = useState<InmateLookup[]>([]);
   const [form, setForm] = useState<FormState>(emptyForm);
@@ -47,47 +53,132 @@ export default function Visitors() {
   );
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(true);
-  const [loadingInmates, setLoadingInmates] = useState(canCreateFamilyVisit);
+  const [visitorsError, setVisitorsError] = useState("");
+  const [visitorsReload, setVisitorsReload] = useState(0);
+  const [loadingInmates, setLoadingInmates] = useState(canLookupInmates);
+  const [inmatesError, setInmatesError] = useState("");
+  const [inmatesReload, setInmatesReload] = useState(0);
   const [saving, setSaving] = useState(false);
+  const [logView, setLogView] = useState<VisitorLogView>("all");
+  const [inmateHistory, setInmateHistory] = useState<Visitor[]>([]);
+  const [historyView, setHistoryView] = useState<InmateHistoryView>("all");
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState("");
+  const [historyReload, setHistoryReload] = useState(0);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [analyticsPeriod, setAnalyticsPeriod] = useState<AnalyticsPeriod>("month");
+  const visitorLogRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     if (!canReadVisits) return;
-    visitorService
-      .getVisitors()
-      .then(setVisitors)
-      .catch((error: unknown) =>
-        setNotice(getErrorMessage(error, "Could not load visitor records.")),
-      )
-      .finally(() => setLoading(false));
-  }, [canReadVisits]);
+    let active = true;
+    void Promise.resolve()
+      .then(() => {
+        if (!active) return undefined;
+        setLoading(true);
+        setVisitorsError("");
+        return visitorService.getVisitors();
+      })
+      .then((records) => { if (active && records) setVisitors(records); })
+      .catch((error: unknown) => {
+        if (active) setVisitorsError(getErrorMessage(error, "Could not load visit records."));
+      })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [canReadVisits, visitorsReload]);
 
   useEffect(() => {
-    if (!canCreateFamilyVisit) {
-      return;
-    }
-    visitorService
-      .getInmates()
-      .then(setInmates)
-      .catch((error: unknown) =>
-        setNotice(getErrorMessage(error, "Could not load inmate records.")),
-      )
-      .finally(() => setLoadingInmates(false));
-  }, [canCreateFamilyVisit]);
+    if (!selectedInmate?.id || !canReadVisits) return;
 
-  const filteredVisitors = visitors;
-  const scheduledVisits = visitors.filter(
-    (visitor) => visitor.status === "Scheduled",
-  ).length;
+    let active = true;
+    void Promise.resolve()
+      .then(() => {
+        if (!active) return undefined;
+        setHistoryLoading(true);
+        setHistoryError("");
+        return visitorService.getInmateVisitHistory(selectedInmate.id);
+      })
+      .then((records) => { if (active && records) setInmateHistory(records); })
+      .catch((error: unknown) => {
+        if (active) setHistoryError(getErrorMessage(error, "Could not load inmate visit history."));
+      })
+      .finally(() => { if (active) setHistoryLoading(false); });
+    return () => { active = false; };
+  }, [selectedInmate?.id, historyReload, canReadVisits]);
+
+  useEffect(() => {
+    if (!canLookupInmates) return;
+    let active = true;
+    void Promise.resolve()
+      .then(() => {
+        if (!active) return undefined;
+        setLoadingInmates(true);
+        setInmatesError("");
+        return visitorService.getInmates();
+      })
+      .then((records) => { if (active && records) setInmates(records); })
+      .catch((error: unknown) => {
+        if (active) setInmatesError(getErrorMessage(error, "Could not load inmate records."));
+      })
+      .finally(() => { if (active) setLoadingInmates(false); });
+    return () => { active = false; };
+  }, [canLookupInmates, inmatesReload]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setCurrentTime(Date.now()), 60_000);
+    const initialUpdate = window.setTimeout(() => setCurrentTime(Date.now()), 0);
+    return () => {
+      window.clearInterval(timer);
+      window.clearTimeout(initialUpdate);
+    };
+  }, []);
+
   const today = new Date().toISOString().slice(0, 10);
+  function isUpcoming(visitor: Visitor) {
+    const visitTime = Date.parse(`${visitor.date}T${visitor.time}`);
+    return currentTime > 0 && Number.isFinite(visitTime) && visitTime >= currentTime;
+  }
+  const filteredVisitors = visitors.filter((visitor) => {
+    if (logView === "upcoming") return isUpcoming(visitor);
+    if (logView === "family") return /family|friend/i.test(visitor.visitType);
+    if (logView === "today") return visitor.date === today;
+    return true;
+  });
+  const upcomingVisits = visitors.filter(isUpcoming).length;
+  const familyVisits = visitors.filter((visitor) => /family|friend/i.test(visitor.visitType)).length;
   const todayLogs = visitors.filter((visitor) => visitor.date === today).length;
+  const isLegalVisit = (visitor: Visitor) =>
+    /legal|attorney|lawyer|counsel/i.test(visitor.visitType);
+  const filteredInmateHistory = inmateHistory.filter((visitor) => {
+    if (historyView === "legal") return isLegalVisit(visitor);
+    if (historyView === "family") return /family|friend/i.test(visitor.visitType);
+    return true;
+  });
+
+  function showVisitorLog(view: VisitorLogView) {
+    setLogView(view);
+    visitorLogRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 
   function updateForm(field: keyof FormState, value: string) {
     setForm((current) => ({ ...current, [field]: value }));
   }
 
-  function resetForm() {
+  function resetForm(clearInmate = true) {
     setForm({ ...emptyForm, date: new Date().toISOString().slice(0, 10) });
-    setSelectedInmate(null);
+    if (clearInmate) setSelectedInmate(null);
+  }
+
+  function refreshVisitors() {
+    setLoading(true);
+    setVisitorsError("");
+    setVisitorsReload((count) => count + 1);
+  }
+
+  function refreshInmates() {
+    setLoadingInmates(true);
+    setInmatesError("");
+    setInmatesReload((count) => count + 1);
   }
 
   async function registerVisitor(event: FormEvent<HTMLFormElement>) {
@@ -98,7 +189,7 @@ export default function Visitors() {
       setNotice("Enter the visitor full name.");
       return;
     }
-    if (!selectedInmate?.id || !selectedInmate.visitationAllowed) {
+    if (!selectedInmate?.id) {
       setNotice(
         "Search for an inmate and select a result before scheduling the visit.",
       );
@@ -113,14 +204,6 @@ export default function Visitors() {
       return;
     }
 
-    if (!canReadVisits) {
-      return (
-        <p className="pending-note" role="alert">
-          Your role does not have permission to view visit records.
-        </p>
-      );
-    }
-
     setSaving(true);
     setNotice("");
     try {
@@ -132,14 +215,11 @@ export default function Visitors() {
         endTime: form.endTime,
       });
       setVisitors((current) => [result, ...current.filter((visitor) => visitor.id !== result.id)]);
-      resetForm();
-      setNotice("Visitor registered successfully.");
-      try {
-        const refreshedVisitors = await visitorService.getVisitors();
-        setVisitors(refreshedVisitors);
-      } catch {
-        setNotice("Visitor registered successfully, but the log could not be refreshed.");
-      }
+      setVisitorsError("");
+      resetForm(false);
+      setHistoryReload((count) => count + 1);
+      setNotice("Visit recorded successfully.");
+      refreshVisitors();
     } catch (error) {
       setNotice(
         axios.isAxiosError(error) && !error.response
@@ -151,13 +231,110 @@ export default function Visitors() {
     }
   }
 
+  const analytics = useMemo(() => {
+    const now = new Date();
+    const periodStart = new Date(now);
+    periodStart.setHours(0, 0, 0, 0);
+
+    if (analyticsPeriod === "week") periodStart.setDate(periodStart.getDate() - 6);
+    if (analyticsPeriod === "month") periodStart.setDate(periodStart.getDate() - 29);
+    if (analyticsPeriod === "year") periodStart.setFullYear(periodStart.getFullYear() - 1);
+
+    const periodVisitors = analyticsPeriod === "all"
+      ? visitors
+      : visitors.filter((visitor) => {
+          if (!visitor.date) return false;
+          const date = new Date(`${visitor.date}T00:00:00`);
+          return !Number.isNaN(date.getTime()) && date >= periodStart && date <= now;
+        });
+
+    const classify = (visitor: Visitor) => {
+      const type = visitor.visitType || "";
+      if (/legal|attorney|lawyer|counsel/i.test(type)) return "Legal";
+      if (/family|friend/i.test(type)) return "Family & friends";
+      if (/official|professional|staff|government/i.test(type)) return "Official";
+      return "Other";
+    };
+
+    const typeCounts = periodVisitors.reduce<Record<string, number>>((counts, visitor) => {
+      const category = classify(visitor);
+      counts[category] = (counts[category] || 0) + 1;
+      return counts;
+    }, {});
+
+    const uniqueVisitors = new Set(periodVisitors.map((visitor) => visitor.name.trim().toLowerCase()).filter(Boolean)).size;
+
+    let buckets: { label: string; count: number }[] = [];
+    if (analyticsPeriod === "week") {
+      buckets = Array.from({ length: 7 }, (_, index) => {
+        const date = new Date(periodStart);
+        date.setDate(periodStart.getDate() + index);
+        const key = date.toISOString().slice(0, 10);
+        return {
+          label: date.toLocaleDateString(undefined, { weekday: "short" }),
+          count: periodVisitors.filter((visitor) => visitor.date === key).length,
+        };
+      });
+    } else if (analyticsPeriod === "month") {
+      buckets = Array.from({ length: 5 }, (_, index) => {
+        const start = new Date(periodStart);
+        start.setDate(periodStart.getDate() + index * 7);
+        const end = new Date(start);
+        end.setDate(start.getDate() + 6);
+        const count = periodVisitors.filter((visitor) => {
+          if (!visitor.date) return false;
+          const date = new Date(`${visitor.date}T00:00:00`);
+          return date >= start && date <= end;
+        }).length;
+        return {
+          label: start.toLocaleDateString(undefined, { day: "numeric", month: "short" }),
+          count,
+        };
+      });
+    } else if (analyticsPeriod === "year" || analyticsPeriod === "all") {
+      const monthCount = analyticsPeriod === "year" ? 12 : 6;
+      buckets = Array.from({ length: monthCount }, (_, index) => {
+        const date = new Date(now.getFullYear(), now.getMonth() - monthCount + 1 + index, 1);
+        const keyYear = date.getFullYear();
+        const keyMonth = date.getMonth();
+        return {
+          label: date.toLocaleDateString(undefined, { month: "short" }),
+          count: periodVisitors.filter((visitor) => {
+            if (!visitor.date) return false;
+            const visitDate = new Date(`${visitor.date}T00:00:00`);
+            return visitDate.getFullYear() === keyYear && visitDate.getMonth() === keyMonth;
+          }).length,
+        };
+      });
+    }
+
+    return {
+      periodVisitors,
+      typeCounts,
+      uniqueVisitors,
+      buckets,
+    };
+  }, [analyticsPeriod, visitors]);
+
+  if (!canReadVisits) {
+    return (
+      <main className="page-content visitor-dashboard" id="visitor-dashboard">
+        <p className="pending-note" role="alert">
+          Your role does not have permission to view visit records.
+        </p>
+      </main>
+    );
+  }
+
   return (
     <main className="page-content visitor-dashboard" id="visitor-dashboard">
       <header className="page-heading">
         <div>
           <p className="eyebrow">FACILITY OPERATIONS / VISITORS</p>
           <h1>Visitor Management</h1>
-
+          <p className="page-description">
+            Schedule visits using the fields accepted by the visits API.
+          </p>
         </div>
       </header>
 
@@ -166,39 +343,67 @@ export default function Visitors() {
           {notice}
         </p>
       )}
+      {inmatesError && (
+        <p className="pending-note" role="alert">
+          {inmatesError}{" "}
+          <button type="button" className="history-retry" onClick={refreshInmates}>
+            Retry inmate list
+          </button>
+        </p>
+      )}
 
       <section
         className="visitor-stats"
-        aria-label="Visitor operations summary"
+        aria-label="Visit operations summary"
       >
-        <article className="visitor-stat">
+        <button
+          className={`visitor-stat${logView === "upcoming" ? " active" : ""}`}
+          type="button"
+          aria-pressed={logView === "upcoming"}
+          onClick={() => showVisitorLog("upcoming")}
+        >
           <div>
-            <span>Scheduled visits</span>
-            <strong>{scheduledVisits}</strong>
+            <span>Upcoming visits</span>
+            <strong>{upcomingVisits}</strong>
           </div>
           <b className="stat-mark">VIS</b>
-        </article>
-        <article className="visitor-stat">
+        </button>
+        <button
+          className={`visitor-stat${logView === "all" ? " active" : ""}`}
+          type="button"
+          aria-pressed={logView === "all"}
+          onClick={() => showVisitorLog("all")}
+        >
           <div>
             <span>API visit records</span>
             <strong>{visitors.length}</strong>
           </div>
           <b className="stat-mark pending">PEN</b>
-        </article>
-        <article className="visitor-stat">
+        </button>
+        <button
+          className={`visitor-stat${logView === "family" ? " active" : ""}`}
+          type="button"
+          aria-pressed={logView === "family"}
+          onClick={() => showVisitorLog("family")}
+        >
           <div>
-            <span>Visit status</span>
-            <strong className="secure">SCHEDULED</strong>
+            <span>Family &amp; friends</span>
+            <strong>{familyVisits}</strong>
           </div>
           <b className="stat-mark lock">SEC</b>
-        </article>
-        <article className="visitor-stat">
+        </button>
+        <button
+          className={`visitor-stat${logView === "today" ? " active" : ""}`}
+          type="button"
+          aria-pressed={logView === "today"}
+          onClick={() => showVisitorLog("today")}
+        >
           <div>
             <span>Today's total logs</span>
             <strong>{todayLogs}</strong>
           </div>
           <b className="stat-mark neutral">LOG</b>
-        </article>
+        </button>
       </section>
 
       {canCreateFamilyVisit && <div className=" my-10">
@@ -206,7 +411,7 @@ export default function Visitors() {
           <div className="visitor-section-heading">
             <div>
               <p className="visitor-section-kicker">Visits</p>
-              <h2>Register a visit</h2>
+              <h2>Record a family &amp; friends visit</h2>
             </div>
           </div>
           <form className="visitor-form" onSubmit={registerVisitor}>
@@ -236,12 +441,12 @@ export default function Visitors() {
                 </option>
                 {inmates.map((inmate) => (
                   <option key={inmate.id} value={inmate.id}>
-                    {inmate.fullName} · {inmate.cellBlock}
+                    {inmate.fullName}{inmate.cellId ? ` · Cell ID ${inmate.cellId}` : ""}
                   </option>
                 ))}
               </select>
               <span className="form-help">
-                The selected inmate UUID will be sent as <code>inmateId</code>.
+                The selected inmate ID will be sent as <code>inmateId</code>.
               </span>
             </label>
             <label>
@@ -275,13 +480,13 @@ export default function Visitors() {
               />
             </label>
             
-            <button className="primary-button" type="submit" disabled={saving}>
+            <button className="primary-button" type="submit" disabled={saving || !selectedInmate?.id}>
               {saving ? "Registering..." : "Register visit"}
             </button>
             <button
               className="secondary-button"
               type="button"
-              onClick={resetForm}
+              onClick={() => resetForm()}
             >
               Clear
             </button>
@@ -327,22 +532,121 @@ export default function Visitors() {
                 )}
             </section> */}
       </div>}
+      <section className="dashboard-section visitor-log-table" aria-labelledby="inmate-history-title">
+        <div className="visitor-section-heading">
+          <div>
+            <p className="visitor-section-kicker">Inmate records</p>
+            <h2 id="inmate-history-title">
+              {selectedInmate ? `${selectedInmate.fullName} · Visit history` : "Inmate visit history"}
+            </h2>
+          </div>
+          <div className="history-inmate-picker">
+            <label htmlFor="history-inmate-select">Choose inmate</label>
+            <select
+              id="history-inmate-select"
+              value={selectedInmate?.id || ""}
+              disabled={loadingInmates || !inmates.length}
+              onChange={(event) => {
+                setSelectedInmate(
+                  inmates.find((inmate) => inmate.id === event.target.value) || null,
+                );
+              }}
+            >
+              <option value="">
+                {loadingInmates ? "Loading inmates..." : "Select an inmate"}
+              </option>
+              {inmates.map((inmate) => (
+                <option key={inmate.id} value={inmate.id}>
+                  {inmate.fullName}{inmate.cellId ? ` · Cell ID ${inmate.cellId}` : ""}
+                </option>
+              ))}
+            </select>
+            <span className="live-port">
+              {selectedInmate ? `${filteredInmateHistory.length} RECORDS` : "0 RECORDS"}
+            </span>
+          </div>
+        </div>
+        <div className="history-filter" role="group" aria-label="Filter inmate visit history">
+          {([
+            ["all", "All history"],
+            ["family", "Family & friends"],
+            ["legal", "Legal visits"],
+          ] as const).map(([view, label]) => (
+            <button
+              key={view}
+              type="button"
+              className={historyView === view ? "selected" : ""}
+              aria-pressed={historyView === view}
+              onClick={() => setHistoryView(view)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        {!selectedInmate ? (
+          <p className="pending-note">Select an inmate in the visit form above to load their visit history.</p>
+        ) : historyLoading ? (
+          <p role="status">Loading visit history…</p>
+        ) : historyError ? (
+          <p className="pending-note" role="alert">
+            {historyError} <button type="button" className="history-retry" onClick={() => setHistoryReload((count) => count + 1)}>Retry</button>
+          </p>
+        ) : filteredInmateHistory.length === 0 ? (
+          <p className="pending-note">No {historyView === "all" ? "visit" : historyView === "legal" ? "legal visit" : "family or friends visit"} records found for this inmate.</p>
+        ) : (
+          <div className="visitor-log-scroll">
+            <table>
+              <thead>
+                <tr><th>Visit type</th><th>Visitor</th><th>Date</th><th>Start</th><th>End</th><th>Duration</th></tr>
+              </thead>
+              <tbody>
+                {filteredInmateHistory.map((visitor) => (
+                  <tr key={visitor.id}>
+                    <td>{isLegalVisit(visitor) ? "Legal" : visitor.visitType || "Family / friends"}</td>
+                    <td><strong>{visitor.name || "Name unavailable"}</strong></td>
+                    <td>{visitor.date || "—"}</td>
+                    <td>{visitor.time || "—"}</td>
+                    <td>{visitor.endTime || "—"}</td>
+                    <td>{visitor.durationMinutes != null ? `${visitor.durationMinutes} min` : "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
       <section
         className="dashboard-section visitor-log-table"
         aria-labelledby="visitor-log-title"
+        ref={visitorLogRef}
       >
         <div className="visitor-section-heading mt-10">
           <div>
-            <p className="visitor-section-kicker">Visits </p>
-            <h2 id="visitor-log-title">Visitor log</h2>
+            <p className="visitor-section-kicker">Visits</p>
+            <h2 id="visitor-log-title">
+              {logView === "upcoming"
+                ? "Upcoming visits"
+                : logView === "family"
+                  ? "Family & friends visits"
+                  : logView === "today"
+                    ? "Today's visitor logs"
+                    : "All visitor records"}
+            </h2>
           </div>
           <span className="live-port">{filteredVisitors.length} RECORDS</span>
         </div>
-        {loading ? (
+        {visitorsError ? (
+          <p className="pending-note" role="alert">
+            {visitorsError}{" "}
+            <button type="button" className="history-retry" onClick={refreshVisitors}>
+              Retry visit log
+            </button>
+          </p>
+        ) : loading ? (
           <p>Loading visitor records...</p>
         ) : filteredVisitors.length === 0 ? (
           <p className="pending-note">
-            No visitor records match the current filter.
+            No visit records match the current filter.
           </p>
         ) : (
           <div className="visitor-log-scroll">
@@ -354,7 +658,7 @@ export default function Visitors() {
                   <th>Visit date</th>
                   <th>Start</th>
                   <th>End</th>
-                  <th>Current state</th>
+                  <th>Visit type</th>
                 </tr>
               </thead>
               <tbody>
@@ -362,7 +666,7 @@ export default function Visitors() {
                   <tr key={visitor.id}>
                     <td>
                       <strong>{visitor.name || "Unnamed visitor"}</strong>
-                      <small>{visitor.visitorId || "ID unavailable"}</small>
+                      <small>Visit ID: {visitor.id}</small>
                     </td>
                     <td>
                       <strong>{visitor.inmate || "Inmate unavailable"}</strong>
@@ -372,7 +676,7 @@ export default function Visitors() {
                     <td>{visitor.time || "—"}</td>
                     <td>{visitor.endTime || "—"}</td>
                     <td>
-                      <span className="visitor-state">{visitor.status}</span>
+                      <span className="visitor-state">{visitor.visitType || "Not specified"}</span>
                     </td>
                   </tr>
                 ))}
@@ -380,6 +684,101 @@ export default function Visitors() {
             </table>
           </div>
         )}
+      </section>
+      <section className="visitor-analytics" aria-labelledby="visitor-analytics-title">
+        <div className="analytics-heading">
+          <div>
+            <p className="visitor-section-kicker">Visitor analytics</p>
+            <h2 id="visitor-analytics-title">Visit activity overview</h2>
+          </div>
+          <div className="analytics-periods" role="group" aria-label="Analytics period">
+            {([
+              ["week", "Week"],
+              ["month", "Month"],
+              ["year", "Year"],
+              ["all", "All time"],
+            ] as const).map(([period, label]) => (
+              <button
+                key={period}
+                type="button"
+                className={analyticsPeriod === period ? "selected" : ""}
+                aria-pressed={analyticsPeriod === period}
+                onClick={() => setAnalyticsPeriod(period)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="analytics-content">
+          <div className="analytics-summary">
+            <article>
+              <span>Total visits</span>
+              <strong>{analytics.periodVisitors.length}</strong>
+              <small>{analyticsPeriod === "all" ? "Across all records" : `In the selected ${analyticsPeriod}`}</small>
+            </article>
+            <article>
+              <span>Unique visitors</span>
+              <strong>{analytics.uniqueVisitors}</strong>
+              <small>Distinct visitor names</small>
+            </article>
+            <article>
+              <span>Family &amp; friends</span>
+              <strong>{analytics.typeCounts["Family & friends"] || 0}</strong>
+              <small>Most common visit category</small>
+            </article>
+          </div>
+
+          <div className="analytics-chart" aria-label="Visitor volume chart">
+            <div className="analytics-chart-heading">
+              <span>Visitor volume</span>
+              <strong>{analytics.periodVisitors.length} visits</strong>
+            </div>
+            <div className="analytics-bars">
+              {analytics.buckets.map((bucket) => {
+                const max = Math.max(...analytics.buckets.map((item) => item.count), 1);
+                const height = Math.max(bucket.count ? 18 : 4, (bucket.count / max) * 100);
+                return (
+                  <div className="analytics-bar-item" key={bucket.label}>
+                    <strong>{bucket.count}</strong>
+                    <div className="analytics-bar-track">
+                      <span style={{ height: `${height}%` }} />
+                    </div>
+                    <small>{bucket.label}</small>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="analytics-breakdown">
+            <div className="analytics-chart-heading">
+              <span>Visits by type</span>
+            </div>
+            { [
+              ["Family & friends", "#2563eb"],
+              ["Legal", "#14a38b"],
+              ["Official", "#d97706"],
+              ["Other", "#94a3b8"],
+            ].map(([type, color]) => {
+              const count = analytics.typeCounts[type] || 0;
+              const percentage = analytics.periodVisitors.length
+                ? Math.round((count / analytics.periodVisitors.length) * 100)
+                : 0;
+              return (
+                <div className="analytics-type-row" key={type}>
+                  <div>
+                    <i style={{ background: color }} />
+                    <span>{type}</span>
+                  </div>
+                  <strong>{count}</strong>
+                  <small>{percentage}%</small>
+                </div>
+              );
+            })}
+          </div>
+        </div>
       </section>
     </main>
   );

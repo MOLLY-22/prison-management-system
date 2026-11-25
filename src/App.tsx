@@ -7,7 +7,7 @@ import {
   useLocation,
 } from "react-router-dom";
 import { useAuth, AuthProvider } from "./context/AuthContext.tsx";
-import Dashboard from "./Dashboard/Dashboard";
+import Dashboard from "./dashboard/Dashboard";
 import LoginForm from "./pages/LoginForm";
 
 function RouteLoading() {

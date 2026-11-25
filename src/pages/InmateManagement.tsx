@@ -14,6 +14,10 @@ import {
   Box,
   Button,
   Chip,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   MenuItem,
   Paper,
   Select,
@@ -159,6 +163,10 @@ export function InmateManagement({ section, onBack }: Props) {
   const [selectedInmateId, setSelectedInmateId] = useState<string | null>(null);
   const [pendingSentence, setPendingSentence] = useState<{ inmate: string; inmateId: string; payload: Record<string, string> } | null>(null);
   const [retryingSentence, setRetryingSentence] = useState(false);
+  const [movingInmate, setMovingInmate] = useState<Inmate | null>(null);
+  const [moveCellId, setMoveCellId] = useState("");
+  const [moveError, setMoveError] = useState("");
+  const [savingMove, setSavingMove] = useState(false);
 
   useEffect(() => {
     setAdmissionOpen(section === "admission" && canAdmit);
@@ -313,6 +321,13 @@ export function InmateManagement({ section, onBack }: Props) {
     setAdmissionError(null);
     setNotice(null);
     try {
+      const currentCells = await inmateService.getCells({ size: 1000 });
+      const selectedCell = currentCells.find((cell) => cell.id === admission.cell);
+      const currentCell = await inmateService.getCell(admission.cell).catch(() => undefined);
+      if (!selectedCell || selectedCell.availableSpaces <= 0 || !currentCell || currentCell.availableSpaces <= 0) {
+        setAdmissionError("That cell no longer has available space. Choose another cell.");
+        return;
+      }
       let created: ApiInmate;
       let photoWarning = "";
       if (admissionPhotos.length) {
@@ -427,6 +442,48 @@ export function InmateManagement({ section, onBack }: Props) {
     );
   }
   if (selectedInmateId && ["overview", "profile"].includes(section)) return <InmateProfile inmateId={selectedInmateId} initialTab="Overview" onBack={() => setSelectedInmateId(null)} />;
+  const openMoveDialog = async (inmate: Inmate) => {
+    if (!can("cells:allocate")) return;
+    setMovingInmate(inmate);
+    setMoveCellId("");
+    setMoveError("");
+    setLoadingCells(true);
+    try {
+      setCells(await inmateService.getCells({ size: 1000 }));
+    } catch (error) {
+      setMoveError(axios.isAxiosError(error) ? error.message : "Could not load current cell availability.");
+    } finally {
+      setLoadingCells(false);
+    }
+  };
+  const saveMove = async () => {
+    if (!can("cells:allocate") || !movingInmate || !moveCellId) {
+      setMoveError("Select a destination cell with available space.");
+      return;
+    }
+    setSavingMove(true);
+    setMoveError("");
+    try {
+      const currentCells = await inmateService.getCells({ size: 1000 });
+      setCells(currentCells);
+      const selectedCell = currentCells.find((cell) => cell.id === moveCellId);
+      const currentCell = await inmateService.getCell(moveCellId).catch(() => undefined);
+      if (!selectedCell || selectedCell.availableSpaces <= 0 || !currentCell || currentCell.availableSpaces <= 0) {
+        setMoveError("That cell no longer has available space. Choose another cell.");
+        return;
+      }
+      await inmateService.allocateCell(movingInmate.id, moveCellId);
+      setMovingInmate(null);
+      await loadInmates();
+      setNotice(`${movingInmate.fullName} was moved to ${selectedCell.name || selectedCell.id}.`);
+    } catch (error) {
+      setMoveError(axios.isAxiosError(error)
+        ? error.response?.data?.message || "Could not move the inmate to that cell."
+        : error instanceof Error ? error.message : "Could not move the inmate to that cell.");
+    } finally {
+      setSavingMove(false);
+    }
+  };
   return (
     <Box className="census-page">
       {!admissionOpen && <>
@@ -483,14 +540,34 @@ export function InmateManagement({ section, onBack }: Props) {
             <TableHead>
               <TableRow>
                 <TableCell>Name</TableCell>
-                <TableCell align="right">Actions</TableCell>
+                <TableCell>Date of Birth</TableCell>
+                <TableCell>Inmate Type</TableCell>
+                <TableCell>Station</TableCell>
+                <TableCell>Cell ID</TableCell>
+                <TableCell>Admission Date</TableCell>
+                <TableCell>Profile</TableCell>
+                <TableCell>Cell allocation</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
-              {loading ? <TableRow><TableCell colSpan={2}>Loading inmate records...</TableCell></TableRow> : censusLoadError ? <TableRow><TableCell colSpan={2}>Inmate records are unavailable. Use Retry above after checking the API connection and your account access.</TableCell></TableRow> : !filtered.length ? <TableRow><TableCell colSpan={2}>No inmate records match these filters.</TableCell></TableRow> : filtered.map((record) => (
-                <TableRow key={record.id} hover>
+              {loading ? <TableRow><TableCell colSpan={9}>Loading inmate records...</TableCell></TableRow> : censusLoadError ? <TableRow><TableCell colSpan={9}>Inmate records are unavailable. Use Retry above after checking the API connection and your account access.</TableCell></TableRow> : !filtered.length ? <TableRow><TableCell colSpan={9}>No inmate records match these filters.</TableCell></TableRow> : filtered.map((record) => (
+                <TableRow key={record.id} hover onClick={() => setSelectedInmateId(record.id)} sx={{ cursor: "pointer" }}>
+                  <TableCell>
+                    <Box className="id-photo">
+                      <span className="mugshot">
+                        {initials(record.fullName)}
+                      </span>
+                      <code>{record.id}</code>
+                    </Box>
+                  </TableCell>
                   <TableCell className="full-name">{record.fullName}</TableCell>
-                  <TableCell align="right"><Button size="small" variant="outlined" onClick={() => setSelectedInmateId(record.id)}>View</Button></TableCell>
+                  <TableCell>{displayDate(record.dateOfBirth)}</TableCell>
+                  <TableCell><Chip label={record.inmateType} /></TableCell>
+                  <TableCell>{record.prisonName || "—"}</TableCell>
+                  <TableCell>{record.cellId || "—"}</TableCell>
+                  <TableCell>{record.admissionDate}</TableCell>
+                  <TableCell><Button size="small" onClick={(event) => { event.stopPropagation(); setSelectedInmateId(record.id); }}>View</Button></TableCell>
+                  <TableCell>{can("cells:allocate") && <Button size="small" onClick={(event) => { event.stopPropagation(); void openMoveDialog(record); }}>Move</Button>}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -646,6 +723,23 @@ export function InmateManagement({ section, onBack }: Props) {
           </Button>
         </Box>
       </Paper>}
+      <Dialog open={Boolean(movingInmate)} onClose={() => !savingMove && setMovingInmate(null)} fullWidth maxWidth="sm">
+        <DialogTitle>Move inmate</DialogTitle>
+        <DialogContent>
+          <Box sx={{ pt: 1 }}>
+            <Typography color="text.secondary" sx={{ mb: 2 }}>{movingInmate?.fullName} · {movingInmate?.id}</Typography>
+            {moveError && <Alert severity="error" sx={{ mb: 2 }} role="alert">{moveError}</Alert>}
+            <TextField select fullWidth label="Destination cell" value={moveCellId} onChange={(event) => setMoveCellId(event.target.value)} disabled={loadingCells || savingMove} helperText={loadingCells ? "Loading current availability…" : "Only cells with open capacity can be selected."}>
+              {cells.filter((cell) => cell.availableSpaces > 0 && cell.id !== movingInmate?.cellId).map((cell) => <MenuItem key={cell.id} value={cell.id}>{cell.blockName ? `Block ${cell.blockName} · ` : ""}{cell.name || cell.id} · {cell.currentOccupancy}/{cell.capacity} occupied · {cell.availableSpaces} available</MenuItem>)}
+            </TextField>
+            {!loadingCells && cells.filter((cell) => cell.availableSpaces > 0 && cell.id !== movingInmate?.cellId).length === 0 && <Alert severity="info" sx={{ mt: 2 }}>There are no other cells with available space.</Alert>}
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setMovingInmate(null)} disabled={savingMove}>Cancel</Button>
+          <Button variant="contained" onClick={() => void saveMove()} disabled={savingMove || loadingCells || !moveCellId}>{savingMove ? "Moving…" : "Move inmate"}</Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }
