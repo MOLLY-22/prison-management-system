@@ -371,7 +371,14 @@ export default function InmateProfile({
           : formKind === "transfer"
             ? [form.destinationPrisonId, form.reason]
             : formKind === "visit"
-              ? [form.visitorFullName, form.visitDate, form.startTime, form.endTime, ...(form.visitType === "LEGAL" ? [form.legalCaseNumber] : [])]
+              ? [
+                  form.visitType === "LEGAL"
+                    ? form.legalCaseNumber
+                    : form.visitorFullName,
+                  form.visitDate,
+                  form.startTime,
+                  form.endTime,
+                ]
               : formKind === "medical"
                 ? [form.visitDate, form.startTime, form.endTime, form.sickness, form.diagnosis]
                 : formKind === "cell"
@@ -1186,8 +1193,6 @@ function ProfileActionForm({
             <label className="grid gap-1 text-xs font-medium text-slate-600">Legal representative<input maxLength={255} value={form.legalRepresentative ?? ""} onChange={(event) => change("legalRepresentative", event.target.value)} className="rounded-md border border-slate-300 px-3 py-2 text-sm" /></label>
           </> : <label className="grid gap-1 text-xs font-medium text-slate-600">Visitor full name<input required maxLength={255} value={form.visitorFullName ?? ""} onChange={(event) => change("visitorFullName", event.target.value)} className="rounded-md border border-slate-300 px-3 py-2 text-sm" /></label>}
           <label className="grid gap-1 text-xs font-medium text-slate-600">Visit date<input required type="date" value={form.visitDate ?? ""} onChange={(event) => change("visitDate", event.target.value)} className="rounded-md border border-slate-300 px-3 py-2 text-sm" /></label>
-          <label className="grid gap-1 text-xs font-medium text-slate-600">Start time<input required type="time" value={form.startTime ?? ""} onChange={(event) => change("startTime", event.target.value)} className="rounded-md border border-slate-300 px-3 py-2 text-sm" /></label>
-          <label className="grid gap-1 text-xs font-medium text-slate-600">End time<input required type="time" value={form.endTime ?? ""} onChange={(event) => change("endTime", event.target.value)} className="rounded-md border border-slate-300 px-3 py-2 text-sm" /></label>
           <label className="grid gap-1 text-xs font-medium text-slate-600">Start time<input required type="time" value={form.startTime ?? ""} onChange={(event) => change("startTime", event.target.value)} className="rounded-md border border-slate-300 px-3 py-2 text-sm" /></label>
           <label className="grid gap-1 text-xs font-medium text-slate-600">End time<input required type="time" value={form.endTime ?? ""} onChange={(event) => change("endTime", event.target.value)} className="rounded-md border border-slate-300 px-3 py-2 text-sm" /></label>
           {form.visitType !== "LEGAL" && <label className="grid gap-1 text-xs font-medium text-slate-600 sm:col-span-2">Items brought (optional)<textarea maxLength={1000} value={form.itemsBrought ?? ""} onChange={(event) => change("itemsBrought", event.target.value)} className="min-h-16 rounded-md border border-slate-300 px-3 py-2 text-sm" /></label>}
