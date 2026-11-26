@@ -2,12 +2,15 @@ import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../context/AuthContext.tsx";
 import api from "../api/axiosClient";
 import { collectionFrom } from "../api/dataContract";
+import VisitorAnalytics from "../pages/VisitorAnalytics";
 import { InmateManagement } from "../pages/InmateManagement";
 import Visitors from "../pages/Visitors";
 import TransferManagement from "../pages/TransferManagement";
 import UserAccess from "../pages/UserAccess";
 import TransferAnalytics from "../pages/TransferAnalytics";
 import { PrisonRegistry } from "../pages/PrisonRegistry";
+import ReleaseManagement from "../pages/ReleaseManagement";
+import MedicalVisits from "../pages/MedicalVisits";
 import { prisonService } from "../api/prisonService";
 import { transferService } from "../api/transferService";
 import {
@@ -22,14 +25,17 @@ type View =
   | "profile"
   | "admission"
   | "sentences"
-  | "transfer-analytics";
+  | "transfer-analytics"
+  | "visitor-analytics"
+  | "release"
+  | "medical";
 type RecordItem = Record<string, string | number | boolean | null>;
 
 const navigation: { id: View; label: string; short: string }[] = [
   { id: "overview", label: "Dashboard", short: "grid" },
   { id: "inmates", label: "Inmates", short: "people" },
   { id: "housing", label: "Blocks & cells", short: "building" },
-  { id: "visitors", label: "Visits", short: "visit" },
+  { id: "visitor-analytics", label: "Visitor analytics", short: "chart" },
   { id: "transfers", label: "Transfers", short: "arrows" },
   { id: "access", label: "Users", short: "shield" },
   { id: "prisons", label: "Prisons", short: "building" },
@@ -40,6 +46,8 @@ const viewPermissions: Partial<Record<View, Permission>> = {
   profile: "inmates:read",
   sentences: "sentences:manage",
   visitors: "visits:read",
+  "visitor-analytics": "visits:read",
+  medical: "visits:create:health",
   transfers: "transfers:read",
   access: "users:list",
   prisons: "prisons:read",
@@ -53,6 +61,12 @@ function canOpenView(
 ) {
   if (view === "admission")
     return workspaces.includes("inmates") && can("inmates:manage");
+  if (view === "visitor-analytics") {
+    return workspaces.includes("visitors") && can("visits:read");
+  }
+  if (view === "medical") {
+    return workspaces.includes("visitors") && can("visits:create:health");
+  }
   if (view === "transfers") {
     return (
       workspaces.includes("transfers") &&
@@ -125,6 +139,18 @@ function NavigationIcon({ name }: { name: string }) {
       <>
         <rect x="3" y="5" width="18" height="16" rx="2" />
         <path d="M16 3v4M8 3v4M3 10h18" />
+      </>
+    ),
+    chart: (
+      <>
+        <path d="M4 19V5M4 19h16" />
+        <path d="m7 15 4-4 3 2 5-6" />
+      </>
+    ),
+    medical: (
+      <>
+        <path d="M12 3v18M3 12h18" />
+        <circle cx="12" cy="12" r="9" />
       </>
     ),
   };
@@ -435,6 +461,10 @@ function ModuleView({
       );
     case "visitors":
       return <Visitors />;
+        case "visitor-analytics":
+      return <VisitorAnalytics />;
+    case "release":
+      return <ReleaseManagement />;
     case "access":
       return <UserAccess />;
     case "transfer-analytics":
@@ -453,6 +483,8 @@ function ModuleView({
           assignedPrisonRequired={normalizeRole(userRole) === "RECORDS OFFICER"}
         />
       );
+    case "medical":
+      return <MedicalVisits />;
     case "overview":
       return null;
   }
@@ -477,7 +509,7 @@ export default function Dashboard() {
     count: number;
   } | null>(null);
   const incomingTransferCount =
-    canReadTransfers && user?.prisonId === incomingTransfer?.prisonId
+    canReadTransfers && incomingTransfer && user?.prisonId === incomingTransfer.prisonId
       ? incomingTransfer.count
       : 0;
   const active = navigation.find((item) => item.id === view) ?? navigation[0];
