@@ -1,5 +1,5 @@
-import api from "./axiosClient";
-import { asRecord, collectionFrom, firstValue, itemFrom } from "./dataContract";
+import { visitorService } from "./visitorService";
+import { asRecord, firstValue } from "./dataContract";
 
 export type MedicalVisit = {
     id: string;
@@ -13,6 +13,8 @@ export type MedicalVisit = {
 export type MedicalVisitRequest = {
     inmateId: string;
     visitDate: string;
+    startTime: string;
+    endTime: string;
     sickness: string;
     diagnosis: string;
     medicationsProvided: string;
@@ -21,14 +23,14 @@ export type MedicalVisitRequest = {
 
 export const medicalVisitService = {
     async getMedicalVisits(inmateId: string): Promise<MedicalVisit[]> {
-        const response = await api.get("/medical-visits", {
-            params: { inmateId, size: 100 },
-        });
-        return collectionFrom(response.data).map(normalizeMedicalVisit);
+        const records = await visitorService.getInmateVisitHistory(inmateId);
+        return records
+            .filter((visit) => visit.visitType === "HEALTH")
+            .map(normalizeMedicalVisit);
     },
     async recordMedicalVisit(payload: MedicalVisitRequest): Promise<MedicalVisit> {
-        const response = await api.post("/medical-visits", payload);
-        return normalizeMedicalVisit(itemFrom(response.data));
+        const visit = await visitorService.registerMedicalVisit(payload);
+        return normalizeMedicalVisit(visit);
     },
 };
 

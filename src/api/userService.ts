@@ -32,7 +32,6 @@ export type CreateUserRequest = {
     fullName: string;
     username: string;
     email?: string | null;
-    password: string;
     role: string;
     prisonId?: string | null;
 };

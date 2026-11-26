@@ -210,7 +210,7 @@ export function InmateManagement({ section, onBack }: Props) {
 
     setLoadingCells(true);
     setCellLoadError("");
-    inmateService.getCells({ size: 100, singlePage: true })
+    inmateService.getCells()
       .then(setCells)
       .catch((error) => { setCells([]); setCellLoadError(error instanceof Error ? error.message : "Could not load cells."); })
       .finally(() => setLoadingCells(false));
@@ -321,7 +321,7 @@ export function InmateManagement({ section, onBack }: Props) {
     setAdmissionError(null);
     setNotice(null);
     try {
-      const currentCells = await inmateService.getCells({ size: 1000 });
+      const currentCells = await inmateService.getCells();
       const selectedCell = currentCells.find((cell) => cell.id === admission.cell);
       const currentCell = await inmateService.getCell(admission.cell).catch(() => undefined);
       if (!selectedCell || selectedCell.availableSpaces <= 0 || !currentCell || currentCell.availableSpaces <= 0) {
@@ -449,7 +449,7 @@ export function InmateManagement({ section, onBack }: Props) {
     setMoveError("");
     setLoadingCells(true);
     try {
-      setCells(await inmateService.getCells({ size: 1000 }));
+      setCells(await inmateService.getCells());
     } catch (error) {
       setMoveError(axios.isAxiosError(error) ? error.message : "Could not load current cell availability.");
     } finally {
@@ -464,7 +464,7 @@ export function InmateManagement({ section, onBack }: Props) {
     setSavingMove(true);
     setMoveError("");
     try {
-      const currentCells = await inmateService.getCells({ size: 1000 });
+      const currentCells = await inmateService.getCells();
       setCells(currentCells);
       const selectedCell = currentCells.find((cell) => cell.id === moveCellId);
       const currentCell = await inmateService.getCell(moveCellId).catch(() => undefined);
@@ -536,10 +536,10 @@ export function InmateManagement({ section, onBack }: Props) {
       </Paper>
       <Paper className="directory" elevation={0}>
         <TableContainer>
-          <Table className="census-table">
+          <Table className="census-table" aria-label="Inmate census">
             <TableHead>
               <TableRow>
-                <TableCell>Name</TableCell>
+                <TableCell>Inmate</TableCell>
                 <TableCell>Date of Birth</TableCell>
                 <TableCell>Inmate Type</TableCell>
                 <TableCell>Station</TableCell>
@@ -550,19 +550,26 @@ export function InmateManagement({ section, onBack }: Props) {
               </TableRow>
             </TableHead>
             <TableBody>
-              {loading ? <TableRow><TableCell colSpan={9}>Loading inmate records...</TableCell></TableRow> : censusLoadError ? <TableRow><TableCell colSpan={9}>Inmate records are unavailable. Use Retry above after checking the API connection and your account access.</TableCell></TableRow> : !filtered.length ? <TableRow><TableCell colSpan={9}>No inmate records match these filters.</TableCell></TableRow> : filtered.map((record) => (
+              {loading ? <TableRow><TableCell colSpan={8}>Loading inmate records...</TableCell></TableRow> : censusLoadError ? <TableRow><TableCell colSpan={8}>Inmate records are unavailable. Use Retry above after checking the API connection and your account access.</TableCell></TableRow> : !filtered.length ? <TableRow><TableCell colSpan={8}>No inmate records match these filters.</TableCell></TableRow> : filtered.map((record) => (
                 <TableRow key={record.id} hover onClick={() => setSelectedInmateId(record.id)} sx={{ cursor: "pointer" }}>
                   <TableCell>
                     <Box className="id-photo">
                       <span className="mugshot">
                         {initials(record.fullName)}
                       </span>
-                      <code>{record.id}</code>
+                      <Box className="inmate-identity">
+                        <Typography component="span" className="full-name">{record.fullName}</Typography>
+                        <code>ID {record.id}</code>
+                      </Box>
                     </Box>
                   </TableCell>
-                  <TableCell className="full-name">{record.fullName}</TableCell>
                   <TableCell>{displayDate(record.dateOfBirth)}</TableCell>
-                  <TableCell><Chip label={record.inmateType} /></TableCell>
+                  <TableCell>
+                    <Chip
+                      className={`custody ${record.inmateType === "REMAND" ? "pre-trial" : "active-sentence"}`}
+                      label={record.inmateType === "REMAND" ? "Remand" : "Sentenced"}
+                    />
+                  </TableCell>
                   <TableCell>{record.prisonName || "—"}</TableCell>
                   <TableCell>{record.cellId || "—"}</TableCell>
                   <TableCell>{record.admissionDate}</TableCell>
@@ -632,7 +639,7 @@ export function InmateManagement({ section, onBack }: Props) {
           <Box component="fieldset" className="admission-section">
             <legend>Cell allocation</legend>
             <Box className="admission-fields admission-placement-fields">
-              {loadingCells ? <Typography className="text-sm text-slate-500">Loading available cells…</Typography> : cellLoadError ? <Alert severity="error" action={<Button color="inherit" size="small" onClick={() => { setLoadingCells(true); setCellLoadError(""); inmateService.getCells({ size: 100, singlePage: true }).then(setCells).catch((error) => setCellLoadError(error instanceof Error ? error.message : "Could not load cells.")).finally(() => setLoadingCells(false)); }}>Retry</Button>}>{cellLoadError}</Alert> : cells.length > 0 ? <TextField
+              {loadingCells ? <Typography className="text-sm text-slate-500">Loading available cells…</Typography> : cellLoadError ? <Alert severity="error" action={<Button color="inherit" size="small" onClick={() => { setLoadingCells(true); setCellLoadError(""); inmateService.getCells().then(setCells).catch((error) => setCellLoadError(error instanceof Error ? error.message : "Could not load cells.")).finally(() => setLoadingCells(false)); }}>Retry</Button>}>{cellLoadError}</Alert> : cells.length > 0 ? <TextField
                 select
                 required
                 label="Cell"

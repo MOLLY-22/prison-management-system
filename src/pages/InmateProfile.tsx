@@ -86,7 +86,7 @@ export default function InmateProfile({
   initialTab = "Overview",
   onBack,
 }: Props) {
-  const { can, canAny } = useAuth();
+  const { can, canAny, user } = useAuth();
   const canReadInmates = can("inmates:read");
   const canReadPhoto = can("inmates:photo:read");
   const canLogConduct = can("incidents:create");
@@ -111,10 +111,15 @@ export default function InmateProfile({
     ["Conduct", ["incidents:read"]],
     ["Rehabilitation", ["programs:read"]],
   ];
+  const tabsHiddenForRole: Tab[] = user?.role === "Records Officer"
+    ? ["Medical", "Rehabilitation"]
+    : [];
   const visibleTabs: Tab[] = [
     "Overview",
     ...tabPermissions
-      .filter(([, permissions]) => canAny(permissions))
+      .filter(([name, permissions]) =>
+        !tabsHiddenForRole.includes(name) && canAny(permissions),
+      )
       .map(([name]) => name),
   ];
   const [tab, setTab] = useState<Tab>(
@@ -214,11 +219,11 @@ export default function InmateProfile({
         } else if (tab === "Cell allocations") {
           const cellId = String(field(inmateRecord, "cellId") ?? "");
           const [cellResult, cellsResult] = await Promise.all([
-            cellId ? api.get(`/cells/${encodeURIComponent(cellId)}`).then(({ data }) => asRecord(itemFrom(data))) : Promise.resolve({}),
+            cellId ? inmateService.getCell(cellId) : Promise.resolve(null),
             inmateService.getCells({ prisonId: String(field(inmateRecord, "prisonId") ?? "") || undefined }),
           ]);
           if (active) {
-            setCellRecord(cellResult);
+            setCellRecord(cellResult ? { ...cellResult } : {});
             setAvailableCells(cellsResult.filter((cell) => cell.availableSpaces > 0));
           }
         } else if (tab === "Conduct") {
@@ -828,7 +833,7 @@ export default function InmateProfile({
           <h3 className="font-semibold text-slate-800">Current cell</h3>
           <dl className="mt-3 grid gap-3 sm:grid-cols-2">
             {[
-              ["Cell", "name"],
+            ["Cell number", "cellNumber"],
               ["Block", "blockName"],
               ["Capacity", "capacity"],
               ["Occupied", "currentOccupancy"],
@@ -1207,7 +1212,14 @@ function ProfileActionForm({
           <label className="grid gap-1 text-xs font-medium text-slate-600">Recommendations<textarea maxLength={10000} value={form.recommendations ?? ""} onChange={(event) => change("recommendations", event.target.value)} className="min-h-16 rounded-md border border-slate-300 px-3 py-2 text-sm" /></label>
         </>}
         {kind === "cell" && <label className="grid gap-1 text-xs font-medium text-slate-600 sm:col-span-2">Available cell
-          <select required value={form.cellId ?? ""} onChange={(event) => change("cellId", event.target.value)} className="rounded-md border border-slate-300 px-3 py-2 text-sm"><option value="">Choose a cell</option>{cells.map((cell) => <option key={cell.id} value={cell.id}>{cell.blockName} · {cell.name} ({cell.availableSpaces} available)</option>)}</select>
+          <select required value={form.cellId ?? ""} onChange={(event) => change("cellId", event.target.value)} className="rounded-md border border-slate-300 px-3 py-2 text-sm">
+            <option value="">Choose a cell</option>
+            {cells.map((cell) => (
+              <option key={cell.id} value={cell.id}>
+                {cell.blockName ? `Block ${cell.blockName} · ` : ""}Cell {cell.cellNumber} ({cell.availableSpaces} available)
+              </option>
+            ))}
+          </select>
         </label>}
         {kind === "sentence" && (
           <>

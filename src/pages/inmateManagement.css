@@ -272,9 +272,18 @@
 
 .census-page .census-table {
   width: 100%;
-  min-width: 0;
+  min-width: 1200px;
   table-layout: fixed;
 }
+
+.census-page .census-table .MuiTableCell-head:nth-child(1) { width: 23%; }
+.census-page .census-table .MuiTableCell-head:nth-child(2) { width: 11%; }
+.census-page .census-table .MuiTableCell-head:nth-child(3) { width: 11%; }
+.census-page .census-table .MuiTableCell-head:nth-child(4) { width: 16%; }
+.census-page .census-table .MuiTableCell-head:nth-child(5) { width: 9%; }
+.census-page .census-table .MuiTableCell-head:nth-child(6) { width: 13%; }
+.census-page .census-table .MuiTableCell-head:nth-child(7) { width: 7%; }
+.census-page .census-table .MuiTableCell-head:nth-child(8) { width: 10%; }
 
 .census-table .MuiTableCell-head {
   border-bottom: 1px solid #d6e0e3;
@@ -313,6 +322,17 @@
   display: flex;
   align-items: center;
   gap: 11px;
+}
+
+.inmate-identity {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.inmate-identity .full-name {
+  overflow-wrap: anywhere;
+  line-height: 1.35;
 }
 
 .mugshot {

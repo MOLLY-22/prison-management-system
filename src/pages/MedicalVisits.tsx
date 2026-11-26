@@ -6,6 +6,8 @@ import { medicalVisitService, type MedicalVisit, type MedicalVisitRequest } from
 
 const emptyMedicalForm = {
   visitDate: new Date().toISOString().slice(0, 10),
+  startTime: "09:00",
+  endTime: "09:30",
   sickness: "",
   diagnosis: "",
   medicationsProvided: "",
@@ -100,6 +102,10 @@ export default function MedicalVisits() {
   async function recordMedicalVisit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!selectedInmateId) return;
+    if (medicalForm.endTime <= medicalForm.startTime) {
+      setSaveError("The medical visit end time must be later than its start time.");
+      return;
+    }
     setSavingVisit(true);
     setSaveNotice("");
     setSaveError("");
@@ -184,6 +190,14 @@ export default function MedicalVisits() {
             <input required type="date" max={new Date().toISOString().slice(0, 10)} value={medicalForm.visitDate} onChange={(event) => setMedicalForm((current) => ({ ...current, visitDate: event.target.value }))} className="min-h-11 rounded border border-[#cfdbe3] bg-white px-3 text-sm font-medium text-[#17324d] outline-none focus:border-[#2876a8] focus:ring-2 focus:ring-[#2876a8]/15" />
           </label>
           <label className="grid gap-2 text-xs font-bold text-[#536b7d]">
+            Start time
+            <input required type="time" value={medicalForm.startTime} onChange={(event) => setMedicalForm((current) => ({ ...current, startTime: event.target.value }))} className="min-h-11 rounded border border-[#cfdbe3] bg-white px-3 text-sm font-medium text-[#17324d] outline-none focus:border-[#2876a8] focus:ring-2 focus:ring-[#2876a8]/15" />
+          </label>
+          <label className="grid gap-2 text-xs font-bold text-[#536b7d]">
+            End time
+            <input required type="time" value={medicalForm.endTime} onChange={(event) => setMedicalForm((current) => ({ ...current, endTime: event.target.value }))} className="min-h-11 rounded border border-[#cfdbe3] bg-white px-3 text-sm font-medium text-[#17324d] outline-none focus:border-[#2876a8] focus:ring-2 focus:ring-[#2876a8]/15" />
+          </label>
+          <label className="grid gap-2 text-xs font-bold text-[#536b7d]">
             Sickness / complaint
             <textarea required maxLength={1000} rows={3} value={medicalForm.sickness} onChange={(event) => setMedicalForm((current) => ({ ...current, sickness: event.target.value }))} className="rounded border border-[#cfdbe3] bg-white px-3 py-2 text-sm font-medium text-[#17324d] outline-none focus:border-[#2876a8] focus:ring-2 focus:ring-[#2876a8]/15" />
           </label>
@@ -259,7 +273,7 @@ export default function MedicalVisits() {
         </div>
       )}
       <footer className="border-t border-[#e5ebf0] px-6 py-3 text-[11px] text-[#8191a0] sm:px-8">
-        Read-only history · Showing up to 100 records
+        Read-only history · Showing all recorded visits
       </footer>
     </section>
   );

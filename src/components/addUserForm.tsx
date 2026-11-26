@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import axios from "axios";
 import { prisonService, type PrisonSummary } from "../api/prisonService";
 import { userService, type CreateUserRequest, type User, type UserRole } from "../api/userService";
-type IconName = "badge" | "lock" | "eye" | "eyeOff" | "arrow" | "info" | "shield";
+type IconName = "badge" | "lock" | "arrow" | "info" | "shield";
 
 function Icon({ name, className = "size-5" }: { name: IconName; className?: string }) {
     const paths: Record<IconName, ReactNode> = {
@@ -18,18 +18,7 @@ function Icon({ name, className = "size-5" }: { name: IconName; className?: stri
                 <path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v2" />
             </>
         ),
-        eye: (
-            <>
-                <path d="M2.5 12s3.2-5 9.5-5 9.5 5 9.5 5-3.2 5-9.5 5-9.5-5-9.5-5Z" />
-                <circle cx="12" cy="12" r="2.5" />
-            </>
-        ),
-        eyeOff: (
-            <>
-                <path d="m3 3 18 18M10.6 6.2A10.7 10.7 0 0 1 12 6c6.3 0 9.5 6 9.5 6a17 17 0 0 1-3.1 3.7M6.2 6.8C3.9 8.3 2.5 12 2.5 12s3.2 6 9.5 6c1.4 0 2.6-.3 3.7-.8" />
-                <path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" />
-            </>
-        ),
+    
         arrow: <path d="M5 12h14m-6-6 6 6-6 6" />,
         info: (
             <>
@@ -126,7 +115,6 @@ export default function AddUserForm({
     const roleOptions = userToEdit && !roles.includes(userToEdit.role as UserRole)
         ? [userToEdit.role, ...roles]
         : roles;
-    const [passwordShown, setPasswordShown] = useState(false);
 
     useEffect(() => {
         let mounted = true;
@@ -160,7 +148,6 @@ export default function AddUserForm({
         const name = newUser.name.trim();
         const username = newUser.username.trim();
         const email = newUser.email.trim();
-        const password = newUser.password;
 
         if (!name || !username) {
             setFormError("Full name and username are required.");
@@ -172,10 +159,6 @@ export default function AddUserForm({
         }
         if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
             setFormError("Enter a valid email address.");
-            return;
-        }
-        if (!isEditing && (!password || password.length < 8 || password.length > 16 || !/\d/.test(password) || !/[^\w\s]/.test(password))) {
-            setFormError("Password must be 8–16 characters and include at least one digit and one punctuation mark.");
             return;
         }
         if (!isSuperAdmin && !newUser.prisonId) {
@@ -201,7 +184,6 @@ export default function AddUserForm({
                     fullName: name,
                     username,
                     email: email || undefined,
-                    password,
                     role: newUser.role,
                     ...(!isSuperAdmin ? { prisonId: newUser.prisonId } : {}),
                 };
@@ -307,34 +289,6 @@ export default function AddUserForm({
                                     )}
                                 </select>
                                 {prisonLoadError && <span role="alert">{prisonLoadError}</span>}
-                            </label>
-                        )}
-                        {!isEditing && (
-                            <label className="modal-field" htmlFor="password">
-                                Password
-                                <span className="modal-password-control">
-                                    <input
-                                        id="password"
-                                        name="password"
-                                        type={passwordShown ? "text" : "password"}
-                                        className="modal-password-input"
-                                        value={newUser.password}
-                                        onChange={(event) => handleFieldChange("password", event.target.value)}
-                                        autoComplete="new-password"
-                                        minLength={8}
-                                        maxLength={16}
-                                        required
-                                    />
-                                    <button
-                                        aria-label={passwordShown ? "Hide password" : "Show password"}
-                                        aria-pressed={passwordShown}
-                                        className="modal-password-toggle"
-                                        onClick={() => setPasswordShown((shown) => !shown)}
-                                        type="button"
-                                    >
-                                        <Icon name={passwordShown ? "eyeOff" : "eye"} className="size-[18px]" />
-                                    </button>
-                                </span>
                             </label>
                         )}
                     </div>
