@@ -31,7 +31,6 @@ const navigation: { id: View; label: string; short: string }[] = [
   { id: "housing", label: "Blocks & cells", short: "building" },
   { id: "visitors", label: "Visits", short: "visit" },
   { id: "transfers", label: "Transfers", short: "arrows" },
-  { id: "transfers", label: "Transfers", short: "chart" },
   { id: "access", label: "Users", short: "shield" },
   { id: "prisons", label: "Prisons", short: "building" },
 ];

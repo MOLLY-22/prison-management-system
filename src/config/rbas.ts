@@ -51,7 +51,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'Super Admin': [
         'prisons:read', 'prisons:manage',
         'users:list', 'users:manage',
-        'inmates:read', 'visits:read',
+        
     ],
     'Commissioner': [
         'prisons:read',
